@@ -6,6 +6,80 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 14:00 UTC
+
+### septico-fotos Salesbot built. bot_id = 55306. Image path now wired end-to-end.
+
+The image workaround is no longer theoretical — the bot exists. `GET /api/v4/bots`
+confirms:
+
+    {"id": 55306, "name": "septico-fotos", "type_functionality": "regular",
+     "is_visual_editor": true, "settings": {"active": true}}
+
+`client.toml` → `[salesbot.triggers]` → `"[[FOTOS_SEPTICO]]" = 55306` (was 0).
+
+Shape: `Start bot` → Message(photo 1) → Message(photo 2) → Message(photo 3) →
+`Stop bot`. Every "Failed to send message" branch also terminates in `Stop bot`.
+**Triggers panel deliberately EMPTY** — we launch via `POST /bots/55306/run`.
+
+### Findings from building it (these generalise to every future client)
+
+**1. Kommo defaults a new Salesbot to the "Any new conversation" trigger.**
+It appears on its own. Left in place it fires the bot at *every* inbound
+first-message, so a well-study enquiry gets three IMHOFF septic diagrams before
+the agent says hello — and it races our agent, which the docs warn about
+("Only one bot can function within a conversation at a time"). **Delete the
+trigger** via the trigger modal → `Delete trigger`. Confirm the panel is empty
+before saving. Now a checklist item for every client build.
+
+**2. One attachment per Message step** (OBSERVED, not documented). The paperclip
+disappears once a photo is attached. Three photos = three chained Message steps.
+Matches WhatsApp native behaviour anyway: each image is its own message.
+Caveat: inferred from the UI, not confirmed by docs — see finding 4.
+
+**3. The Message step exposes a "Failed to send message" branch.** Kommo itself
+models image sending as fallible. Ours terminate in `Stop bot` (silent failure,
+no customer-visible error). Once live, this branch is where we learn the real
+failure rate. It is the honest counterweight to "images work now."
+
+**4. The step-types doc is DEAD.** `kommo.com/support/kb/salesbot-step-and-action-types/`
+now 302s to the KB home. `how-to-create-a-salesbot` still resolves and is the
+source for the trigger/step/preview mechanics cited above. Kommo has migrated the
+KB to `support.kommo.com` (index at `support.kommo.com/llms.txt`) — old
+`kommo.com/support/kb/*` deep links are unreliable. Prefer the new host.
+
+**5. NPS Bot (id 55238) is `"active": false`.** It ships with the account carrying
+a "Conversation closed" trigger, but it is dormant. No action needed. Flagged only
+so nobody re-investigates it. If ever activated it would fire an NPS survey the
+moment our agent hands a customer to a técnico.
+
+**6. Kommo pushes its built-in AI Agent from every screen** (Salesbot template
+picker, bot list, KB banners). It is not what we use and must not be enabled:
+UI-only, no API control, no audio/GPS handling, no KB, and it would answer
+alongside our agent — two replies per customer message.
+
+### Status of the image path — honest read
+
+Wired, not proven. `bot_id` is real and the sequence is saved, but nothing has been
+fired at a live WhatsApp conversation. Remaining unknowns:
+
+- Does `POST /bots/55306/run` actually deliver the images over `waba`?
+- Does a Salesbot send consume Chats API add-on quota? (Believed no — it does not
+  traverse `/talks/{id}/send_message` — but unverified, and it matters because
+  Trial is 100 and the reset period is still undocumented.)
+- Does the `[square bracket]` URL syntax render images via plain `send_message`?
+  If yes, this entire Salesbot mechanism becomes unnecessary. One request tests it.
+
+### Still open
+
+- `agua-foto` and `welcome-foto` bots not built. Both need a **firing rule** decided
+  before building — the welcome promo in particular would land on top of Wellington's
+  exact saludo text, which was deliberately authored.
+- Deposit-receipt path: acked + handoff in code, never live-tested.
+- OTP for WABA 1472215754667167 / number 3119. Payment method on the NEW WABA first.
+
+---
+
 ## Session: July 17, 2026 — 07:30 UTC
 
 ### ⚠️ CORRECTION: images ARE sendable. My "no workaround" call was wrong.

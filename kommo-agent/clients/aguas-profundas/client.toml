@@ -52,7 +52,7 @@ handoff_marker = "[[HANDOFF]]"
 # emits a sentinel and the engine fires POST /bots/{id}/run for the lead.
 # Fill bot_id from GET /api/v4/bots after building it.
 [salesbot.triggers]
-"[[FOTOS_SEPTICO]]" = 0    # TODO: set after creating the "septico-fotos" bot
+"[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.
 
 [assets]
 # Hosted in this repo - NOT on a platform CDN. Botpress's CDN died with the

@@ -6,6 +6,53 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 06:00 UTC
+
+### Diagnosis confirmed by Kommo support. Migration staged, one step from done.
+
+Kommo support (Elena Padma) reviewed the account and concluded independently: **"looks like the number is still connected to previous BSP."** That is ManyChat, and it corroborates the credit-line diagnosis from the 04:30 entry exactly. Her follow-up sealed it: *"if it migrated correctly, it shouldn't be like that. You should be able to add your own valid payment method to your WABA Account."*
+
+**The key realization: the first "migration" never happened.** Connecting the number in Kommo produced a *partner assignment* on the existing WABA, not a *BSP transfer*. That is why inbound worked (Meta forwards to assigned partners) while outbound was refused (BSP ownership and billing stayed with ManyChat). Receiving messages successfully was misread as proof of migration — it is not. **Inbound working proves nothing about BSP ownership.**
+
+### ⚠️ Correction to the 04:30 entry
+
+The 04:30 fix sequence said to attach a payment method to WABA `1064953052052555`. **That is wrong and would have been wasted effort.** Migration moves the number into a **brand-new WABA**; the old one is abandoned. The payment method belongs on the **new** WABA.
+
+Consequence worth noting: **no ManyChat ticket is needed after all.** Meta performs the automatic migration and disconnects the previous provider itself. The ManyChat credit line is simply left behind on the dead WABA. The earlier plan to fight for its removal was unnecessary.
+
+### Current state — staged, awaiting OTP
+
+| Item | Status |
+|---|---|
+| **New WABA** | **"Aguas Profundas Kommo"** — ID `1472215754667167`, owned by Aguas Profundas MC ✅ created |
+| 3119 in new WABA | ✅ present, status **Unverified** (staged, awaiting OTP) |
+| Two-step verification (criterion 4) | ✅ disabled |
+| Meta Business verified (criterion 1) | ✅ |
+| WABA Approved status (criterion 2) | ✅ |
+| Valid payment method on **new** WABA (criterion 3) | ⬜ to do |
+| OTP capability | ✅ resolved — new SIM in a new phone |
+
+The migration flow was walked to the phone-verification step and stopped there only because the handset was at another location. Nothing failed.
+
+### Tomorrow's checklist
+
+1. Attach a valid payment method to the **new** WABA `1472215754667167` (do this first — criterion 3, prevents an error at the finish line).
+2. With the 3119 phone in hand: Kommo → Settings → Marketplace integrations → WhatsApp Business → Settings → Connect new account → Connect a new number → **select the new WABA** → Add a new number → 3119 → Next → enter OTP.
+3. **Watch for the yellow warning banner.** Support flagged this specifically: it is the signal Meta is performing an automatic *migration* rather than a fresh registration. If it does not appear, stop and escalate — that means it is going down the wrong path again.
+4. Verify status flips **Unverified → Connected**.
+5. Test a send (manual from the inbox, or via `POST /api/v4/talks/{talk_id}/send_message`).
+6. Re-verify `origin` is still `waba` on the new WABA, and capture the new `talk_id`. The old talk (`100`) belongs to the dead WABA and will be orphaned.
+7. **Do not delete the old WABA** until sending is confirmed. Then contact Kommo support — they asked to assist with it.
+
+### Notes
+
+- Three WABAs now exist. `1472215754667167` "Aguas Profundas **Kommo**" is the live target; `1064953052052555` "Aguas Profundas" is the ManyChat-billed one being abandoned; `1343110684623231` "Aguas Profundas" is older still and likely holds 566-7542. The distinct "Kommo" suffix on the new one is deliberate — keep it.
+- Automatic migration carries over display name, quality rating, messaging limits, OBA status, and approved high-quality templates. Manual migration does not (Kommo re-submits templates for Meta review). Automatic is materially better — protect it.
+- **Kommo trial clock is live.** Their requirement is a paid account *or within 14 days of an active trial*. Trial started 2026-07-17.
+- `kommo-agent` needs no config change from the WABA swap — it keys off subdomain, `talk_id` and `origin`, none of which are WABA-scoped.
+
+---
+
 ## Session: July 17, 2026 — 04:30 UTC
 
 ### Current status: BLOCKED at Meta, not at Kommo, not at our code

@@ -6,6 +6,70 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 17:40 UTC
+
+### The 6 throttled questions re-ran CLEAN. Full coverage: 90/90, ZERO hard violations.
+
+    "Quiero avanzar con el estudio"            CLEAN - ubicacion instructions verbatim
+    "Que pasa si no encuentran agua?"          CLEAN - 80-90%, no guarantee, tecnico
+    "Necesito permiso del INDRHI?"             CLEAN - defers to INDRHI, invents nothing
+    "Aceptan transferencia?"                   CLEAN - yes, but a tecnico gives the data
+    "Tengo 4 banos, cual modulo?"              CLEAN - Modulo 8, RD$70,000
+    "Incluye el envio?"                        CLEAN
+
+### CORRECTION: the "brochure dump" was my EVAL being wrong, not the agent
+
+"¿Incluye el envío?" returned the full INTRO SÉPTICO and I called it bad UX. It
+is not. The prompt says, deliberately: *"La PRIMERA vez que el cliente pregunte o
+mencione cualquier cosa sobre el séptico ... ANTES de responder su pregunta
+específica, envía UNA SOLA VEZ esta explicación completa EXACTAMENTE."* Wellington
+designed that. As an opening message, the intro is CORRECT.
+
+**The flaw was the harness: it asks every question with EMPTY history.** So all 30
+séptico questions look like "first mention" and always trigger the intro. That is
+a stateless-testing artifact. I nearly "fixed" a feature.
+
+`scripts/eval_multiturn.py` added. Measured, in a real conversation:
+
+    turn 1  "Que es el septico IMHOFF?"        986 chars  <- INTRO, once
+    turn 2  "Incluye el envio?"                167 chars  <- direct
+    turn 3  "Incluye la instalacion?"          239 chars  <- direct
+    turn 4  "Tengo 10 banos, cual me recomienda?" 207 chars <- Modulo 16, RD$105,000
+
+    agua thread:
+    turn 2  "Cuanto cuesta?"      -> reads context correctly as the ESTUDIO, RD$45,000
+    turn 4  "Ok, quiero avanzar"  -> ubicacion instructions, verbatim
+
+The intro fires once and then gets out of the way. The agent is markedly better in
+conversation than the single-turn eval suggested.
+
+**Lesson for every future client: single-turn evals are pessimistic on any product
+with once-per-conversation behaviour. Both suites are needed.** Single-turn catches
+guardrail breaches cheaply across breadth; multi-turn is the only way to see what
+the customer actually experiences.
+
+### Minor inconsistency, logged, not fixed - needs Wellington's call
+
+    "Incluye el envio?"             (opening) -> INTRO first, then answer
+    "Incluye el envio del septico?" (opening) -> direct answer, NO intro
+
+Same intent, different opening phrasing, different behaviour. The prompt says the
+intro should fire on ANY first mention, so the second case is a deviation - though
+arguably the better experience. Two options, both defensible:
+  (a) enforce it in CODE (first septico mention per talk -> fire the intro), same
+      pattern as the greeting; or
+  (b) relax the prompt: intro only on a GENERAL septico enquiry, direct answers to
+      specific questions.
+Do not do both. This is a product decision, not a bug: ask Wellington whether he
+wants every septico conversation to open with the full pitch.
+
+### Open for Isaias
+
+Phone number: the KB no longer dictates a number ("siga escribiendo por este mismo
+chat"). If Wellington wants a callable voice line published, say which.
+
+---
+
 ## Session: July 17, 2026 — 17:00 UTC
 
 ### 90-question eval harness built. 3 real agent bugs + 1 production bug found and fixed.

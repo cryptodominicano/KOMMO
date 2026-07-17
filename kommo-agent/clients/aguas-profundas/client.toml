@@ -35,3 +35,19 @@ location_types = ["location"]
 audio_types    = ["voice", "audio"]
 # model emits this sentinel; engine strips it and pauses the agent in code
 handoff_marker = "[[HANDOFF]]"
+
+[assets]
+# Hosted in this repo - NOT on a platform CDN. Botpress's CDN died with the
+# platform and ImgBB is a free host; both are assets we do not control.
+# jsDelivr serves these with a correct image content-type, CDN-cached.
+#
+# NOTE: the agent CANNOT send these yet. Kommo's send_message is text-only
+# ("file uploads in an upcoming release"). Staged for when that ships.
+base_url = "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets"
+welcome  = "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/welcome-todo-comienza.jpg"
+agua     = "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/agua-pasos-proceso.jpg"
+septico  = [
+  "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/septico-promo-1.jpg",
+  "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/septico-promo-2.jpg",
+  "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/septico-promo-3.jpg",
+]

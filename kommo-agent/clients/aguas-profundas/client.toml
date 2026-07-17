@@ -70,7 +70,7 @@ welcome_bot_id = 55340   # "welcome-bot": the saludo as an infographic.
 #
 # The bank account + cedula live ONLY in the image inside this Kommo Salesbot.
 # They are never in this repo, the prompt, the KB, or any log line.
-deposit_bot_id = 0       # TODO: set after building the "banco-foto" Salesbot
+deposit_bot_id = 55956   # "banco-foto": 1 Message step, bank image, NO trigger.
 # If this exact text appears in a reply, the engine fires deposit_bot_id.
 # Must stay in sync with the order message in prompts/system.md.
 deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"

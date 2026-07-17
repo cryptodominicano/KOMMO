@@ -6,6 +6,56 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 19:00 UTC
+
+### banco-foto built. deposit_bot_id = 55956. All four bots wired.
+
+    55238  NPS Bot         active: false   dormant, ignore
+    55306  septico-fotos   active: true    <- [[FOTOS_SEPTICO]]  (model sentinel)
+    55340  welcome-bot     active: true    <- engine, first contact
+    55348  agua-foto       active: true    <- [[FOTO_AGUA]]      (model sentinel)
+    55956  banco-foto      active: true    <- engine, on the order message TEXT
+
+All five have an EMPTY trigger panel. Launched only via POST /bots/{id}/run.
+
+A test now asserts `deposit_bot_id > 0`. At 0 the order message promises a bank
+image that never arrives, to a customer who is trying to pay.
+
+### FIRST LIVE PROOF: POST /bots/{id}/run returns 202 on this account
+
+Created a throwaway lead, fired both 55956 and 55306 against it:
+
+    POST /api/v4/bots/55956/run  {"bot_id":55956,"entity_id":<lead>,"entity_type":"leads"}  -> 202
+    POST /api/v4/bots/55306/run  -> 202
+
+The launcher half of the image workaround is **verified**, not assumed. This was
+the single biggest untested assumption in the whole design - the thing I called
+impossible this morning, then called solved, and have been careful to keep
+labelling "wired, not proven" ever since. The API contract is now proven.
+
+**Still not proven:** 202 means QUEUED. The test lead has no WhatsApp
+conversation attached, so nothing was actually delivered. Whether the images
+render over `waba` to a real phone is still open, and still blocked on the OTP.
+
+### Kommo API cannot delete leads — 405
+
+    DELETE /api/v4/leads/9733450  -> 405 Method Not Allowed
+
+v4 has no lead-delete endpoint. **A test lead is left behind: id 9733450, named
+"ZZZ TEST - borrar (kommo-agent salesbot check)".** Isaias must delete it in the
+UI. Recorded because it will otherwise sit in the pipeline forever looking like
+a real lead, and because any future scripted test that creates entities has the
+same problem: create nothing you cannot clean up, or name it so a human can.
+
+### Security note
+
+The Banco Popular account number, the account holder, and the cédula are visible
+in the Salesbot image inside Kommo. They are NOT in this repo, this log, any
+commit message, the prompt, the KB, or any log line - and a test greps the client
+pack on every run to keep it that way. This repo is public; git history is forever.
+
+---
+
 ## Session: July 17, 2026 — 18:30 UTC
 
 ### Workflows confirmed against Isaias's description. Séptico deposit flow rebuilt.

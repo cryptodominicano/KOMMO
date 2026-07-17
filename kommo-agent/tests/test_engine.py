@@ -327,6 +327,10 @@ def test_deposit_bot_fires_from_text_not_a_sentinel():
     trigger = sb.get("deposit_trigger_text")
     assert trigger, "deposit_trigger_text missing"
 
+    # A real bot id. At 0 the order message promises an image that never arrives,
+    # to a customer who is trying to pay.
+    assert int(sb.get("deposit_bot_id", 0)) > 0, "deposit_bot_id not set"
+
     # The trigger must actually appear in the order message the model is told to
     # send, or the bank photo never fires.
     prompt = client.system_prompt("aguas-profundas")

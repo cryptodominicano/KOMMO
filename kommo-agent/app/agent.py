@@ -3,6 +3,7 @@ retrieved context. Provider-agnostic: the same prompt drives OpenAI or Claude.""
 import httpx
 from .config import settings
 from . import client as client_pack
+from .retry import post_with_retry
 
 # The prompt lives in the CLIENT PACK (clients/<id>/prompts/system.md).
 # This module used to hardcode /srv/prompts/system.md - a leftover from before
@@ -27,8 +28,13 @@ def _system(kb_context: str) -> str:
 
 
 async def _openai(system: str, msgs: list[dict]) -> str:
+    # Retry matters here: this account is capped at 30k TOKENS/min and each
+    # reply costs ~6k (system prompt + retrieved KB), so ~5 replies/min fit.
+    # A real lunchtime burst hits 429, and without a retry the customer is
+    # silently ghosted by worker.py broad except.
     async with httpx.AsyncClient(timeout=90.0) as c:
-        r = await c.post(
+        r = await post_with_retry(
+            c,
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.openai_api_key}"},
             json={
@@ -38,13 +44,13 @@ async def _openai(system: str, msgs: list[dict]) -> str:
                 "messages": [{"role": "system", "content": system}] + msgs,
             },
         )
-        r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
 
 
 async def _anthropic(system: str, msgs: list[dict]) -> str:
     async with httpx.AsyncClient(timeout=90.0) as c:
-        r = await c.post(
+        r = await post_with_retry(
+            c,
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": settings.anthropic_api_key,
                      "anthropic-version": "2023-06-01"},
@@ -55,7 +61,6 @@ async def _anthropic(system: str, msgs: list[dict]) -> str:
                 "messages": msgs,
             },
         )
-        r.raise_for_status()
         return "".join(b["text"] for b in r.json()["content"]
                        if b["type"] == "text").strip()
 

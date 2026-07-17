@@ -9,16 +9,18 @@ Collections follow the account convention: 1536-dim, Cosine (text-embedding-3-sm
 import httpx
 from .config import settings
 from . import client as client_pack
+from .retry import post_with_retry
 
 
 async def embed(text: str) -> list[float]:
+    # Embeddings share the same TPM budget as generation - retry too.
     async with httpx.AsyncClient(timeout=30.0) as c:
-        r = await c.post(
+        r = await post_with_retry(
+            c,
             "https://api.openai.com/v1/embeddings",
             headers={"Authorization": f"Bearer {settings.openai_api_key}"},
             json={"model": settings.embed_model, "input": text},
         )
-        r.raise_for_status()
         return r.json()["data"][0]["embedding"]
 
 

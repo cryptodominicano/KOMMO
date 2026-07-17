@@ -1,0 +1,646 @@
+{
+  "_comment": "Realistic customer questions per workflow. Assertions are grounded in the KB files, not assumptions. must_any = at least one string must appear (case-insensitive). expect_sentinel = the model SHOULD emit this (soft: measured, not a hard fail).",
+  "agua": [
+    {
+      "q": "Buenas, quiero saber sobre estudios de agua",
+      "must_any": [
+        "45,000",
+        "45000"
+      ]
+    },
+    {
+      "q": "Cuanto cuesta el estudio de agua?",
+      "must_any": [
+        "45,000",
+        "45000"
+      ]
+    },
+    {
+      "q": "Que incluye el estudio?",
+      "must_any": [
+        "topograf"
+      ],
+      "must_any2": [
+        "radioestesia",
+        "radiestesia"
+      ]
+    },
+    {
+      "q": "Ustedes garantizan que voy a encontrar agua?",
+      "must_any": [
+        "80"
+      ],
+      "must_any2": [
+        "nunca",
+        "no se garantiza",
+        "no puede garantizarse"
+      ]
+    },
+    {
+      "q": "Por que su estudio es mas caro que el de otras empresas?",
+      "must_any": [
+        "complet",
+        "tres",
+        "3"
+      ]
+    },
+    {
+      "q": "El estudio esta muy caro, me puede hacer un descuento?",
+      "must_any": [
+        "estudio"
+      ]
+    },
+    {
+      "q": "Puedo perforar sin hacer el estudio?",
+      "must_any": [
+        "no perforamos",
+        "siempre",
+        "primero",
+        "necesario"
+      ]
+    },
+    {
+      "q": "Que es el estudio hidrogeologico?",
+      "must_any": [
+        "terreno",
+        "profundidad"
+      ]
+    },
+    {
+      "q": "Cuanto tiempo tarda el estudio?"
+    },
+    {
+      "q": "Trabajan en Santiago?",
+      "must_any": [
+        "todo el pa",
+        "sí",
+        "si"
+      ]
+    },
+    {
+      "q": "Tengo un terreno en Punta Cana, pueden ir?",
+      "must_any": [
+        "todo el pa",
+        "sí",
+        "si",
+        "zona"
+      ]
+    },
+    {
+      "q": "El estudio incluye la perforacion?",
+      "must_any": [
+        "no",
+        "aparte",
+        "separado",
+        "despu"
+      ]
+    },
+    {
+      "q": "Que pasa si el estudio dice que no hay agua?"
+    },
+    {
+      "q": "Como saben donde esta el agua?",
+      "must_any": [
+        "topogr",
+        "radioestesia",
+        "radiestesia",
+        "geohidrol"
+      ]
+    },
+    {
+      "q": "Que es la radioestesia?",
+      "must_any": [
+        "vena",
+        "localiz"
+      ]
+    },
+    {
+      "q": "Usan tecnologia o solo varitas?",
+      "must_any": [
+        "satelital",
+        "tecnolog",
+        "topogr",
+        "geohidrol"
+      ]
+    },
+    {
+      "q": "Necesitan que yo este en el terreno?"
+    },
+    {
+      "q": "Como les envio la ubicacion del terreno?",
+      "must_any": [
+        "ubicaci",
+        "clip",
+        "mapa"
+      ]
+    },
+    {
+      "q": "El precio del estudio cambia segun la zona?",
+      "must_any": [
+        "zona",
+        "ubicaci",
+        "depende"
+      ]
+    },
+    {
+      "q": "Ustedes son ingenieros?"
+    },
+    {
+      "q": "Cuantos anos tienen haciendo esto?"
+    },
+    {
+      "q": "Mi vecino tiene pozo cerca, igual necesito el estudio?",
+      "must_any": [
+        "sí",
+        "si",
+        "estudio"
+      ]
+    },
+    {
+      "q": "A que profundidad esta el agua en mi terreno?",
+      "must_any": [
+        "estudio",
+        "depende"
+      ]
+    },
+    {
+      "q": "El estudio sirve para riego?"
+    },
+    {
+      "q": "Tienen fotos del proceso del estudio?",
+      "expect_sentinel": "[[FOTO_AGUA]]"
+    },
+    {
+      "q": "Cual es su numero de telefono?",
+      "forbid_sentinel": [],
+      "must_any": [
+        "este mismo chat",
+        "por aquí",
+        "por aqui",
+        "este chat"
+      ]
+    },
+    {
+      "q": "Puedo pagar el estudio con tarjeta?",
+      "must_any": [
+        "transferencia",
+        "depósito",
+        "deposito",
+        "no"
+      ]
+    },
+    {
+      "q": "Me pasa el numero de cuenta para depositar el estudio?",
+      "must_any": [
+        "técnico",
+        "tecnico",
+        "no"
+      ]
+    },
+    {
+      "q": "Quiero avanzar con el estudio, que hago?",
+      "must_any": [
+        "ubicaci"
+      ]
+    },
+    {
+      "q": "Ya decidi, quiero contratar el estudio de agua hoy",
+      "must_any": [
+        "ubicaci"
+      ]
+    }
+  ],
+  "perforacion": [
+    {
+      "q": "Cuanto cuesta perforar un pozo?",
+      "must_any": [
+        "850",
+        "1,300",
+        "1300"
+      ]
+    },
+    {
+      "q": "Cuanto cuesta el pie de perforacion?",
+      "must_any": [
+        "850",
+        "1,300",
+        "1300"
+      ]
+    },
+    {
+      "q": "Cuanto tarda la perforacion?",
+      "must_any": [
+        "día",
+        "dia"
+      ]
+    },
+    {
+      "q": "Que incluye la perforacion?",
+      "must_any": [
+        "transporte",
+        "tuber",
+        "bomba",
+        "aforo"
+      ]
+    },
+    {
+      "q": "Incluye la bomba?",
+      "must_any": [
+        "bomba"
+      ]
+    },
+    {
+      "q": "Incluye el transporte?",
+      "must_any": [
+        "transporte"
+      ]
+    },
+    {
+      "q": "Que es una perforacion de exploracion?",
+      "must_any": [
+        "riesgo",
+        "explora"
+      ]
+    },
+    {
+      "q": "Cual es la diferencia entre convencional y exploratoria?",
+      "must_any": [
+        "riesgo",
+        "probabilidad",
+        "convencional"
+      ]
+    },
+    {
+      "q": "La perforacion esta muy cara",
+      "must_any": [
+        "explora",
+        "inversi",
+        "calidad"
+      ]
+    },
+    {
+      "q": "Por que son mas caros que otros perforadores?",
+      "must_any": [
+        "inversi",
+        "calidad",
+        "experiencia"
+      ]
+    },
+    {
+      "q": "Que pasa si no encuentran agua? Me devuelven el dinero?",
+      "must_any": [
+        "técnico",
+        "tecnico",
+        "estudio",
+        "explora"
+      ]
+    },
+    {
+      "q": "Dan garantia del pozo?",
+      "must_any": [
+        "técnico",
+        "tecnico"
+      ],
+      "expect_sentinel": "[[HANDOFF]]"
+    },
+    {
+      "q": "Puedo usar el pozo para riego?",
+      "must_any": [
+        "riego",
+        "cultivo"
+      ]
+    },
+    {
+      "q": "Sirve para una finca con animales?",
+      "must_any": [
+        "animal",
+        "finca"
+      ]
+    },
+    {
+      "q": "Puedo perforar hoy mismo?",
+      "must_any": [
+        "estudio",
+        "primero"
+      ]
+    },
+    {
+      "q": "Necesito permiso del INDRHI?"
+    },
+    {
+      "q": "Que profundidad tendra mi pozo?",
+      "must_any": [
+        "estudio",
+        "depende"
+      ]
+    },
+    {
+      "q": "Hacen la prueba de aforo?",
+      "must_any": [
+        "aforo",
+        "caudal"
+      ]
+    },
+    {
+      "q": "Instalan la tuberia?",
+      "must_any": [
+        "tuber"
+      ]
+    },
+    {
+      "q": "Cuanta agua da un pozo?",
+      "must_any": [
+        "depende",
+        "aforo",
+        "caudal",
+        "estudio"
+      ]
+    },
+    {
+      "q": "Tengo un pozo que se seco, pueden ayudarme?"
+    },
+    {
+      "q": "Perforan en terreno rocoso?"
+    },
+    {
+      "q": "Cuanto me costaria un pozo de 200 pies?",
+      "must_any": [
+        "850",
+        "1,300",
+        "1300",
+        "estudio",
+        "depende"
+      ]
+    },
+    {
+      "q": "Necesito estar presente en la perforacion?"
+    },
+    {
+      "q": "Trabajan los sabados?",
+      "must_any": [
+        "lunes",
+        "viernes"
+      ]
+    },
+    {
+      "q": "Me pasan una cotizacion por escrito?"
+    },
+    {
+      "q": "Quiero avanzar con la perforacion",
+      "must_any": [
+        "estudio",
+        "ubicaci"
+      ]
+    },
+    {
+      "q": "Aceptan transferencia?",
+      "must_any": [
+        "transferencia",
+        "depósito",
+        "deposito"
+      ]
+    },
+    {
+      "q": "Tienen fotos de pozos que hayan hecho?"
+    },
+    {
+      "q": "Como es el proceso de perforacion paso a paso?",
+      "expect_sentinel": "[[FOTO_AGUA]]"
+    }
+  ],
+  "septico": [
+    {
+      "q": "Que es el septico IMHOFF?",
+      "must_any": [
+        "sediment",
+        "digesti",
+        "tratamiento"
+      ]
+    },
+    {
+      "q": "Cuanto cuesta el septico?",
+      "must_any": [
+        "70,000",
+        "70000"
+      ]
+    },
+    {
+      "q": "Tengo una casa de 3 banos, cual me sirve?",
+      "must_any": [
+        "módulo 8",
+        "modulo 8"
+      ]
+    },
+    {
+      "q": "Tengo 4 banos, cual modulo me recomienda?",
+      "must_any": [
+        "módulo 8",
+        "modulo 8"
+      ]
+    },
+    {
+      "q": "Tengo 10 banos, que me recomienda?",
+      "must_any": [
+        "módulo 16",
+        "modulo 16"
+      ]
+    },
+    {
+      "q": "Tengo un proyecto con 20 banos, que hago?",
+      "must_any": [
+        "modular",
+        "varios",
+        "módulo"
+      ]
+    },
+    {
+      "q": "Cuanto mide el Modulo 8?",
+      "must_any": [
+        "5 pies",
+        "5"
+      ]
+    },
+    {
+      "q": "Cuanto mide el Modulo 16?",
+      "must_any": [
+        "6 pies",
+        "6"
+      ]
+    },
+    {
+      "q": "Incluye la instalacion?",
+      "must_any": [
+        "no incluimos",
+        "no inclu",
+        "plomero",
+        "guía",
+        "guia"
+      ]
+    },
+    {
+      "q": "Quien lo instala?",
+      "must_any": [
+        "plomero",
+        "guía",
+        "guia"
+      ]
+    },
+    {
+      "q": "Incluye el envio?",
+      "must_any": [
+        "envío incluido",
+        "envio incluido",
+        "inclu"
+      ]
+    },
+    {
+      "q": "Que mantenimiento necesita?",
+      "must_any": [
+        "año",
+        "ano",
+        "limpieza"
+      ]
+    },
+    {
+      "q": "Cada cuanto se limpia?",
+      "must_any": [
+        "año",
+        "ano",
+        "una vez"
+      ]
+    },
+    {
+      "q": "Por que es mejor que uno de cemento?",
+      "must_any": [
+        "agriet",
+        "sella",
+        "durab"
+      ]
+    },
+    {
+      "q": "El septico esta caro",
+      "must_any": [
+        "25",
+        "30",
+        "20",
+        "cemento",
+        "bloque"
+      ]
+    },
+    {
+      "q": "Cuanto mas barato es que uno de cemento?",
+      "must_any": [
+        "20",
+        "25",
+        "30"
+      ]
+    },
+    {
+      "q": "Se agrieta con los temblores?",
+      "must_any": [
+        "no se agriet",
+        "resist",
+        "no se corroe"
+      ]
+    },
+    {
+      "q": "Usa quimicos?",
+      "must_any": [
+        "sin químico",
+        "sin quimico",
+        "ecol"
+      ]
+    },
+    {
+      "q": "Huele mal?",
+      "must_any": [
+        "olor"
+      ]
+    },
+    {
+      "q": "Como funciona el IMHOFF?",
+      "must_any": [
+        "sediment",
+        "digesti"
+      ]
+    },
+    {
+      "q": "Sirve para una villa turistica?",
+      "must_any": [
+        "villa",
+        "tur"
+      ]
+    },
+    {
+      "q": "Como ordeno el septico?",
+      "must_any": [
+        "5,000",
+        "5000"
+      ],
+      "must_any2": [
+        "ubicaci"
+      ]
+    },
+    {
+      "q": "Cuanto es el deposito para ordenar?",
+      "must_any": [
+        "5,000",
+        "5000"
+      ]
+    },
+    {
+      "q": "Me pasa el numero de cuenta para el deposito?",
+      "must_any": [
+        "técnico",
+        "tecnico",
+        "no"
+      ]
+    },
+    {
+      "q": "Ya hice el deposito, que hago ahora?",
+      "must_any": [
+        "comprobante",
+        "técnico",
+        "tecnico"
+      ]
+    },
+    {
+      "q": "Puedo pagar todo cuando lo reciba?",
+      "must_any": [
+        "5,000",
+        "5000",
+        "depósito",
+        "deposito"
+      ]
+    },
+    {
+      "q": "Envian a Samana?",
+      "must_any": [
+        "envío",
+        "envio",
+        "todo el pa",
+        "sí",
+        "si"
+      ]
+    },
+    {
+      "q": "Tienen fotos del septico?",
+      "expect_sentinel": "[[FOTOS_SEPTICO]]"
+    },
+    {
+      "q": "De que material esta hecho?",
+      "must_any": [
+        "resist",
+        "material"
+      ]
+    },
+    {
+      "q": "Cuanto dura el septico?",
+      "must_any": [
+        "durab",
+        "dura",
+        "resist"
+      ]
+    }
+  ]
+}

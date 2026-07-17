@@ -232,3 +232,83 @@ def test_system_prompt_carries_the_guardrails_into_the_llm_call():
     assert "datos bancarios" in system                 # never send bank details
     assert "[[FOTOS_SEPTICO]]" in system
     assert "[[FOTO_AGUA]]" in system
+
+
+def test_retry_recovers_from_429(monkeypatch):
+    """A 429 must NOT reach worker.py.
+
+    OpenAI caps this account at 30k TOKENS/min and each reply costs ~6k, so a
+    real burst of customers hits 429. worker.py catches Exception broadly, so an
+    un-retried 429 = the customer is silently ghosted. Found by running 90 real
+    questions through the live agent; no unit test would have surfaced it.
+    """
+    import asyncio
+    import httpx
+    from app import retry
+
+    calls = {"n": 0}
+
+    class FakeResp:
+        def __init__(self, status):
+            self.status_code = status
+            self.headers = {}
+            self.request = None
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"ok": True}
+
+    class FakeClient:
+        async def post(self, url, **kw):
+            calls["n"] += 1
+            return FakeResp(429 if calls["n"] < 3 else 200)
+
+    async def go():
+        return await retry.post_with_retry(
+            FakeClient(), "https://x/y", attempts=5, base_delay=0.001)
+
+    r = asyncio.run(go())
+    assert r.status_code == 200
+    assert calls["n"] == 3          # failed twice, succeeded on the third
+
+
+def test_retry_gives_up_and_raises(monkeypatch):
+    """After the last attempt it must RAISE, not return a bad response.
+
+    Swallowing the error would send the customer an empty reply, which is worse
+    than the worker logging a failure we can see.
+    """
+    import asyncio
+    import pytest
+    from app import retry
+
+    class FakeResp:
+        status_code = 429
+        headers = {}
+        request = None
+        def raise_for_status(self):
+            pass
+
+    class AlwaysThrottled:
+        async def post(self, url, **kw):
+            return FakeResp()
+
+    async def go():
+        return await retry.post_with_retry(
+            AlwaysThrottled(), "https://x/y", attempts=2, base_delay=0.001)
+
+    try:
+        asyncio.run(go())
+        assert False, "should have raised"
+    except Exception as e:
+        assert "429" in str(e)
+
+
+def test_llm_calls_go_through_retry():
+    """Guard against someone reverting to a bare c.post()."""
+    from pathlib import Path
+    src = (Path(__file__).parent.parent / "app" / "agent.py").read_text()
+    assert "post_with_retry" in src
+    assert "await c.post(" not in src, "bare post found in agent.py - no retry"
+    rag_src = (Path(__file__).parent.parent / "app" / "rag.py").read_text()
+    assert "post_with_retry" in rag_src

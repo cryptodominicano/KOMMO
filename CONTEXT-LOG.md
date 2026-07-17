@@ -6,6 +6,105 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 17:00 UTC
+
+### 90-question eval harness built. 3 real agent bugs + 1 production bug found and fixed.
+
+`scripts/eval_agent.py` + `scripts/eval_questions.json` — 30 realistic customer
+questions per workflow (agua / perforación / séptico), assertions grounded in the
+KB, not in assumptions. Reusable for every future client: swap the questions,
+keep the harness.
+
+    HARD (release blockers):  invented price / bank leak / guarantees water
+    soft (human read):        expected sentinel missing, keyword missing
+    infra:                    429 etc - reported SEPARATELY, not agent quality
+
+Run: `python scripts/eval_agent.py --concurrency 2 --json out.json`
+
+### Result
+
+    round 1:  71/90 answered, 0 hard violations, 19 infra 429s
+    round 2:  84/90 answered, 0 HARD violations, 1 soft (a harness bug)
+
+**Zero invented prices, zero bank-detail leaks, zero water guarantees across 84
+real questions.** The guardrails hold under pressure. That is the finding that
+matters, because those three are what cost Wellington money or credibility.
+
+### PRODUCTION BUG: no retry on 429 — customers were being silently ghosted
+
+Discovered because the eval itself got throttled. This account is capped at
+**30,000 TOKENS/minute**, and each reply costs ~6k (system prompt + retrieved
+KB), so only about **five replies per minute** fit. A lunchtime burst of real
+customers WILL hit 429. Without a retry the 429 propagated to `worker.py`, which
+catches Exception broadly and logs — container healthy, webhook 200, customer
+never hears back. Identical failure shape to this morning's prompt-path bug.
+
+Fixed: `app/retry.py` — exponential backoff + jitter, honours `Retry-After`,
+wired into `agent.py` (both providers) and `rag.py` embeddings. Three tests,
+including one that fails if anyone reverts to a bare `c.post()`.
+
+**Capacity note for Wellington:** ~5 concurrent replies/min is a real ceiling.
+Raising the OpenAI usage tier lifts it. Worth watching once traffic is real.
+
+### Agent bug 1: it handed out the DEAD phone number
+
+Asked "¿Cuál es su número de teléfono?" the agent answered **(829) 566-7542** —
+the ManyChat-blocked line. It was sitting in `04-contacto-precios-proceso.md`.
+Now: "puede seguir escribiendo por este mismo chat" — the customer is already on
+the official WhatsApp; dictating a second number helps nobody.
+**OPEN for Isaias:** if Wellington wants a callable voice line published, say
+which number and it goes back in.
+
+### Agent bug 2: séptico sizing failed above 8 baños — the biggest sales
+
+    "Tengo 4 banos"   -> Modulo 8, RD$70,000        CORRECT
+    "Tengo 10 banos"  -> generic brochure           WRONG (should be Modulo 16)
+    "Tengo 20 banos"  -> generic brochure           WRONG (should be 2 modules)
+
+The KB *listed* the modules and never stated the **rule**, so the model recited
+the brochure instead of recommending. 4 baños only worked because 4 < 8 is
+obvious from the listing. Added an explicit sizing rule to the KB + prompt.
+
+**Then 20 baños STILL failed — and the cause was RETRIEVAL, not the prompt.**
+The intro chunk contains "villas, residencias, fincas y proyectos turísticos",
+so the word "proyecto" pulled the brochure ahead of the new sizing rule. Chunks
+split on H2, so the fix was a dedicated H2 that owns that vocabulary:
+"## Proyectos grandes: más de 16 baños (hoteles, torres, complejos, proyectos
+turísticos)". Now:
+
+    "proyecto con 20 banos"        -> Modulo 16 + Modulo 8, unit prices, tecnico confirms
+    "hotel de 24 banos"            -> Modulo 16 + Modulo 8 or two Modulo 16
+    "10 banos"                     -> Modulo 16, RD$105,000
+
+The hotel question was NOT in the KB examples — the rule generalises rather than
+pattern-matching. Lesson worth keeping: **a KB that lists facts is not a KB that
+states rules, and adding a rule is useless if retrieval never surfaces it.**
+
+### Agent bug 3: promised a técnico, never fired [[HANDOFF]]
+
+"¿Dan garantía del pozo?" → "lo mejor es hablar con un técnico" with **no
+[[HANDOFF]]**. The customer is told someone will contact them and nobody does.
+A broken promise is worse than a refusal. Now an explicit prompt rule: if the
+reply says or implies a técnico will follow up, [[HANDOFF]] is mandatory.
+Verified: it now fires.
+
+### The harness itself had two bugs — worth recording
+
+1. It flagged `[[FOTOS_SEPTICO]]` on the séptico intro and `[[HANDOFF]]` on the
+   deposit flow as "unexpected". Both are exactly correct per the prompt. Now
+   sentinels are allowed by default; only `forbid_sentinel` flags.
+2. It checked for "topograf" and the agent correctly said "Topográfico" — the
+   match was not accent-insensitive. Fixed with NFD folding.
+
+**An eval that cries wolf gets ignored, which is worse than no eval.** Both
+false alarms were mine, and both would have trained us to skim the output.
+
+### Still not proven
+
+Nothing has touched a real WhatsApp conversation. Blocked on the OTP for 3119.
+
+---
+
 ## Session: July 17, 2026 — 15:50 UTC
 
 ### DEPLOYED. https://kommo-agent.goldcoastai.pro — live, healthy, webhook registered.

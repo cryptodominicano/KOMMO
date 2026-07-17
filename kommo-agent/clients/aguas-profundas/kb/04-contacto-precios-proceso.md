@@ -1,7 +1,7 @@
 # Aguas Profundas — Contacto, Horario, Precios y Proceso
 
 ## Contacto y horario
-- WhatsApp y llamadas: (829) 566-7542.
+- El cliente YA está escribiendo por el WhatsApp oficial de Aguas Profundas. Si pregunta por el número de contacto, dígale que puede seguir escribiendo por este mismo chat y que un técnico le da seguimiento; no dicte otro número.
 - Horario de atención: lunes a viernes, 8am – 6pm (República Dominicana).
 - Dentro del horario, un técnico responde normalmente dentro de las 2 horas laborables. Fuera del horario, un técnico da seguimiento el próximo día laborable (dentro de 24 horas).
 

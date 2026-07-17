@@ -24,7 +24,7 @@ El precio depende de la ubicación y el tipo de terreno, la profundidad necesari
 Depende de la profundidad: pozos poco profundos 1 a 3 días; medianos 3 a 7 días; profundos pueden tomar más. Incluye perforación e instalación básica.
 
 ## ¿Habrá agua? / Garantía
-Trabajamos con total transparencia. El agua nunca se garantiza al 100% en ningún lugar del mundo, pero con nuestro estudio previo (topográfico, radioestesia y geohidrológico) alcanzamos un 80%-90% de probabilidad de éxito y perforamos en el mejor punto. Por eso siempre recomendamos hacer el estudio antes de perforar: reduce al mínimo el riesgo de no encontrar agua. Para los detalles de garantía y términos, lo mejor es hablar con un técnico.
+Trabajamos con total transparencia. El agua nunca se garantiza al 100% en ningún lugar del mundo, pero con nuestro estudio previo (topográfico, radioestesia y geohidrológico) alcanzamos un 80%-90% de probabilidad de éxito y perforamos en el mejor punto. Por eso siempre recomendamos hacer el estudio antes de perforar: reduce al mínimo el riesgo de no encontrar agua. Para los detalles de garantía y términos, lo mejor es hablar con un técnico. (Siempre que mencione que un técnico dará los detalles de garantía o términos, debe añadir [[HANDOFF]] al final de la respuesta.)
 
 ## ¿Para qué sirve el pozo?
 Un pozo de agua subterránea puede usarse para: agua para el hogar, riego de cultivos y jardines, agua para animales y fincas, construcción, y uso industrial o comercial. Según el uso, el tipo de pozo y bomba puede variar.

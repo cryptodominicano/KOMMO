@@ -6,6 +6,77 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 15:00 UTC
+
+### All three Salesbots built. Welcome fires from CODE, not the prompt.
+
+    55238  NPS Bot         active: false   (dormant, ignore)
+    55306  septico-fotos   active: true    <- [[FOTOS_SEPTICO]]
+    55340  welcome-bot     active: true    <- engine, first contact
+    55348  agua-foto       active: true    <- [[FOTO_AGUA]]
+
+All three have an EMPTY Triggers panel. Launched only by `POST /bots/{id}/run`.
+
+### Why welcome-bot is NOT a sentinel
+
+Two options were on the table. (A) the model emits `[[FOTO_WELCOME]]` with the
+saludo — consistent with the other two, five lines. (B) the engine tracks first
+contact per `talk_id` and fires 55340 deterministically.
+
+We took B. A greeting is not a judgement call: first message, always, no
+reasoning required. A model told to emit a sentinel "only on the first message"
+will eventually fire it late, twice, or never — and there is no way to test it.
+This is the fourth time in one day the same rule has paid: **handoff, location,
+deposit receipts, and now the greeting all moved out of the prompt into code.**
+The prompt is for judgement. Code is for rules.
+
+Implementation: `state.first_contact(talk_id)` — new `greeted` table, atomic
+INSERT-then-catch, same pattern as `already_seen`. Returns True exactly once
+per talk, survives restarts, safe across uvicorn worker processes.
+
+Deliberate: it marks BEFORE launching the bot. If the launch fails the customer
+gets no welcome image. The alternative (mark on success) re-fires on every
+subsequent message during a Kommo outage, and a duplicate greeting is worse than
+a missing promo. `welcome_bot_id` deliberately lives OUTSIDE `[salesbot.triggers]`
+so no sentinel can ever reach it; a test asserts this.
+
+**Known ordering caveat:** `send_message` (text) and `/bots/{id}/run` (202 queued)
+are separate calls, so image-vs-saludo arrival order is NOT guaranteed. Accepted,
+because the image IS the saludo made visual — the same three services the greeting
+text offers. They reinforce each other in either order. If Wellington wants a
+strict order, the fix is to move the saludo text into welcome-bot as a Message
+step and let the prompt skip it.
+
+### agua-foto removed a handoff
+
+The prompt previously said: *"Si el cliente pide fotos de pozos o del proceso de
+agua, dile que un técnico se las envía enseguida y añade [[HANDOFF]]."* That
+handoff existed **only because we believed images were impossible**. It is gone.
+"How does the water process work, any photos?" is now answered by the agent with
+the five-step infographic instead of pulling a human in. A regression test asserts
+the old sentence never comes back.
+
+That is the real cost of the wrong "no workaround" call from this morning: it did
+not just fail to send a photo, it wrote a human handoff into the product.
+
+### Tests: 14 passing (was 10)
+
+- `test_first_contact_fires_exactly_once` — double-greeting guard
+- `test_welcome_bot_is_engine_fired_not_sentinel_fired` — asserts welcome_bot_id
+  is absent from triggers AND that no FOTO_WELCOME sentinel exists in the prompt
+- `test_agua_photo_sentinel_wired_and_no_longer_hands_off`
+- `test_every_configured_bot_id_is_real` — every sentinel has a real bot id AND
+  is actually mentioned in the prompt (catches a half-finished client build)
+
+### Still not proven
+
+No bot has been fired at a live WhatsApp conversation. Everything above is
+structurally correct and tested, but the questions from 14:00 UTC are all still
+open: does `run_bot` deliver over `waba`, does it consume add-on quota, does the
+`[square bracket]` syntax make the whole mechanism unnecessary. Blocked on the OTP.
+
+---
+
 ## Session: July 17, 2026 — 14:00 UTC
 
 ### septico-fotos Salesbot built. bot_id = 55306. Image path now wired end-to-end.

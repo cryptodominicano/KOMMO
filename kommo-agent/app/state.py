@@ -34,6 +34,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL, reason TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS seen ("
                   "message_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS greeted ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -50,6 +52,31 @@ def already_seen(message_id: str, ttl: int = 3600) -> bool:
             return False
         except sqlite3.IntegrityError:
             return True
+
+
+def first_contact(talk_id: str) -> bool:
+    """True exactly once per talk - the first time we ever see it.
+
+    Drives the welcome infographic. In CODE, not the prompt: greeting on
+    first contact is not a judgement call, and a model asked to emit a
+    sentinel "only on the first message" will eventually fire it late,
+    twice, or never. Same reasoning as handoff.
+
+    INSERT-then-catch is atomic; check-then-insert would race across the
+    uvicorn worker processes.
+
+    NOTE: marks BEFORE the bot is launched. If the launch then fails the
+    customer simply gets no welcome image - deliberate. The alternative
+    (mark on success) re-fires on every later message during a Kommo
+    outage, and a duplicate greeting is worse than a missing promo.
+    """
+    with _conn() as c:
+        try:
+            c.execute("INSERT INTO greeted (talk_id, at) VALUES (?, ?)",
+                      (str(talk_id), time.time()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
 
 
 def is_handed_off(talk_id: str) -> bool:

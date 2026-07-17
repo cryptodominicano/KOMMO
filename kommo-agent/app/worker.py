@@ -53,6 +53,22 @@ async def handle_message(msg: dict) -> None:
 
     k = KommoClient()
     try:
+        # --- First contact: fire the welcome infographic, once, in code ---
+        # The image is the saludo made visual: the same three services the
+        # greeting text offers (agua / perforacion / septico). It reinforces
+        # the menu rather than competing with it.
+        # Ordering caveat: send_message and /bots/{id}/run are separate calls
+        # and the bot run returns 202 (queued), so image-vs-text arrival order
+        # is NOT guaranteed. Acceptable here - they reinforce each other.
+        welcome_bot = client_pack.pack().get("salesbot", {}).get("welcome_bot_id", 0)
+        entity_id = msg.get("entity_id") or msg.get("element_id")
+        if welcome_bot and entity_id and state.first_contact(talk_id):
+            try:
+                await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
+                log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)
+            except KommoError as e:
+                log.error("talk=%s welcome bot launch failed: %s", talk_id, e)
+
         # --- GPS pin: recognize, send verbatim text, hand off, stop ---
         # message_type == "location" is a first-class Kommo enum. On the previous
         # platform this arrived as the opaque string "[Unsupported message]" and

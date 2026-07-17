@@ -119,3 +119,58 @@ def test_inbound_media_is_configured_not_dropped():
     assert "verifica" in ack          # promises verification, never confirmation
     for bad in ("confirmado", "confirmamos", "recibimos el pago", "pago confirmado"):
         assert bad.lower() not in ack.lower(), f"must never confirm payment: {bad}"
+
+
+def test_first_contact_fires_exactly_once(monkeypatch):
+    """The welcome infographic is deterministic, not a model decision.
+
+    Guards the double-greeting bug: Kommo retries webhooks and uvicorn runs
+    multiple processes, so this must be atomic and must survive.
+    """
+    from app import state
+    with tempfile.TemporaryDirectory() as d:
+        monkeypatch.setattr(state, "_DB", Path(d) / "t.db")
+        state.init()
+        assert state.first_contact("500") is True    # first ever message
+        assert state.first_contact("500") is False   # retry / 2nd message
+        assert state.first_contact("500") is False
+        assert state.first_contact("501") is True    # different talk
+
+
+def test_welcome_bot_is_engine_fired_not_sentinel_fired():
+    """welcome_bot_id must NOT be in [salesbot.triggers].
+
+    If it were, the model could emit its sentinel mid-conversation and greet
+    someone who has been talking for ten minutes.
+    """
+    from app import client
+    sb = client.pack("aguas-profundas").get("salesbot", {})
+    assert int(sb.get("welcome_bot_id", 0)) > 0
+    triggers = sb.get("triggers", {})
+    assert all(int(v) != int(sb["welcome_bot_id"]) for v in triggers.values())
+    assert "FOTO_WELCOME" not in client.system_prompt("aguas-profundas")
+
+
+def test_agua_photo_sentinel_wired_and_no_longer_hands_off():
+    """agua-foto (55348) replaced a handoff.
+
+    The prompt used to say a tecnico would send water-process photos and fire
+    [[HANDOFF]]. That handoff existed only because we believed images were
+    impossible. Regression guard: it must not come back.
+    """
+    from app import client
+    triggers = client.pack("aguas-profundas").get("salesbot", {}).get("triggers", {})
+    assert triggers.get("[[FOTO_AGUA]]") == 55348
+    prompt = client.system_prompt("aguas-profundas")
+    assert "[[FOTO_AGUA]]" in prompt
+    assert "fotos de pozos o del proceso de agua" not in prompt
+
+
+def test_every_configured_bot_id_is_real():
+    """Sentinels with bot_id 0 warn and no-op. Catch a half-finished build."""
+    from app import client
+    sb = client.pack("aguas-profundas").get("salesbot", {})
+    for sentinel, bot_id in sb.get("triggers", {}).items():
+        assert int(bot_id) > 0, f"{sentinel} has no bot_id"
+        assert sentinel in client.system_prompt("aguas-profundas"), \
+            f"{sentinel} configured but the model is never told to emit it"

@@ -1,14 +1,21 @@
 """LLM call. The system prompt is the persona + flows; the KB arrives as
 retrieved context. Provider-agnostic: the same prompt drives OpenAI or Claude."""
 import httpx
-from pathlib import Path
 from .config import settings
+from . import client as client_pack
 
-_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system.md"
+# The prompt lives in the CLIENT PACK (clients/<id>/prompts/system.md).
+# This module used to hardcode /srv/prompts/system.md - a leftover from before
+# the engine was made client-agnostic. That path has never existed in the
+# image, so generate() raised FileNotFoundError on EVERY message. worker.py
+# catches Exception broadly, so the customer would simply have been ghosted,
+# silently, forever. Unit tests missed it because they asserted
+# client.system_prompt() works - which it does; nothing exercised THIS path.
+# Caught only by running the real container. Deploy IS a test.
 
 
 def system_prompt() -> str:
-    return _PROMPT_PATH.read_text(encoding="utf-8")
+    return client_pack.system_prompt()
 
 
 def _system(kb_context: str) -> str:

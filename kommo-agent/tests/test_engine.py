@@ -202,3 +202,33 @@ def test_ingest_script_points_at_the_real_kb():
     chunks = mod.chunk_markdown(files[0].read_text(encoding="utf-8"), files[0].name)
     assert len(chunks) > 0
     assert all(c["text"].strip() for c in chunks)
+
+
+def test_agent_loads_the_real_system_prompt():
+    """Regression: agent.py hardcoded /srv/prompts/system.md, which never existed.
+
+    generate() raised FileNotFoundError on EVERY message. worker.py catches
+    Exception broadly, so the customer was ghosted silently - no reply, no
+    visible error. The existing tests missed it because they asserted
+    client.system_prompt() works (it does); nothing exercised agent.py's own
+    loader. Only running the container caught it.
+
+    This asserts agent.py reads the SAME prompt the client pack serves.
+    """
+    from app import agent, client
+    p = agent.system_prompt()
+    assert p == client.system_prompt("aguas-profundas")
+    assert "Aguas Profundas" in p
+    assert "[[HANDOFF]]" in p
+
+
+def test_system_prompt_carries_the_guardrails_into_the_llm_call():
+    """The non-negotiables must survive assembly, not just exist in a file."""
+    from app import agent
+    system = agent._system("CONTEXTO_DE_PRUEBA_KB")
+    assert "CONTEXTO_DE_PRUEBA_KB" in system          # KB actually injected
+    assert "FUENTES DE CONOCIMIENTO" in system
+    assert "[[HANDOFF]]" in system                     # handoff still reachable
+    assert "datos bancarios" in system                 # never send bank details
+    assert "[[FOTOS_SEPTICO]]" in system
+    assert "[[FOTO_AGUA]]" in system

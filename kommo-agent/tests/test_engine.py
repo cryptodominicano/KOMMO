@@ -174,3 +174,31 @@ def test_every_configured_bot_id_is_real():
         assert int(bot_id) > 0, f"{sentinel} has no bot_id"
         assert sentinel in client.system_prompt("aguas-profundas"), \
             f"{sentinel} configured but the model is never told to emit it"
+
+
+def test_ingest_script_points_at_the_real_kb():
+    """Regression: KB_DIR pointed at kommo-agent/kb, which never existed.
+
+    The KB lives in the client pack. The bug was silent - it would have built an
+    empty Qdrant collection and left the agent answering from nothing, with the
+    guardrails ("never guarantee water") gone too, since those live in the KB.
+    """
+    import importlib.util
+    root = Path(__file__).parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "ingest_kb", root / "scripts" / "ingest_kb.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    assert mod.KB_DIR.is_dir(), f"KB_DIR does not exist: {mod.KB_DIR}"
+    files = sorted(mod.KB_DIR.glob("*.md"))
+    assert len(files) >= 4, f"expected the 4 KB files, found {len(files)}"
+
+    # The KB must still carry the two non-negotiable business rules.
+    corpus = "\n".join(f.read_text(encoding="utf-8") for f in files)
+    assert "80" in corpus and "90" in corpus, "water success-rate range missing"
+
+    # And chunking must actually produce chunks (H2 split).
+    chunks = mod.chunk_markdown(files[0].read_text(encoding="utf-8"), files[0].name)
+    assert len(chunks) > 0
+    assert all(c["text"].strip() for c in chunks)

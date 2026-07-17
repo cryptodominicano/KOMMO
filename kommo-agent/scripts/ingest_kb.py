@@ -19,7 +19,12 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://172.20.0.10:6333")
 COLLECTION = os.getenv("QDRANT_COLLECTION", "aguas_profundas_kb")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-KB_DIR = Path(__file__).parent.parent / "kb"
+# The KB lives inside the CLIENT PACK, not at the repo root. This pointed at
+# kommo-agent/kb (which has never existed) - a leftover from before the engine
+# was made client-agnostic. It would have created an empty collection and left
+# the agent answering with no knowledge at all, silently.
+CLIENT_ID = os.getenv("CLIENT_ID", "aguas-profundas")
+KB_DIR = Path(__file__).parent.parent / "clients" / CLIENT_ID / "kb"
 
 
 def chunk_markdown(text: str, source: str) -> list[dict]:
@@ -63,6 +68,9 @@ def main() -> int:
         print("ERROR: OPENAI_API_KEY not set", file=sys.stderr)
         return 1
 
+    if not KB_DIR.is_dir():
+        print(f"ERROR: KB dir does not exist: {KB_DIR}", file=sys.stderr)
+        return 1
     files = sorted(KB_DIR.glob("*.md"))
     if not files:
         print(f"ERROR: no .md files in {KB_DIR}", file=sys.stderr)

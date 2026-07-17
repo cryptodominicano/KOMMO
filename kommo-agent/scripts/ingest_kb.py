@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
-"""Ingest the Aguas Profundas KB into Qdrant.
+"""Ingest a client's KB into Qdrant.
 
-Matches the existing account convention: 1536-dim vectors, Cosine distance
-(OpenAI text-embedding-3-small), same as every other collection on this VPS.
+WHY httpx AND NOT qdrant-client: the app dropped qdrant-client because it is
+synchronous and blocks the event loop (which threatens Kommo's hard 2-second
+webhook ack). This script imported it anyway and died at deploy time on
+ModuleNotFoundError. Qdrant's REST API is trivial - use it, add no dependency,
+and stay consistent with app/rag.py.
 
-Chunks on markdown H2 headings so each Q/A or objection stays intact.
+The collection name comes from the CLIENT PACK, exactly like app/rag.py reads
+it. It used to come from an env var here, which meant two sources of truth that
+happened to agree; the first time they disagreed, ingest would have written to
+one collection while the agent read from another, and the agent would have
+answered from nothing with no error anywhere.
+
+Vectors: 1536-dim, Cosine (OpenAI text-embedding-3-small) - the account
+convention shared by every other collection on this VPS.
+
+Chunks on markdown H2 so each Q/A or objection stays intact.
 """
 import os
 import sys
@@ -12,18 +24,16 @@ import re
 import uuid
 import httpx
 from pathlib import Path
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from app import client as client_pack  # noqa: E402
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://172.20.0.10:6333")
-COLLECTION = os.getenv("QDRANT_COLLECTION", "aguas_profundas_kb")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-# The KB lives inside the CLIENT PACK, not at the repo root. This pointed at
-# kommo-agent/kb (which has never existed) - a leftover from before the engine
-# was made client-agnostic. It would have created an empty collection and left
-# the agent answering with no knowledge at all, silently.
 CLIENT_ID = os.getenv("CLIENT_ID", "aguas-profundas")
+
+# The KB lives inside the client pack, not at the repo root.
 KB_DIR = Path(__file__).parent.parent / "clients" / CLIENT_ID / "kb"
 
 
@@ -68,6 +78,10 @@ def main() -> int:
         print("ERROR: OPENAI_API_KEY not set", file=sys.stderr)
         return 1
 
+    # Same source of truth the agent reads at query time.
+    collection = client_pack.pack(CLIENT_ID)["client"]["qdrant_collection"]
+    print(f"client={CLIENT_ID} collection={collection}")
+
     if not KB_DIR.is_dir():
         print(f"ERROR: KB dir does not exist: {KB_DIR}", file=sys.stderr)
         return 1
@@ -81,31 +95,33 @@ def main() -> int:
         c = chunk_markdown(f.read_text(encoding="utf-8"), f.name)
         chunks.extend(c)
         print(f"  {f.name}: {len(c)} chunks")
-
     print(f"total chunks: {len(chunks)}")
+
     vectors = embed([c["text"] for c in chunks])
     dim = len(vectors[0])
     print(f"embedding dim: {dim}")
     assert dim == 1536, f"expected 1536 to match existing collections, got {dim}"
 
-    client = QdrantClient(url=QDRANT_URL)
-    existing = [c.name for c in client.get_collections().collections]
-    if COLLECTION in existing:
-        print(f"recreating collection {COLLECTION}")
-        client.delete_collection(COLLECTION)
-    client.create_collection(
-        collection_name=COLLECTION,
-        vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
-    )
-    client.upsert(
-        collection_name=COLLECTION,
-        points=[
-            PointStruct(id=str(uuid.uuid4()), vector=v, payload=c)
-            for v, c in zip(vectors, chunks)
-        ],
-    )
-    info = client.get_collection(COLLECTION)
-    print(f"OK: {COLLECTION} now has {info.points_count} points")
+    with httpx.Client(timeout=60.0) as c:
+        existing = [x["name"] for x in
+                    c.get(f"{QDRANT_URL}/collections").json()["result"]["collections"]]
+        if collection in existing:
+            print(f"recreating collection {collection}")
+            c.delete(f"{QDRANT_URL}/collections/{collection}").raise_for_status()
+        c.put(
+            f"{QDRANT_URL}/collections/{collection}",
+            json={"vectors": {"size": dim, "distance": "Cosine"}},
+        ).raise_for_status()
+        c.put(
+            f"{QDRANT_URL}/collections/{collection}/points?wait=true",
+            json={"points": [
+                {"id": str(uuid.uuid4()), "vector": v, "payload": p}
+                for v, p in zip(vectors, chunks)
+            ]},
+        ).raise_for_status()
+        info = c.get(f"{QDRANT_URL}/collections/{collection}").json()["result"]
+
+    print(f"OK: {collection} now has {info['points_count']} points")
     return 0
 
 

@@ -6,6 +6,99 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 15:50 UTC
+
+### DEPLOYED. https://kommo-agent.goldcoastai.pro — live, healthy, webhook registered.
+
+    container   kommo-agent (healthy)
+    compose     /root/kommo-agent/docker-compose.yml   <- its OWN project.
+                NOT appended to /root/docker-compose.yml, so n8n/traefik untouched.
+    networks    root_default (traefik) + goldcoast (qdrant 172.20.0.10) + internal
+    cert        Let's Encrypt, valid to Oct 15 2026, mytlschallenge
+    qdrant      aguas_profundas_kb - 32 points, 1536-dim Cosine
+    webhook     id 47409015, add_message, enabled
+    secret      KOMMO_WEBHOOK_SECRET in master.env
+
+### THREE bugs found by deploying. None caught by 15 green unit tests.
+
+All three were the same root cause: **paths left behind when the engine was made
+client-agnostic.** All three were silent. All three would have looked healthy.
+
+**1. `ingest_kb.py` KB_DIR = `kommo-agent/kb`** — never existed. Would have built
+an empty collection. The agent would have answered every customer from nothing,
+guardrails included, since "never guarantee water" lives in the KB.
+
+**2. `ingest_kb.py` imported `qdrant_client`** — the app deliberately dropped that
+dep (sync, blocks the event loop, threatens the 2s ack). Not in requirements.
+Died on ModuleNotFoundError the first time it was ever run. Also read the
+collection from an env var while `rag.py` reads it from the client pack: two
+sources of truth that happened to agree. Rewritten on httpx REST + client pack.
+
+**3. `agent.py` `_PROMPT_PATH = /srv/prompts/system.md`** — never existed in the
+image. **`generate()` raised FileNotFoundError on EVERY message.** `worker.py`
+catches Exception broadly, so the customer would have been ghosted silently: no
+reply, no visible error, container reporting healthy. The bot would have been
+deployed, green, and completely mute.
+
+Why the tests missed #3: they asserted `client.system_prompt()` works — it does.
+Nothing exercised `agent.py`'s own loader. **Unit tests are not a substitute for
+booting the container.** Deploy is a test. Every one of these was found in the
+first 20 minutes of running the real image.
+
+Now 17 tests, including one that asserts agent.py and the client pack serve the
+SAME prompt, and one that asserts the assembled system prompt still carries the
+guardrails (bank details, HANDOFF, both photo sentinels).
+
+### Verified live on gpt-4o (real KB, real retrieval)
+
+- **Pricing**: estudio "desde RD$45,000", 3 estudios. Correct.
+- **Never guarantees water**: "nunca se garantiza al 100% ... 80%-90%". Verbatim.
+- **Módulo 8 for 4 baños @ RD$70,000 envío incluido.** Correct sizing.
+- **Bank details**: "no compartimos números de cuenta por este chat". Refused.
+
+### Webhook path verified end to end
+
+- wrong secret -> 404 + warning logged
+- correct secret -> 200 in **0.109s** (Kommo's hard ack limit is 2s)
+- duplicate message id -> "duplicate message ignored", not answered twice
+- welcome bot fired automatically on first contact (403 only because the entity
+  id was invented for the test — proves the call is correctly formed)
+- embeddings 200, qdrant query 200
+
+### HONEST: sentinel firing is ~80-90%, NOT deterministic
+
+Measured, not assumed:
+
+    "Mandame fotos del septico"                    -> [[FOTOS_SEPTICO]]  yes
+    "Tienen fotos del septico?"                    -> [[FOTOS_SEPTICO]]  yes
+    "Quiero un septico, cuenteme"                  -> [[FOTOS_SEPTICO]]  yes
+    "Quiero un septico para 4 banos, cuanto?"      -> NONE  <-- MISSED
+    "Como es el proceso? Tienen fotos?"            -> [[FOTO_AGUA]]      yes
+    "Quiero hablar con una persona"                -> [[HANDOFF]]        yes
+
+The miss is real: the model sent the full INTRO SÉPTICO and skipped the sentinel,
+despite the prompt saying to emit it with the intro. This is exactly the flakiness
+that justified moving handoff, location, receipts, and the greeting into code. A
+missed photo is cosmetic; a missed handoff would not be. **The architecture is
+right: judgement in the prompt, rules in code.** Do not move anything that matters
+back into the prompt on the strength of "it worked when I tried it."
+
+### Known issue: the webhook secret appears in uvicorn access logs
+
+`docker logs kommo-agent` prints the full request path, secret included. Root on
+the VPS can read it. Acceptable for now, worth fixing (disable uvicorn access log
+for that route, or move the secret to a header) before this template ships to
+other clients.
+
+### What is still NOT proven
+
+Nothing has touched a real WhatsApp conversation. Blocked on the OTP for 3119.
+Still open: does `run_bot` actually deliver images over `waba`; does a Salesbot
+send consume add-on quota; does the `[square bracket]` syntax make the whole
+Salesbot mechanism unnecessary.
+
+---
+
 ## Session: July 17, 2026 — 15:00 UTC
 
 ### All three Salesbots built. Welcome fires from CODE, not the prompt.

@@ -1,0 +1,37 @@
+# Client pack: Aguas Profundas RD
+# The engine reads this. Nothing here is code; nothing in app/ is client-specific.
+
+[client]
+id            = "aguas-profundas"
+name          = "Aguas Profundas RD"
+language      = "es-DO"
+qdrant_collection = "aguas_profundas_kb"
+
+[kommo]
+subdomain = "infoswecinvestmentscom"
+# VERIFIED live 2026-07-17: WhatsApp Business API origin is "waba".
+# Kommo's docs only ever show "telegram". The wrong value silently drops every message.
+origin    = "waba"
+
+[messages]
+# Sent verbatim when a GPS pin arrives. Handled in code, never by the model,
+# because the model paraphrases verbatim text (proven on Botpress + Respond.io).
+location_received = """¡Gracias! 🙏 Recibimos su ubicación.
+
+Ahora un técnico le enviará por aquí una imagen (mapa satelital) de su propiedad. Cuando la reciba, por favor:
+1️⃣ Tome una captura de pantalla de esa imagen.
+2️⃣ Ábrala y toque el ícono de editar/lápiz ✏️ de WhatsApp.
+3️⃣ Dibuje los límites (linderos) de su terreno sobre el mapa.
+4️⃣ Envíenos de vuelta la imagen ya marcada.
+
+Con eso identificamos sus linderos y las posibles venas de agua para recomendarle el mejor punto de perforación. Por favor, tenga un poco de paciencia 🙏 Uno de nuestros representantes le atenderá en breve."""
+
+audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría repetirla o escribirme el mensaje?"
+
+[behavior]
+# message_type values that trigger the deterministic location handoff
+location_types = ["location"]
+# message_type values treated as voice notes
+audio_types    = ["voice", "audio"]
+# model emits this sentinel; engine strips it and pauses the agent in code
+handoff_marker = "[[HANDOFF]]"

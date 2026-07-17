@@ -1,0 +1,27 @@
+services:
+  kommo-agent:
+    build: .
+    container_name: kommo-agent
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - kommo_agent_data:/data
+    networks:
+      - root_default
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kommoagent.rule=Host(`kommo-agent.goldcoastai.pro`)"
+      - "traefik.http.routers.kommoagent.entrypoints=web,websecure"
+      - "traefik.http.routers.kommoagent.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.kommoagent.loadbalancer.server.port=8080"
+      - "traefik.docker.network=root_default"
+
+volumes:
+  kommo_agent_data:
+
+networks:
+  root_default:
+    external: true
+  internal:
+    driver: bridge

@@ -1,0 +1,112 @@
+"""Background processing. Runs AFTER the webhook has already been acked.
+
+Client-agnostic: every Spanish string and channel value comes from the client
+pack (clients/<id>/client.toml). Onboarding a client is a new directory.
+"""
+import logging
+from . import rag, agent, state, client as client_pack
+from .kommo import KommoClient, KommoError
+from .transcribe import download_audio, transcribe, TranscriptionRejected
+from .config import settings
+
+log = logging.getLogger("worker")
+
+
+async def _history(k: KommoClient, talk_id: str, limit: int = 20) -> list[dict]:
+    """Claude/OpenAI-shaped history from Kommo chat history (free of add-on quota)."""
+    msgs = await k.get_messages(talk_id, limit=limit)
+    out = []
+    for m in reversed(msgs):                     # oldest first
+        text = (m.get("text") or "").strip()
+        if not text:
+            continue
+        out.append({"role": "user" if m.get("type") == "incoming" else "assistant",
+                    "content": text})
+    return out[-limit:]
+
+
+async def handle_message(msg: dict) -> None:
+    talk_id = str(msg.get("talk_id") or "")
+    msg_id = str(msg.get("id") or "")
+    mtype = (msg.get("message_type") or "text").lower()
+    text = (msg.get("text") or "").strip()
+
+    if not talk_id:
+        log.warning("no talk_id, skipping msg=%s", msg_id)
+        return
+
+    # Handoff is enforced in CODE. Once a human owns the talk, we are silent.
+    if state.is_handed_off(talk_id):
+        log.info("talk=%s handed off - staying silent", talk_id)
+        return
+
+    location_types = set(client_pack.behavior("location_types"))
+    audio_types = set(client_pack.behavior("audio_types"))
+    marker = client_pack.behavior("handoff_marker")
+
+    k = KommoClient()
+    try:
+        # --- GPS pin: recognize, send verbatim text, hand off, stop ---
+        # message_type == "location" is a first-class Kommo enum. On the previous
+        # platform this arrived as the opaque string "[Unsupported message]" and
+        # had to be pattern-matched. Deterministic here - no model judgment.
+        if mtype in location_types:
+            log.info("talk=%s location pin received", talk_id)
+            await k.send_message(talk_id, client_pack.msg("location_received"))
+            state.mark_handoff(talk_id, "location_shared")
+            return
+
+        # --- Voice note: download -> transcribe -> treat as text ---
+        if mtype in audio_types:
+            link = (msg.get("attachment") or {}).get("link")
+            if not link:
+                # Kommo's docs never show `attachment` on the INCOMING webhook
+                # (only a text sample), so fall back to the history endpoint,
+                # which does not consume add-on quota.
+                for m in await k.get_messages(talk_id, limit=5):
+                    if str(m.get("id")) == msg_id:
+                        link = (m.get("attachment") or {}).get("link")
+                        break
+            if not link:
+                log.warning("talk=%s voice note without attachment link", talk_id)
+                await k.send_message(talk_id, client_pack.msg("audio_unclear"))
+                return
+            try:
+                text = await transcribe(await download_audio(link))
+                log.info("talk=%s transcript=%r", talk_id, text)
+            except TranscriptionRejected as e:
+                # Whisper invents filler on silence. Never guess intent - ask again.
+                log.info("talk=%s transcription rejected (%s)", talk_id, e)
+                await k.send_message(talk_id, client_pack.msg("audio_unclear"))
+                return
+
+        if not text:
+            log.info("talk=%s nothing to answer (type=%s)", talk_id, mtype)
+            return
+
+        # --- RAG + LLM ---
+        kb = await rag.retrieve(text)
+        history = await _history(k, talk_id)
+        if history and history[-1]["role"] == "user":
+            history = history[:-1]               # current message passed separately
+        reply = await agent.generate(text, kb, history)
+        if not reply:
+            log.warning("talk=%s empty model reply", talk_id)
+            return
+
+        # Model signals handoff with a sentinel; the pause is enforced here.
+        handoff = marker in reply
+        reply = reply.replace(marker, "").strip()
+
+        if reply:
+            await k.send_message(talk_id, reply)
+        if handoff:
+            state.mark_handoff(talk_id, "agent_requested")
+            log.info("talk=%s handed off by agent", talk_id)
+
+    except KommoError as e:
+        log.error("talk=%s kommo error: %s", talk_id, e)
+    except Exception:
+        log.exception("talk=%s unhandled error", talk_id)
+    finally:
+        await k.aclose()

@@ -15,6 +15,16 @@ Kommo **also** does not allow creating AI agents via API — see the analysis fo
 
 That combination lets us skip Kommo's built-in AI entirely and run **our own Claude agent**, with the prompt, the flows, and the handoff logic all in code, in this repo.
 
+## The agent
+
+Code lives in [`kommo-agent/`](kommo-agent/) — a **reusable template**. The engine
+(`app/`) has no client-specific content; a client is a directory under
+`clients/<id>/` holding its prompt, KB, verbatim messages and channel config.
+Onboarding a client is a new directory, not a code change.
+
+See [`kommo-agent/README.md`](kommo-agent/README.md) for the design decisions and
+why each one exists.
+
 ## Architecture
 
 ```

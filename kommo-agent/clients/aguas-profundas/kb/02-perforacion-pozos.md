@@ -1,0 +1,36 @@
+# Aguas Profundas — Perforación de Pozos
+
+## Mensaje base (perforación)
+Con gusto le explico 💧⛏️
+
+Importante: antes de perforar SIEMPRE realizamos primero el estudio de agua del terreno. El estudio es el que nos dice dónde y a qué profundidad perforar. Sin estudio no perforamos, para proteger su inversión.
+
+Según los resultados del estudio, le ofrecemos:
+- Perforación convencional: cuando el estudio confirma buena probabilidad de agua.
+- Perforación de exploración: para terrenos con mayor riesgo de no encontrar agua; somos de las pocas empresas que la ofrecen.
+
+La perforación es a partir de RD$850 a RD$1,300 el pie, incluye transporte, y el precio final depende de la profundidad, el terreno y los materiales.
+
+## El proceso incluye
+- Evaluación del terreno (estudio de agua primero).
+- Perforación profesional.
+- Instalación de tubería y bomba.
+- Prueba de caudal (aforo).
+
+## ¿Cuánto cuesta un pozo?
+El precio depende de la ubicación y el tipo de terreno, la profundidad necesaria para encontrar agua, y el diámetro y materiales requeridos. La perforación va desde RD$850 a RD$1,300 el pie e incluye transporte. Para un precio exacto, primero se evalúa el terreno con el estudio.
+
+## ¿Cuánto tarda la perforación?
+Depende de la profundidad: pozos poco profundos 1 a 3 días; medianos 3 a 7 días; profundos pueden tomar más. Incluye perforación e instalación básica.
+
+## ¿Habrá agua? / Garantía
+Trabajamos con total transparencia. El agua nunca se garantiza al 100% en ningún lugar del mundo, pero con nuestro estudio previo (topográfico, radioestesia y geohidrológico) alcanzamos un 80%-90% de probabilidad de éxito y perforamos en el mejor punto. Por eso siempre recomendamos hacer el estudio antes de perforar: reduce al mínimo el riesgo de no encontrar agua. Para los detalles de garantía y términos, lo mejor es hablar con un técnico.
+
+## ¿Para qué sirve el pozo?
+Un pozo de agua subterránea puede usarse para: agua para el hogar, riego de cultivos y jardines, agua para animales y fincas, construcción, y uso industrial o comercial. Según el uso, el tipo de pozo y bomba puede variar.
+
+## Objeción: la perforación es cara
+Le entiendo, es lógico comparar precios. Somos de las únicas compañías que ofrece la Perforación de Exploración: si su terreno tiene alto riesgo de no encontrar agua, otras empresas le cobran igual y perforan de todas formas; si no hay agua, perdió ese dinero. Nosotros se lo decimos antes y usamos una metodología específica, tecnología satelital y un equipo con formación internacional para proteger su inversión.
+
+## ¿Por qué elegir Aguas Profundas? ¿Por qué son más caros?
+Perforar un pozo no es un gasto, es una inversión que debe hacerse bien desde la primera vez. No competimos por ser los más baratos; competimos por experiencia, precisión y calidad. Hacemos un estudio previo más completo, contamos con personal de amplia experiencia y maquinaria especializada, trabajamos con materiales de alta calidad, y lo acompañamos antes, durante y después de la perforación. Elegir solo por precio puede salir mucho más costoso si el pozo no da el caudal esperado o hay que perforar de nuevo.

@@ -151,7 +151,11 @@ async def handle_message(msg: dict) -> None:
         trigger_text = sb.get("deposit_trigger_text") or ""
         deposit_bot = sb.get("deposit_bot_id", 0)
         if trigger_text and trigger_text in reply:
-            if deposit_bot:
+            if deposit_bot and not state.first_deposit(talk_id):
+                # Already sent for this talk. Repeats are either a model loop
+                # or someone farming the image; either way, once is enough.
+                log.warning("talk=%s deposit bot already fired - suppressed", talk_id)
+            elif deposit_bot:
                 fire.append(int(deposit_bot))
                 log.info("talk=%s order message sent - firing deposit bot %s",
                          talk_id, deposit_bot)

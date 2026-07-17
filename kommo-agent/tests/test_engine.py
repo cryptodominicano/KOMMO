@@ -312,3 +312,58 @@ def test_llm_calls_go_through_retry():
     assert "await c.post(" not in src, "bare post found in agent.py - no retry"
     rag_src = (Path(__file__).parent.parent / "app" / "rag.py").read_text()
     assert "post_with_retry" in rag_src
+
+
+def test_deposit_bot_fires_from_text_not_a_sentinel():
+    """The bank photo must ride on the order message deterministically.
+
+    Sentinel firing measured ~80-90%. A miss here tells the customer "le comparto
+    los datos" and sends no photo, at the exact moment they are trying to pay -
+    the same broken promise as the [[HANDOFF]]-on-garantia bug. So the engine
+    fires it on the order TEXT, which the model either sent or did not.
+    """
+    from app import client
+    sb = client.pack("aguas-profundas").get("salesbot", {})
+    trigger = sb.get("deposit_trigger_text")
+    assert trigger, "deposit_trigger_text missing"
+
+    # The trigger must actually appear in the order message the model is told to
+    # send, or the bank photo never fires.
+    prompt = client.system_prompt("aguas-profundas")
+    assert trigger in prompt, (
+        f"deposit_trigger_text {trigger!r} is not in the order message - "
+        "config and prompt have drifted, the bank photo would never fire")
+
+    # It must NOT be a model-fired sentinel.
+    assert "[[FOTO_BANCO]]" not in prompt
+    assert all("BANCO" not in k for k in sb.get("triggers", {}))
+
+
+def test_septico_order_does_not_hand_off_before_payment():
+    """Handoff used to fire at 'quiero ordenarlo', silencing the agent BEFORE the
+    deposit - which made the receipt-handling code dead in the septico path.
+
+    The flow is now: order message + bank photo -> customer pays -> receipt
+    arrives -> code acks and hands off. So the prompt must NOT tell the model to
+    hand off right after the order message.
+    """
+    from app import client
+    prompt = client.system_prompt("aguas-profundas")
+    assert "NO añadas [[HANDOFF]] después de este mensaje" in prompt
+    assert "Ya enviaste el mensaje de orden del séptico" not in prompt
+
+
+def test_no_bank_details_anywhere_in_the_client_pack():
+    """The account number and cedula live ONLY in the Kommo Salesbot image.
+
+    This repo is public. A real account number or cedula in the pack, the prompt,
+    or the KB is a leak that git history keeps forever.
+    """
+    import re
+    from pathlib import Path
+    root = Path(__file__).parent.parent / "clients" / "aguas-profundas"
+    bad = re.compile(r"\b\d{9,}\b|banco\s+popular|banreservas|c[eé]dula\s*[:#]?\s*\d",
+                     re.I)
+    for f in list(root.rglob("*.md")) + list(root.rglob("*.toml")):
+        m = bad.search(f.read_text(encoding="utf-8"))
+        assert not m, f"possible bank detail in {f.name}: {m.group(0)!r}"

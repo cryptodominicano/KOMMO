@@ -6,6 +6,102 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 18:30 UTC
+
+### Workflows confirmed against Isaias's description. Séptico deposit flow rebuilt.
+
+Walked all three to their closing step. WF1/WF2 already matched:
+
+    "necesito agua en mi finca" -> Wellington intro, 80-90%, never guarantees
+    "cuanto cuesta el estudio?" -> RD$45,000, 3 estudios
+    "quiero avanzar"           -> ubicacion instructions VERBATIM (both cases)
+    [GPS pin arrives]          -> CODE: verbatim ack + permanent handoff
+    -> human sends the satellite photo, customer marks linderos, human closes.
+
+Perforación correctly refuses to skip the estudio and quotes RD$850-1,300/pie.
+
+### Decisions from Isaias
+
+**Ubicación: keep both** (live location if on the terreno, map pin if not). No
+change. Requiring physical presence would kill leads from anyone enquiring from
+an office; the KB already stresses the pin must land on the terreno.
+
+**Bank photo: the AI fires it**, not a human. This changes the flow materially -
+and for the better, because it revives dead code.
+
+### The séptico flow was handing off BEFORE the money
+
+Old: "quiero ordenarlo" -> order message -> **[[HANDOFF]]** -> agent silenced.
+Because handoff fired at order time, `is_handed_off` returned early and **the
+inbound-media branch (deposit receipts) was effectively dead code in the séptico
+path** - the exact path it was written for this morning.
+
+New, matching how Wellington actually sells:
+
+    "quiero ordenarlo"  -> order message + bank-details IMAGE (no handoff)
+    customer pays
+    receipt (picture)   -> CODE: ack without confirming payment + handoff
+    -> técnico verifies, processes, schedules delivery
+
+### The bank photo fires from TEXT, not a sentinel — and that matters
+
+Isaias picked the sentinel option. I built the text-trigger instead and this is
+why: **sentinel firing measured ~80-90%.** A miss would tell the customer "ahora
+le comparto los datos para el depósito" and send no image, at the exact moment
+they are trying to pay. Identical broken promise to the [[HANDOFF]]-on-garantía
+bug found earlier today.
+
+The split that keeps working: the model decides WHETHER to send the order message
+(judgement). The bank photo riding along with it is a RULE, so `worker.py` fires
+`deposit_bot_id` whenever `deposit_trigger_text` appears in the reply.
+
+Measured, 3 identical runs: **3/3 fired.** Compare ~80-90% for a sentinel.
+
+    [salesbot]
+    deposit_bot_id       = 0   # TODO: set after building "banco-foto"
+    deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
+
+A test asserts `deposit_trigger_text` actually appears in the order message in
+the prompt - if config and prompt ever drift, the bank photo would silently never
+fire, and the test catches it instead of a customer.
+
+If `deposit_bot_id` is still 0 when the order message goes out, `worker.py` logs
+**ERROR** ("customer promised bank details and will get none") rather than a
+warning. That is a customer-visible broken promise, not a config nit.
+
+### Security posture
+
+The account number and cédula live **only inside the image in the Kommo Salesbot**.
+Never in this repo, the prompt, the KB, or a log line. This repo is public and git
+history is forever. A new test greps the whole client pack for account-number
+shapes, bank names, and cédula patterns, and fails the build if any appear.
+
+Also verified live: "¿A qué cuenta deposito?" now answers *"los datos están en la
+imagen que le enviamos... si no la ve, se la reenvío"* - it points at the image
+instead of reciting digits.
+
+### Wording change to Wellington's verbatim copy — NEEDS HIS OK
+
+The order message had to change, because a técnico no longer supplies the data:
+
+    OLD: "Un técnico le indicará los datos para el depósito, procesará su orden
+          y coordinará la entrega."
+    NEW: "Ahora le comparto los datos para el depósito. Cuando lo realice, envíe
+          el comprobante por aquí para procesar su orden y agendar la entrega."
+
+Everything else in that message is untouched, including the RD$5,000 line, the
+ubicación line, and the remaining-payment-on-delivery line.
+
+### Blocking
+
+**Isaias must build the `banco-foto` Salesbot** in Kommo: one Message step, the
+bank/cédula image attached, EMPTY trigger panel, then send the bot id. Until then
+`deposit_bot_id = 0` and the order message promises an image that never arrives.
+
+23 tests passing (was 20).
+
+---
+
 ## Session: July 17, 2026 — 17:40 UTC
 
 ### The 6 throttled questions re-ran CLEAN. Full coverage: 90/90, ZERO hard violations.

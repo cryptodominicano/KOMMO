@@ -60,6 +60,21 @@ handoff_marker = "[[HANDOFF]]"
 # Not in [salesbot.triggers] precisely because no sentinel should reach it.
 welcome_bot_id = 55340   # "welcome-bot": the saludo as an infographic.
 
+# DEPOSIT / BANK DETAILS. Fired deterministically by the engine when the
+# septico order message goes out - NOT by a model sentinel.
+#
+# WHY CODE AND NOT A SENTINEL: sentinel firing measured ~80-90%. A miss here
+# means the customer is told "le comparto los datos" and no photo arrives, at
+# the exact moment they are trying to pay. The model decides WHETHER to send
+# the order message (judgement); the bank photo riding along with it is a RULE.
+#
+# The bank account + cedula live ONLY in the image inside this Kommo Salesbot.
+# They are never in this repo, the prompt, the KB, or any log line.
+deposit_bot_id = 0       # TODO: set after building the "banco-foto" Salesbot
+# If this exact text appears in a reply, the engine fires deposit_bot_id.
+# Must stay in sync with the order message in prompts/system.md.
+deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
+
 [salesbot.triggers]
 "[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.
 "[[FOTO_AGUA]]"     = 55348  # "agua-foto": the 5-step water process infographic.

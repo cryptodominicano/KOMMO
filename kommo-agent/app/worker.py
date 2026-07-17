@@ -134,8 +134,32 @@ async def handle_message(msg: dict) -> None:
 
         # IMAGE WORKAROUND: send_message is text-only, but a Salesbot can attach
         # images. The model emits a sentinel; we strip it and launch the bot.
-        bots = client_pack.pack().get("salesbot", {}).get("triggers", {})
+        sb = client_pack.pack().get("salesbot", {})
+        bots = sb.get("triggers", {})
         fire: list[int] = []
+
+        # --- DEPOSIT / BANK DETAILS: fired by the TEXT, not by a sentinel ---
+        # The model decides whether to send the septico order message - that is
+        # judgement. The bank photo riding along with it is a RULE, so it fires
+        # from code. Sentinel firing measured ~80-90%; a miss here would tell the
+        # customer "le comparto los datos" and send no photo, at the exact moment
+        # they are trying to pay. Same class of broken promise as the [[HANDOFF]]
+        # bug on garantia.
+        #
+        # The account number and cedula exist ONLY inside the Salesbot image in
+        # Kommo. They never touch this repo, the prompt, the KB, or a log line.
+        trigger_text = sb.get("deposit_trigger_text") or ""
+        deposit_bot = sb.get("deposit_bot_id", 0)
+        if trigger_text and trigger_text in reply:
+            if deposit_bot:
+                fire.append(int(deposit_bot))
+                log.info("talk=%s order message sent - firing deposit bot %s",
+                         talk_id, deposit_bot)
+            else:
+                # Loud: the customer was just promised bank details we cannot send.
+                log.error("talk=%s ORDER MESSAGE SENT BUT deposit_bot_id IS 0 - "
+                          "customer promised bank details and will get none",
+                          talk_id)
         for sentinel, bot_id in bots.items():
             if sentinel in reply:
                 reply = reply.replace(sentinel, "").strip()

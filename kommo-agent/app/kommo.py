@@ -51,6 +51,25 @@ class KommoClient:
             return []
         return data.get("_embedded", {}).get("messages", [])
 
+    async def run_bot(self, bot_id: int | str, entity_id: int | str,
+                      entity_type: str = "leads") -> None:
+        """POST /bots/{id}/run -> 202 (queued, not sent).
+
+        THE IMAGE WORKAROUND. send_message is text-only, but a Salesbot Message
+        step CAN carry images ("Supported file types include: Documents, Images,
+        Videos, Audio files"). The payload is built once in the UI; we trigger it
+        from code. The agent decides WHEN, Salesbot carries WHAT.
+
+        Gotchas:
+          - One bot per entity. A second launch on the same entity silently
+            blocks while another bot is running.
+          - 202 means queued; there is no synchronous send confirmation.
+          - Does NOT go through /talks/{id}/send_message, so it very likely does
+            not consume Chats API add-on quota (unverified).
+        """
+        await self._req("POST", f"/bots/{bot_id}/run",
+                        json={"entity_id": int(entity_id), "entity_type": entity_type})
+
     async def get_talk(self, talk_id: str | int) -> dict | None:
         data = await self._req("GET", "/talks", params={"filter[talk_id][]": talk_id})
         if not data:

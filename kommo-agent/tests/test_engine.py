@@ -83,3 +83,21 @@ def test_client_pack_loads():
     assert "Recibimos su ubicación" in client.msg("location_received", "aguas-profundas")
     assert client.behavior("handoff_marker", "aguas-profundas") == "[[HANDOFF]]"
     assert "Aguas Profundas" in client.system_prompt("aguas-profundas")
+
+
+def test_entity_type_pluralised_for_bot_run():
+    """Webhook sends 'lead'; POST /bots/{id}/run requires 'leads'."""
+    from app.worker import _entity_type
+    assert _entity_type({"entity_type": "lead"}) == "leads"
+    assert _entity_type({"entity_type": "leads"}) == "leads"
+    assert _entity_type({}) == "leads"
+    assert _entity_type({"entity_type": "contact"}) == "contacts"
+
+
+def test_salesbot_trigger_configured():
+    """The image workaround: send_message is text-only, so a sentinel fires a
+    Salesbot, whose Message step CAN attach images."""
+    from app import client
+    triggers = client.pack("aguas-profundas").get("salesbot", {}).get("triggers", {})
+    assert "[[FOTOS_SEPTICO]]" in triggers
+    assert "[[FOTOS_SEPTICO]]" in client.system_prompt("aguas-profundas")

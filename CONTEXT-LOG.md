@@ -6,6 +6,76 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 17, 2026 — 07:30 UTC
+
+### ⚠️ CORRECTION: images ARE sendable. My "no workaround" call was wrong.
+
+The 04:30 and 06:00 entries state that `send_message` is text-only and therefore
+the agent cannot send photos, and the prompt was written to apologise and hand
+off. **That conclusion was wrong**, and it was wrong because I accepted a
+limitation instead of hunting for the seam. Isaias pushed back and asked for a
+deep search. The search found it.
+
+**The seam:** `send_message` really is text-only. But a **Salesbot Message step
+can attach images** — Kommo's own docs: *"You can also attach files to your
+messages... Supported file types include: Documents, **Images**, Videos, Audio
+files."* And `POST /api/v4/bots/{id}/run` launches a Salesbot for an entity.
+
+So the payload is authored once in the UI, but **the trigger is fully
+programmatic**. The agent decides *when*; Salesbot carries *what*. The
+`add_message` webhook already hands us `entity_id`, so no extra lookup.
+
+Implemented:
+- `kommo.py` → `run_bot()`
+- `worker.py` → sentinel detected → strip → `POST /bots/{id}/run`
+- `client.toml` → `[salesbot.triggers]` maps sentinel → bot id
+- prompt → emits `[[FOTOS_SEPTICO]]` instead of apologising
+
+**Still to do:** build the `septico-fotos` Salesbot in the UI with the 3 photos,
+then set its id in `[salesbot.triggers]` (currently `0`, which logs a warning and
+no-ops rather than failing loudly).
+
+### Two more leads worth testing
+
+1. **The `[square bracket]` syntax.** Third-party Kommo docs claim a URL wrapped
+   in square brackets inside a Salesbot text box is rendered **as an image, not a
+   link**. If Kommo's message pipeline parses that universally rather than only
+   inside Salesbot, then `send_message` with `[https://cdn.jsdelivr.net/...jpg]`
+   would render as an image and the whole problem disappears. **One request to
+   test** once the channel is live. This is why the jsDelivr asset URLs matter.
+2. **Probable quota bonus.** Salesbot sends do not go through
+   `/talks/{id}/send_message`, so they likely do **not** consume Chats API add-on
+   quota (Trial 100 / Pro 500). Unverified, but it would soften the limit risk.
+
+### Audio: re-verified, design confirmed
+
+Scanned the **entire** Kommo API index for `transcri|voice|audio|speech|whisper`
+— **zero hits**. Kommo has no transcription of any kind. Whisper is mandatory,
+not a preference. The 5E design stands.
+
+Fixed a latent bug while there: `download_audio()` fetched attachments with no
+auth. Kommo never documents whether `amojo.kommo.com/attachments/...` is public
+or token-gated, and their sample links are expired so it cannot be tested until a
+real voice note arrives. Now sends the bearer first and falls back to anonymous.
+Guessing wrong would have meant **every voice note silently failing**.
+
+### Assets: off third-party hosts, permanently
+
+The 5 marketing images (welcome, water process, 3× séptico) are now committed to
+this repo and served via jsDelivr, verified returning `200 image/jpeg` — the
+correct content-type, which GitHub raw does not reliably give and which WhatsApp
+requires. Third host these images have lived on: Botpress CDN (died with the
+platform) → ImgBB (free host) → this repo. They can no longer vanish.
+
+### Lesson for the template
+
+Twice now the honest-sounding answer ("the platform can't do X") was wrong, and
+both times the real answer was a documented feature one layer sideways. **Check
+whether an adjacent primitive can do it and whether that primitive is
+API-triggerable**, before telling a client no.
+
+---
+
 ## Session: July 17, 2026 — 06:00 UTC
 
 ### Diagnosis confirmed by Kommo support. Migration staged, one step from done.

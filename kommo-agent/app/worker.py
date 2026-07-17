@@ -12,6 +12,12 @@ from .config import settings
 log = logging.getLogger("worker")
 
 
+def _entity_type(msg: dict) -> str:
+    """Webhook says "lead" (singular); POST /bots/{id}/run wants "leads" (plural)."""
+    t = str(msg.get("entity_type") or "lead").lower()
+    return t if t.endswith("s") else t + "s"
+
+
 async def _history(k: KommoClient, talk_id: str, limit: int = 20) -> list[dict]:
     """Claude/OpenAI-shaped history from Kommo chat history (free of add-on quota)."""
     msgs = await k.get_messages(talk_id, limit=limit)
@@ -98,8 +104,33 @@ async def handle_message(msg: dict) -> None:
         handoff = marker in reply
         reply = reply.replace(marker, "").strip()
 
+        # IMAGE WORKAROUND: send_message is text-only, but a Salesbot can attach
+        # images. The model emits a sentinel; we strip it and launch the bot.
+        bots = client_pack.pack().get("salesbot", {}).get("triggers", {})
+        fire: list[int] = []
+        for sentinel, bot_id in bots.items():
+            if sentinel in reply:
+                reply = reply.replace(sentinel, "").strip()
+                if bot_id:
+                    fire.append(int(bot_id))
+                else:
+                    log.warning("sentinel %s has no bot_id configured", sentinel)
+
         if reply:
             await k.send_message(talk_id, reply)
+
+        entity_id = msg.get("entity_id") or msg.get("element_id")
+        for bot_id in fire:
+            if not entity_id:
+                log.warning("talk=%s cannot launch bot %s: no entity_id", talk_id, bot_id)
+                continue
+            try:
+                await k.run_bot(bot_id, entity_id, _entity_type(msg))   # one bot per entity
+                log.info("talk=%s launched salesbot %s for entity %s",
+                         talk_id, bot_id, entity_id)
+            except KommoError as e:
+                log.error("talk=%s salesbot %s launch failed: %s", talk_id, bot_id, e)
+
         if handoff:
             state.mark_handoff(talk_id, "agent_requested")
             log.info("talk=%s handed off by agent", talk_id)

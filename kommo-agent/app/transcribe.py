@@ -39,10 +39,23 @@ def _looks_hallucinated(text: str) -> bool:
 
 
 async def download_audio(url: str) -> bytes:
+    """Fetch a Kommo attachment.
+
+    Kommo never documents whether amojo.kommo.com/attachments/... is public or
+    token-gated, and their sample links are expired so it cannot be tested until
+    a real voice note arrives. Send the bearer first (harmless if ignored), fall
+    back to anonymous. Guessing wrong means every voice note silently fails.
+    """
+    from .config import settings as _s
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
-        r = await c.get(url)
-        r.raise_for_status()
-        return r.content
+        try:
+            r = await c.get(url, headers={"Authorization": f"Bearer {_s.kommo_long_lived_token}"})
+            r.raise_for_status()
+            return r.content
+        except httpx.HTTPStatusError:
+            r = await c.get(url)          # some CDNs reject unexpected auth headers
+            r.raise_for_status()
+            return r.content
 
 
 async def transcribe(audio: bytes, filename: str = "voice.ogg") -> str:

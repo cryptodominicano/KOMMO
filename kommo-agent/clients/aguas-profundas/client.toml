@@ -28,11 +28,20 @@ Con eso identificamos sus linderos y las posibles venas de agua para recomendarl
 
 audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría repetirla o escribirme el mensaje?"
 
+# Sent verbatim when the customer sends a photo/file (typically a deposit
+# receipt - "envíe el comprobante"). Handled in CODE, never by the model:
+# business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
+media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y le confirma en breve."
+
 [behavior]
 # message_type values that trigger the deterministic location handoff
 location_types = ["location"]
 # message_type values treated as voice notes
 audio_types    = ["voice", "audio"]
+# Inbound media the agent must acknowledge + hand off rather than ignore.
+# A customer sending a deposit receipt arrives as "picture" with EMPTY text -
+# without this the agent silently ghosts them at the moment money changes hands.
+media_types    = ["picture", "file", "video", "sticker", "contact"]
 # model emits this sentinel; engine strips it and pauses the agent in code
 handoff_marker = "[[HANDOFF]]"
 

@@ -35,6 +35,45 @@ Implemented:
 then set its id in `[salesbot.triggers]` (currently `0`, which logs a warning and
 no-ops rather than failing loudly).
 
+### 🔴 Bug found and fixed: inbound media was silently dropped
+
+Spotted while answering "so both images and audio are possible?" — a good
+reminder that stating a design out loud exposes its holes.
+
+**The bug:** a customer sending a **deposit receipt photo** — which the séptico
+flow explicitly asks for ("envíe el comprobante") — arrives as
+`message_type: "picture"` with **empty `text`**. The worker branched on location,
+then audio, then fell through to `if not text: return`. **The agent silently did
+nothing.** The customer sends proof of payment and gets ghosted.
+
+Worst possible place for a silent drop: the moment money changes hands, on the
+one interaction where the client is most anxious for acknowledgement.
+
+The prompt said the right thing ("agradece sin confirmar el pago y transfiere"),
+but the worker never got far enough to ask the model. **Another instance of the
+recurring lesson: if the behaviour matters, it belongs in code, not the prompt.**
+
+**Fix:** a media branch ahead of the empty-text drop. Inbound `picture | file |
+video | sticker | contact` → send the verbatim receipt acknowledgement → mark
+handoff → stop. Deterministic, no model judgment, because the business rule is
+**never confirm a payment**. Branch order is now location → audio → media →
+text.
+
+Regression test asserts the acknowledgement contains "Recibido"/"verifica" and
+does **not** contain confirming language ("pago confirmado", "recibimos el
+pago"). 10 tests passing.
+
+### Capability status, honestly stated
+
+| Capability | Status |
+|---|---|
+| Receive + transcribe voice notes | ✅ Wired. Kommo has zero transcription, so Whisper is ours. Two unknowns handled defensively (webhook attachment link, CDN auth) — one real voice note settles both. |
+| Send images | ⚠️ Documented + wired via Salesbot, **unproven live**. Needs the `septico-fotos` bot built and its id set (currently `0`, warns + no-ops). |
+| Receive images (receipts) | ✅ Fixed above. |
+| Recognise GPS pin | ✅ Deterministic on `message_type == "location"`. |
+
+---
+
 ### Two more leads worth testing
 
 1. **The `[square bracket]` syntax.** Third-party Kommo docs claim a URL wrapped

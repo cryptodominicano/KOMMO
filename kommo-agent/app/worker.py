@@ -48,6 +48,7 @@ async def handle_message(msg: dict) -> None:
 
     location_types = set(client_pack.behavior("location_types"))
     audio_types = set(client_pack.behavior("audio_types"))
+    media_types = set(client_pack.behavior("media_types"))
     marker = client_pack.behavior("handoff_marker")
 
     k = KommoClient()
@@ -85,6 +86,17 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s transcription rejected (%s)", talk_id, e)
                 await k.send_message(talk_id, client_pack.msg("audio_unclear"))
                 return
+
+        # --- Inbound media (usually a deposit receipt): acknowledge + hand off ---
+        # A photo arrives with EMPTY text, so without this branch it falls
+        # through to the empty-text drop below and the customer is ghosted at
+        # the exact moment they send proof of payment. Deterministic, in code:
+        # the business rule is NEVER confirm a payment.
+        if mtype in media_types:
+            log.info("talk=%s inbound media (%s) - ack + handoff", talk_id, mtype)
+            await k.send_message(talk_id, client_pack.msg("media_received"))
+            state.mark_handoff(talk_id, f"media_received:{mtype}")
+            return
 
         if not text:
             log.info("talk=%s nothing to answer (type=%s)", talk_id, mtype)

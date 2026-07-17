@@ -101,3 +101,21 @@ def test_salesbot_trigger_configured():
     triggers = client.pack("aguas-profundas").get("salesbot", {}).get("triggers", {})
     assert "[[FOTOS_SEPTICO]]" in triggers
     assert "[[FOTOS_SEPTICO]]" in client.system_prompt("aguas-profundas")
+
+
+def test_inbound_media_is_configured_not_dropped():
+    """A deposit receipt arrives as message_type 'picture' with EMPTY text.
+
+    Regression guard: without a media branch it falls through to the empty-text
+    drop and the customer is silently ignored at the moment they send proof of
+    payment. Business rule: never confirm a payment - acknowledge and hand off.
+    """
+    from app import client
+    media = client.behavior("media_types", "aguas-profundas")
+    assert "picture" in media, "photos (deposit receipts) must be handled"
+    assert "file" in media
+    ack = client.msg("media_received", "aguas-profundas")
+    assert "Recibido" in ack
+    assert "verifica" in ack          # promises verification, never confirmation
+    for bad in ("confirmado", "confirmamos", "recibimos el pago", "pago confirmado"):
+        assert bad.lower() not in ack.lower(), f"must never confirm payment: {bad}"

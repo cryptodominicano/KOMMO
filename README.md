@@ -34,6 +34,7 @@ The **handoff pause** is enforced in code, not as a prompt instruction the model
 
 ## Documentation
 
+- [`CONTEXT-LOG.md`](CONTEXT-LOG.md) — **running build log. Read this first.** Reverse-chronological, newest entry on top. Records what changed, what's verified, and what's blocked,each session. Never delete entries.
 - [`docs/KOMMO-CAPABILITIES.md`](docs/KOMMO-CAPABILITIES.md) — full doc-grounded capabilities analysis: what is and is not API-creatable, auth, Chats API vs Chats API add-on, Salesbot JSON reference, webhooks, rate limits, the audio/location decision, and open questions to verify.
 
 ## Key constraints (verified against Kommo docs)
@@ -57,7 +58,7 @@ Tracked in the analysis doc, section 9. The two that could still change the arch
 
 ## Status
 
-Documentation phase complete. Service build pending Kommo private-integration token.
+Service built, not deployed. **Blocked at Meta**: ManyChat holds the credit line on the WABA, which makes them the billing partner, which prevents Kommo from being granted the `Messages` permission. See [`CONTEXT-LOG.md`](CONTEXT-LOG.md) for the diagnosis and fix sequence.
 
 ---
 

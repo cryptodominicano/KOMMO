@@ -35,6 +35,7 @@ The **handoff pause** is enforced in code, not as a prompt instruction the model
 ## Documentation
 
 - [`CONTEXT-LOG.md`](CONTEXT-LOG.md) — **running build log. Read this first.** Reverse-chronological, newest entry on top. Records what changed, what's verified, and what's blocked,each session. Never delete entries.
+- [`docs/AGENT-CONTENT-ARCHIVE.md`](docs/AGENT-CONTENT-ARCHIVE.md) — **the crown jewels.** Every KB file, verbatim customer message, business rule and hard-won gotcha, preserved from the Botpress and Respond.io builds. Platform-independent. If a fifth platform ever happens, start here.
 - [`docs/KOMMO-CAPABILITIES.md`](docs/KOMMO-CAPABILITIES.md) — full doc-grounded capabilities analysis: what is and is not API-creatable, auth, Chats API vs Chats API add-on, Salesbot JSON reference, webhooks, rate limits, the audio/location decision, and open questions to verify.
 
 ## Key constraints (verified against Kommo docs)

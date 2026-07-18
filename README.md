@@ -74,3 +74,8 @@ Service built, not deployed. **Blocked at Meta**: ManyChat holds the credit line
 ---
 
 Maintained by Intelia Automatizaciones / Gold Coast AI Automations.
+
+
+## Building the next client
+
+Start here: [kommo-agent/docs/AGENT-BUILD-PLAYBOOK.md](kommo-agent/docs/AGENT-BUILD-PLAYBOOK.md) — the reusable master reference. Every rule in it was paid for by a real failure on the first build.

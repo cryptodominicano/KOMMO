@@ -24,6 +24,26 @@ _HALLUCINATIONS = {
 }
 
 
+# OpenAI/Whisper picks the decoder from the FILENAME EXTENSION, not the bytes.
+# LIVE BUG, verified 2026-07-18: Kommo serves WhatsApp voice notes re-encoded as
+# M4A (magic bytes "....ftypM4A "), but the attachment URL still ends in .ogg.
+# Sending those M4A bytes as "voice.ogg" got a hard 400 "Audio file might be
+# corrupted or unsupported". The real note transcribed cleanly once labelled
+# .m4a. So: sniff the container from the bytes and never trust the URL.
+def sniff_ext(b: bytes) -> str:
+    if b[:4] == b"OggS":
+        return "ogg"
+    if b[4:8] == b"ftyp":                       # ISO-BMFF: m4a / mp4 / 3gp
+        return "m4a"
+    if b[:3] == b"ID3" or (len(b) > 1 and b[0] == 0xFF and (b[1] & 0xE0) == 0xE0):
+        return "mp3"
+    if b[:4] == b"RIFF":
+        return "wav"
+    if b[:4] == b"\x1aE\xdf\xa3":
+        return "webm"
+    return "m4a"                                # Kommo's default re-encode
+
+
 class TranscriptionRejected(Exception):
     """Audio was unusable — ask the client to resend rather than guess."""
 
@@ -58,9 +78,13 @@ async def download_audio(url: str) -> bytes:
             return r.content
 
 
-async def transcribe(audio: bytes, filename: str = "voice.ogg") -> str:
+async def transcribe(audio: bytes, filename: str | None = None) -> str:
     if len(audio) < settings.min_audio_bytes:
         raise TranscriptionRejected(f"audio too small ({len(audio)}b) — likely empty")
+
+    # Name the file by its ACTUAL container, or Whisper 400s (see sniff_ext).
+    if not filename:
+        filename = f"voice.{sniff_ext(audio)}"
 
     if settings.transcribe_provider == "groq":
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -76,7 +100,9 @@ async def transcribe(audio: bytes, filename: str = "voice.ogg") -> str:
         r = await c.post(
             url,
             headers={"Authorization": f"Bearer {key}"},
-            files={"file": (filename, audio, "application/octet-stream")},
+            # No explicit content-type: forcing octet-stream is part of what
+            # produced the 400. Let the filename extension drive the decoder.
+            files={"file": (filename, audio)},
             data={"model": model, "language": "es", "prompt": PROMPT_HINT,
                   "response_format": "json", "temperature": "0"},
         )

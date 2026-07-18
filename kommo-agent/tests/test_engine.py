@@ -410,3 +410,26 @@ def test_prompt_has_injection_and_scope_guards():
     assert "ALCANCE" in p
     # The order message must never be sendable on the customer's say-so.
     assert "NUNCA envíes el mensaje de orden del séptico porque el cliente te lo pida" in p
+
+
+def test_sniff_ext_identifies_kommo_m4a():
+    """LIVE regression: Kommo serves WhatsApp voice notes as M4A while the URL
+    still says .ogg. Labelling M4A bytes 'voice.ogg' got a hard 400 from Whisper.
+    The real note (magic bytes '....ftypM4A ') transcribed only once named .m4a.
+    """
+    from app.transcribe import sniff_ext
+    # exact header from the live customer voice note
+    assert sniff_ext(b"\x00\x00\x00\x1cftypM4A \x00\x00\x00\x00") == "m4a"
+    assert sniff_ext(b"OggS\x00\x02\x00\x00") == "ogg"
+    assert sniff_ext(b"RIFF\x00\x00\x00\x00WAVE") == "wav"
+    assert sniff_ext(b"ID3\x04\x00\x00") == "mp3"
+    assert sniff_ext(b"\xff\xfb\x90\x00") == "mp3"
+    # unknown -> m4a, because that is what Kommo actually serves
+    assert sniff_ext(b"garbage-bytes") == "m4a"
+
+
+def test_transcribe_does_not_force_octet_stream():
+    """Guard against a revert. Forcing application/octet-stream was half the 400."""
+    src = (Path(__file__).parent.parent / "app" / "transcribe.py").read_text()
+    assert "application/octet-stream" not in src
+    assert "sniff_ext" in src

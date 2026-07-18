@@ -6,6 +6,65 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 18, 2026 — 17:40 UTC
+
+### 🎉 LIVE over waba. Real number connected. Every capability now PROVEN, not assumed.
+
+Real customer messages, three talks (100/101/102), backend inspected directly.
+Everything that was "wired but not proven" for a week is now proven in production:
+
+    ✓ Text conversation           talks 100/101/102, RAG + LLM + send all clean
+    ✓ Welcome image on 1st contact talk 101 & 102, mtype=picture, real link, DELIVERED
+                                   -> the image workaround is PROVEN. The thing I
+                                      called impossible, then "wired not proven".
+    ✓ GPS location pin            talk 102, mtype=location, ack + handoff fired
+    ✓ Code-enforced handoff       customer messaged AFTER the pin; agent stayed silent
+    ✓ Inbound photo               talk 101, "inbound media (picture) - ack + handoff",
+                                   ack sent, never confirmed payment
+    ✓ Voice-note transcription    fixed + proven (below)
+
+Webhook: 9+ real deliveries, all acked fast. Registered for add_message, enabled.
+Incoming media DOES reach the agent - the earlier worry that Kommo might not
+deliver it was unfounded.
+
+### LIVE BUG found and fixed: voice notes 400'd on transcription
+
+First real voice note hit a hard failure. Diagnosis, from the actual file:
+
+    URL said:      .../file.ogg
+    Kommo served:  M4A (magic bytes 00 00 00 1c 66 74 79 70 4D 34 41  = "....ftypM4A ")
+
+`transcribe()` labelled the bytes "voice.ogg" and forced content-type
+application/octet-stream. Whisper picks its decoder from the FILENAME EXTENSION,
+saw .ogg on M4A bytes, and returned:
+
+    HTTP 400: "Audio file might be corrupted or unsupported"
+
+Proven side-by-side on the real note:
+    OLD (voice.ogg, octet-stream)  -> 400
+    NEW (voice.m4a, no forced type) -> 200: "Sí, estoy interesado. ¿Cómo
+                                             seguimos pa'lante? Quiero pagar."
+
+Perfect transcription, Dominican Spanish and all ("pa'lante").
+
+Fix: `sniff_ext()` reads the container from the magic bytes and never trusts the
+URL; default is m4a because that is what Kommo re-encodes to. Dropped the forced
+octet-stream content-type. Two tests, one asserting the exact live M4A header.
+
+This is the cleanest example yet of why live testing is not optional. 90 evals,
+25 unit tests, and a full audit all passed - and the very first real voice note
+still failed, on a detail (Kommo's re-encode) that nothing but a real Kommo
+attachment could have surfaced.
+
+### 27 tests passing. Nothing left unproven on the capability list.
+
+### Note for future client builds
+Kommo serves WhatsApp voice as M4A regardless of the .ogg URL. `sniff_ext()` is
+client-agnostic and already in the engine, so every future client inherits the
+fix. Add "send a real voice note" to the go-live checklist anyway.
+
+---
+
 ## Session: July 17, 2026 — 20:00 UTC
 
 ### FULL AUDIT vs 2026 best practice, cross-referenced against official docs.

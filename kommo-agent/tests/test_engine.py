@@ -433,3 +433,47 @@ def test_transcribe_does_not_force_octet_stream():
     src = (Path(__file__).parent.parent / "app" / "transcribe.py").read_text()
     assert "application/octet-stream" not in src
     assert "sniff_ext" in src
+
+
+def test_human_last_active_distinguishes_human_from_bot_and_customer():
+    """Graceful return depends on telling three authors apart, verified live:
+    external = customer, bot = our automation, internal = the human técnico.
+    Only an internal (human) message should count as a takeover.
+    """
+    import asyncio, time as _t
+    from app.worker import _human_last_active_min
+
+    now = int(_t.time())
+
+    class FakeK:
+        def __init__(self, msgs):
+            self._msgs = msgs
+        async def get_messages(self, talk_id, limit=20):
+            return self._msgs
+
+    # customer + our bot only -> no human has spoken -> None (bot keeps helping)
+    only_bot = [
+        {"type": "incoming", "author": {"type": "external"}, "created_at": now - 30},
+        {"type": "outgoing", "author": {"type": "bot"}, "created_at": now - 20},
+    ]
+    assert asyncio.run(_human_last_active_min(FakeK(only_bot), "1")) is None
+
+    # a human replied 3 minutes ago -> ~3.0
+    with_human = only_bot + [
+        {"type": "outgoing", "author": {"type": "internal"}, "created_at": now - 180},
+    ]
+    mins = asyncio.run(_human_last_active_min(FakeK(with_human), "1"))
+    assert mins is not None and 2.5 < mins < 3.5
+
+
+def test_grace_window_configured():
+    from app import client
+    b = client.pack("aguas-profundas")["behavior"]
+    assert int(b["handoff_grace_minutes"]) == 15
+
+
+def test_location_message_invites_more_questions():
+    """The location step now asks once more before the human takes over."""
+    from app import client
+    msg = client.msg("location_received", "aguas-profundas")
+    assert "otra pregunta" in msg.lower()

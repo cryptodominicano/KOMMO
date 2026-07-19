@@ -6,6 +6,64 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 18, 2026 — 19:30 UTC
+
+### Flow change: handoff is no longer permanent. Graceful 15-min return, live.
+
+Client (Sheyla) requested two changes. Both built, deployed, 30 tests passing.
+
+**1. Ask once more before the human takes over.** The location_received message
+now ends with "Mientras tanto, ¿tiene alguna otra pregunta? Con gusto le
+respondo." instead of a flat "un representante le atenderá."
+
+**2. Handoff pause shortened and made graceful (was permanent silence).**
+
+Old: any handoff = silent forever until a human cleared it.
+New: the agent is silent ONLY while a human agent is actively engaged, defined
+as an `author_type=internal` message within `handoff_grace_minutes` (15). If no
+human has spoken, or the last human reply is older than 15 min, the agent
+resumes and answers. A customer with more questions is never stranded by a slow
+or absent técnico.
+
+### The key technical finding that shaped the design
+
+**Kommo does NOT webhook outgoing messages.** In ~22h live with real human
+replies in talk 102, we received zero outgoing-message webhooks (queued=0 count
+= 0). So the agent cannot be *told* a human replied. Instead it *reads* history
+(`get_messages`, free of add-on quota) and distinguishes the three authors,
+verified live on real messages:
+
+    author_type=external  -> the customer (Sheyla)
+    author_type=bot       -> our automation (WhatsApp Business / Salesbot)
+    author_type=internal  -> a human agent (Isaias Perez)
+
+Only an `internal` message counts as human takeover. This is the reliable signal
+and it needs no webhook we don't get.
+
+### Two product decisions (Isaias, with the client)
+
+- **No human present + immediate follow-up -> answer right away** (not wait 15m).
+  The bot just invited questions; answering them is the point. The 15-min window
+  only applies to the gap AFTER a human has spoken and gone quiet.
+- **Payment-receipt handoff auto-resumes like the others** (against my
+  recommendation; I recommended human-only). Isaias chose uniform behaviour.
+  RESIDUAL RISK, logged: the bot can resume shortly after a receipt with no human
+  present. Bounded by the never-confirm-payment guardrail (SEGURIDAD + prompt,
+  red-teamed 10/10), so the bot will say "un técnico verifica su pago", never
+  "confirmado". Acceptable given the guardrail; revisit if it ever misbehaves.
+
+### Not built, flagged for later
+
+Nothing currently NOTIFIES the human técnico that a handoff happened - the agent
+just goes quiet and the customer is told a rep will follow up. With graceful
+return the bot keeps helping, which softens this, but a técnico still has to be
+watching the Kommo inbox. Consider adding a Kommo task / stage move / internal
+note on handoff so a human is actively pinged. Not in scope for this change.
+
+30 tests passing (was 27). New: three-author distinction, grace window config,
+location-invites-questions.
+---
+
 ## Session: July 18, 2026 — 17:40 UTC
 
 ### 🎉 LIVE over waba. Real number connected. Every capability now PROVEN, not assumed.

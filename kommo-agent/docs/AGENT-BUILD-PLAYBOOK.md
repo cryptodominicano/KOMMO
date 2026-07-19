@@ -21,7 +21,11 @@ anything that touches money, compliance, safety, or a promise to the customer.
 Every such behaviour must be deterministic, enforced in code, keyed to the
 conversation. On this build that meant **handoff, GPS location, deposit
 receipts, the welcome image, and the bank-details send all live in code**, not
-in the system prompt. The prior Botpress and Respond.io builds leaked messages
+in the system prompt. Handoff itself is graceful: the agent stays
+silent only while a human agent is actively engaged (an author_type=internal
+message within a 15-minute window, read from history because Kommo does not
+webhook outgoing messages), and resumes if the human is absent or goes quiet so
+a customer with more questions is never stranded. The prior Botpress and Respond.io builds leaked messages
 after handoff precisely because the pause lived in the prompt and the model
 ignored it.
 

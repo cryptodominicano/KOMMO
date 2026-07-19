@@ -4,6 +4,7 @@ Client-agnostic: every Spanish string and channel value comes from the client
 pack (clients/<id>/client.toml). Onboarding a client is a new directory.
 """
 import logging
+import time
 from . import rag, agent, state, client as client_pack
 from .kommo import KommoClient, KommoError
 from .transcribe import download_audio, transcribe, TranscriptionRejected
@@ -16,6 +17,30 @@ def _entity_type(msg: dict) -> str:
     """Webhook says "lead" (singular); POST /bots/{id}/run wants "leads" (plural)."""
     t = str(msg.get("entity_type") or "lead").lower()
     return t if t.endswith("s") else t + "s"
+
+
+async def _human_last_active_min(k: KommoClient, talk_id: str) -> float | None:
+    """Minutes since a HUMAN agent last replied, or None if none ever has.
+
+    Kommo message authors: external = the customer, bot = our automation,
+    internal = a real Kommo user (the técnico). Verified live. This is the
+    only reliable takeover signal, because Kommo does not webhook outgoing
+    messages. get_messages is free of the Chats API add-on quota.
+    """
+    try:
+        msgs = await k.get_messages(talk_id, limit=20)
+    except KommoError:
+        return None
+    latest = 0
+    for m in msgs:
+        a = m.get("author") or {}
+        if m.get("type") == "outgoing" and a.get("type") == "internal":
+            ts = int(m.get("created_at") or 0)
+            if ts > latest:
+                latest = ts
+    if not latest:
+        return None
+    return (time.time() - latest) / 60.0
 
 
 async def _history(k: KommoClient, talk_id: str, limit: int = 20) -> list[dict]:
@@ -41,18 +66,32 @@ async def handle_message(msg: dict) -> None:
         log.warning("no talk_id, skipping msg=%s", msg_id)
         return
 
-    # Handoff is enforced in CODE. Once a human owns the talk, we are silent.
-    if state.is_handed_off(talk_id):
-        log.info("talk=%s handed off - staying silent", talk_id)
-        return
-
     location_types = set(client_pack.behavior("location_types"))
     audio_types = set(client_pack.behavior("audio_types"))
     media_types = set(client_pack.behavior("media_types"))
     marker = client_pack.behavior("handoff_marker")
+    grace = int(client_pack.behavior("handoff_grace_minutes"))
 
     k = KommoClient()
     try:
+        # --- Graceful handoff (enforced in CODE) ---
+        # Old behaviour: handoff = permanent silence. New: the agent is silent
+        # only while a HUMAN agent is actively engaged (author_type=internal,
+        # replied within `grace` minutes). If no human has spoken, or the last
+        # human reply is older than the window, the agent resumes - so a
+        # customer with more questions is never stranded by a slow técnico.
+        # Kommo does not webhook outgoing messages, so we read history to tell
+        # a human reply apart from our own bot sends (free of add-on quota).
+        if state.is_handed_off(talk_id):
+            human_min = await _human_last_active_min(k, talk_id)
+            if human_min is not None and human_min < grace:
+                log.info("talk=%s handoff, human active %.1fm ago - silent",
+                         talk_id, human_min)
+                return
+            log.info("talk=%s handoff grace elapsed (human=%s) - resuming",
+                     talk_id, human_min)
+            state.clear_handoff(talk_id)
+
         # --- First contact: fire the welcome infographic, once, in code ---
         # The image is the saludo made visual: the same three services the
         # greeting text offers (agua / perforacion / septico). It reinforces

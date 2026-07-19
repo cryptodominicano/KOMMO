@@ -24,7 +24,9 @@ Ahora un técnico le enviará por aquí una imagen (mapa satelital) de su propie
 3️⃣ Dibuje los límites (linderos) de su terreno sobre el mapa.
 4️⃣ Envíenos de vuelta la imagen ya marcada.
 
-Con eso identificamos sus linderos y las posibles venas de agua para recomendarle el mejor punto de perforación. Por favor, tenga un poco de paciencia 🙏 Uno de nuestros representantes le atenderá en breve."""
+Con eso identificamos sus linderos y las posibles venas de agua para recomendarle el mejor punto de perforación. Uno de nuestros representantes continuará con su caso en breve.
+
+Mientras tanto, ¿tiene alguna otra pregunta? Con gusto le respondo. 🙏"""
 
 audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría repetirla o escribirme el mensaje?"
 
@@ -44,6 +46,13 @@ audio_types    = ["voice", "audio"]
 media_types    = ["picture", "file", "video", "sticker", "contact"]
 # model emits this sentinel; engine strips it and pauses the agent in code
 handoff_marker = "[[HANDOFF]]"
+# Graceful return after handoff. The agent stays silent only while a HUMAN
+# agent (author_type=internal in Kommo) has replied within this many minutes.
+# If no human has spoken, OR the last human message is older than this, the
+# agent resumes and answers - so a customer with more questions is never left
+# stranded because a técnico was slow or stepped away. Kommo does NOT webhook
+# outgoing messages, so human activity is read from history (free of quota).
+handoff_grace_minutes = 15
 
 [salesbot]
 # THE IMAGE WORKAROUND.

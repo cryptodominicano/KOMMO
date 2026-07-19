@@ -102,6 +102,15 @@ def linderos_first(talk_id: str) -> bool:
             return False
 
 
+def deposit_was_presented(talk_id: str) -> bool:
+    """True if a deposit has been presented in this talk. Used to decide
+    whether inbound media is a payment receipt (say \"verificamos su
+    comprobante\") or just some other image (neutral ack)."""
+    with _conn() as c:
+        return c.execute("SELECT 1 FROM deposit_sent WHERE talk_id = ?",
+                         (str(talk_id),)).fetchone() is not None
+
+
 def deposit_cooldown_ok(talk_id: str, cooldown: int = 90) -> bool:
     """True if no deposit was sent for this talk within `cooldown` seconds.
 

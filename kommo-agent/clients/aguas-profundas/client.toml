@@ -37,6 +37,7 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 # receipt - "envíe el comprobante"). Handled in CODE, never by the model:
 # business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y un representante le contactará en un día laborable para coordinar los siguientes pasos."
+media_received_generic = "¡Recibido! Gracias 🙏 Un técnico de Aguas Profundas revisará lo que nos envió y le responderá en breve."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
 linderos_fallback = "¡Gracias! 🙏 Recibimos su ubicación. Un técnico de Aguas Profundas le atenderá en breve para marcar los linderos de su terreno y continuar con su caso."
 linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.
@@ -51,7 +52,7 @@ audio_types    = ["voice", "audio"]
 # Inbound media the agent must acknowledge + hand off rather than ignore.
 # A customer sending a deposit receipt arrives as "picture" with EMPTY text -
 # without this the agent silently ghosts them at the moment money changes hands.
-media_types    = ["picture", "file", "video", "sticker", "contact"]
+media_types    = ["picture", "file", "video"]   # NOT sticker/contact: a 👍 is not a receipt
 # model emits this sentinel; engine strips it and pauses the agent in code
 handoff_marker = "[[HANDOFF]]"
 # Graceful return after handoff. The agent stays silent only while a HUMAN

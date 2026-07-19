@@ -643,3 +643,23 @@ def test_linderos_backup_path(monkeypatch):
     assert "ubicación" in fb.lower() and "técnico" in fb.lower()
     p = client.system_prompt("aguas-profundas")
     assert "PROBLEMA CON EL ENLACE DE LINDEROS" in p
+
+
+def test_sticker_is_not_a_receipt(monkeypatch):
+    """A closing 👍 sticker fired the payment ack. Stickers/contacts are no
+    longer media, and the comprobante wording only fires if a deposit was
+    presented; otherwise a neutral ack."""
+    from app import client, state
+    import tempfile
+    from pathlib import Path
+    media = client.behavior("media_types", "aguas-profundas")
+    assert "sticker" not in media and "contact" not in media
+    assert "picture" in media                       # real receipts still handled
+    gen = client.msg("media_received_generic", "aguas-profundas")
+    assert "comprobante" not in gen.lower()          # neutral, not payment wording
+    with tempfile.TemporaryDirectory() as d:
+        monkeypatch.setattr(state, "_DB", Path(d) / "t.db")
+        state.init()
+        assert state.deposit_was_presented("500") is False
+        state.deposit_cooldown_ok("500")             # simulate a deposit presented
+        assert state.deposit_was_presented("500") is True

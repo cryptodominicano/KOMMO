@@ -201,8 +201,13 @@ async def handle_message(msg: dict) -> None:
         # the exact moment they send proof of payment. Deterministic, in code:
         # the business rule is NEVER confirm a payment.
         if mtype in media_types:
-            log.info("talk=%s inbound media (%s) - ack + handoff", talk_id, mtype)
-            await k.send_message(talk_id, client_pack.msg("media_received"))
+            # Only call it a "comprobante" if a deposit was actually presented;
+            # otherwise it is some other image (terrain photo, etc.) - neutral ack.
+            is_receipt = state.deposit_was_presented(talk_id)
+            key = "media_received" if is_receipt else "media_received_generic"
+            log.info("talk=%s inbound media (%s) receipt=%s - ack + handoff",
+                     talk_id, mtype, is_receipt)
+            await k.send_message(talk_id, client_pack.msg(key))
             state.mark_handoff(talk_id, f"media_received:{mtype}")
             await _signal_handoff(k, msg, talk_id, f"media_received:{mtype}")
             return

@@ -603,6 +603,16 @@ def test_isla_identity_and_disclosure():
     assert "Nunca afirmes ser una persona humana" in p
 
 
+def test_town_sector_captured_early():
+    """Client add-on: after the customer picks a service, Isla asks which
+    pueblo/sector they are in BEFORE quoting, because zone affects price."""
+    from app import client
+    p = client.system_prompt("aguas-profundas")
+    assert "CAPTURA DE PUEBLO/SECTOR" in p
+    assert "pueblo o sector" in p
+    assert "afecta el precio" in p
+
+
 def test_deposit_amounts_corrected():
     """Client manual: séptico RD$10,000; agua staged RD$5,000 + RD$10,000."""
     from app import client

@@ -7,7 +7,7 @@
 
 ## Resumen de precios (estimados: "desde / a partir de")
 - Estudio de agua (3 estudios incluidos): desde RD$45,000, según la zona.
-- Perforación de pozo: de RD$850 a RD$1,300 el pie, incluye transporte; el total depende de la profundidad, el terreno y los materiales.
+- Perforación exploratoria: desde RD$850 el pie (cercana al 75% de una convencional), sujeta a cotización según el estudio. Perforación convencional: de RD$1,300 a RD$1,500 el pie. El total depende de la profundidad, el terreno, el acceso y la compañía aliada, y se confirma después de revisar el estudio.
 - Séptico IMHOFF Módulo 8 (hasta 8 baños): RD$70,000, envío incluido.
 - Séptico IMHOFF Módulo 16 (hasta 16 baños): RD$105,000, envío incluido.
 Los precios son estimados; el precio final se confirma según el caso.
@@ -24,7 +24,13 @@ Es importante que la ubicación quede justo sobre el terreno, para que el estudi
 ## Proceso general
 
 ### Reserva del estudio de agua (depósito)
-Para reservar el estudio de agua se requiere un depósito de RD$5,000, que se abona al costo total del estudio (RD$45,000). Se solicita después de que el cliente marca los linderos de su terreno. Los datos de la cuenta se envían por imagen (nunca por texto); el cliente hace el depósito, envía el comprobante por el mismo chat, y un representante le contacta en un día laborable para confirmar la cita. El asistente nunca escribe números de cuenta.
+El estudio de agua se paga por etapas. Etapa 1: un primer depósito de RD$5,000 para el estudio topográfico y satelital; NO es reembolsable porque esa etapa se trabaja y se entrega, y el primer reporte se prepara en 24 a 48 horas desde que el pago esté reflejado. Etapa 2: un segundo depósito de RD$10,000 para reservar la visita presencial de los técnicos, que se solicita solo después de entregar el primer estudio. El balance restante corresponde a las etapas técnicas y el informe final, que no se libera hasta completar el pago total. Al enviar el mensaje de depósito, el sistema comparte los datos de la cuenta en texto y en imagen; la cédula solo aparece en la imagen.
+
+### Política de reembolsos del estudio
+El depósito de RD$5,000 (estudio topográfico) no es reembolsable. El depósito de RD$10,000 (reserva de visita) generalmente tampoco es reembolsable, salvo que Aguas Profundas cambie la cita en dos ocasiones consecutivas por situaciones operativas y el cliente decida no continuar. Toda solicitud de reembolso la revisa una persona; el asistente no promete ni procesa devoluciones.
+
+### Perforación: depósito personalizado
+El depósito de una perforación no es un monto fijo: se define en una cotización personalizada según profundidad estimada, tipo de perforación, ubicación, acceso, condiciones del terreno y compañía aliada. Nunca se comparte una cuenta ni un monto de perforación sin una cotización aprobada.
 
 ### Agua / perforación
 1. Se hace primero el estudio de agua del terreno (topográfico, radioestesia, geohidrológico).
@@ -35,7 +41,7 @@ Para reservar el estudio de agua se requiere un depósito de RD$5,000, que se ab
 
 ### Séptico
 1. Se confirma el módulo según la cantidad de baños.
-2. Para ordenar: un depósito de RD$5,000 y la ubicación (municipio y sector).
+2. Para ordenar: un depósito inicial de RD$10,000 y la ubicación (municipio y sector).
 3. El cliente envía el comprobante; un técnico procesa la orden y agenda la entrega.
 4. El pago restante se hace cuando el cliente recibe el módulo en su ubicación.
 

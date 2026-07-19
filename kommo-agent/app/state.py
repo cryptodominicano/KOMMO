@@ -83,6 +83,24 @@ def first_contact(talk_id: str) -> bool:
             return False
 
 
+def deposit_cooldown_ok(talk_id: str, cooldown: int = 90) -> bool:
+    """True if no deposit was sent for this talk within `cooldown` seconds.
+
+    Replaces the old once-per-talk cap: agua has two legitimate deposits
+    (topographic then visit) minutes apart. The cooldown lets both through
+    while stopping rapid repeats. Injection is blocked upstream by SEGURIDAD.
+    """
+    now = time.time()
+    with _conn() as c:
+        row = c.execute("SELECT at FROM deposit_sent WHERE talk_id = ?",
+                        (str(talk_id),)).fetchone()
+        if row and (now - row[0]) < cooldown:
+            return False
+        c.execute("INSERT OR REPLACE INTO deposit_sent (talk_id, at) VALUES (?, ?)",
+                  (str(talk_id), now))
+        return True
+
+
 def first_deposit(talk_id: str) -> bool:
     """True exactly once per talk: the first time the bank photo is fired.
 

@@ -6,6 +6,73 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 19, 2026 — 04:30 UTC
+
+### Aligned the build to the client's Master Manual. Isla. Deployed. 40 tests.
+
+Client sent a 19-section master manual. Isaias: follow it, except keep Meta AI
+disclosure. Phase 1 done and live-verified:
+
+**Identity — Isla.** Renamed from "el asistente de Aguas Profundas" to "Isla, la
+asistente del señor Wellington Valenzuela y del equipo de Aguas Profundas".
+Persona/voice rewritten per the manual (one question per turn, allowed/forbidden
+phrases, protect-the-investment framing).
+
+**AI disclosure — the one override, reconciled cleanly.** Manual says never reveal
+she's AI; Meta requires truthfulness when asked. Both satisfied: Isla presents
+warmly by default (no "virtual" volunteered), and ONLY when directly asked
+"eres bot/robot/IA/persona real" confirms she is an AI assistant. Live-verified.
+
+**Deposit amounts corrected (were WRONG live).**
+- Séptico: RD$5,000 → **RD$10,000** (fabrication 7-14 days, balance before
+  delivery, truck access, drivers never take cash). Live: quotes 10k.
+- Agua, now STAGED: **RD$5,000** topographic study (non-refundable) + **RD$10,000**
+  reserve the presential visit. Was a single wrong "RD$5,000 booking fee toward
+  RD$45,000". Live: stage-1 fires the deposit at 5k, non-refundable.
+- Perforación: personalized deposit from a quote; never a fixed number. Live:
+  correctly refuses and points to the study first.
+- Refund policy added (5k non-refundable; 10k conditional on two consecutive
+  operational reschedules). Never promises/processes refunds - escalates.
+
+**Bank details in TEXT (client's request) done SECURELY.** The manual wants the
+account copied in text to avoid read errors. Instead of putting Sheyla's account
+number in the prompt or the PUBLIC repo, it lives in master.env (AGUAS_BANK_TEXT)
+and the WORKER sends it as a text message when a deposit legitimately fires,
+between the reply and the account image. Result for the customer: text + image.
+But the number is never in git history, and the LLM never sees it - so a prompt
+injection cannot extract it. A test greps the pack to keep the number out. Cédula
+stays image-only. Verified: 857111645 is never in any model reply; the code-sent
+text carries it.
+
+**Deposit cap changed once-per-talk → 90s cooldown.** Agua has two legitimate
+deposits (topographic then visit) in one conversation; once-ever would have
+blocked stage 2. The cooldown allows the staged flow, bounds farming; injection
+is blocked upstream by SEGURIDAD (still red-team-hardened).
+
+**Pause 15 → 20 minutes + NO_REACTIVAR.** Grace window now 20 min per the manual.
+New: if the lead carries a NO_REACTIVAR tag, the agent stays silent permanently
+(read from lead tags) - a human can lock the bot out of a conversation.
+
+### Watch item (live)
+When séptico module-recommendation and the deposit message land in the SAME turn,
+the model sometimes doesn't include the exact trigger phrase, so the bank photo
+may not fire. Agua stage-1 (a clean standalone deposit message) fires reliably.
+Test the séptico "quiero ordenar" path live; if the trigger misses, tighten the
+prompt so the deposit message is sent as its own turn after the module is set.
+
+### Phase 2 — NOT built yet (from the manual)
+- Proactive follow-ups (5min / 24h / 72h). The 24h+ ones fall outside Meta's
+  messaging window and need APPROVED templates - real dependency, not just code.
+- Call scheduling with Wellington (5-min calls, two time options, task creation).
+- Full image matrix A1/B1 + C1-C4 mapped to intents (we have welcome/agua/septico).
+- CRM tag + field automation (HUMANO_EN_CHAT, PENDIENTE_PAGO, PAGO_EN_VALIDACION,
+  data capture fields). Payment states PAGO_SOLICITADO/COMPROBANTE_RECIBIDO/etc.
+- Deeper KB from the manual's full objection library (we fixed the money-critical
+  facts; the extra objection scripts are enrichment).
+
+40 tests passing (was 37).
+---
+
 ## Session: July 19, 2026 — 03:10 UTC
 
 ### Agua/perforación now reaches PAYMENT, closing the loop like séptico.

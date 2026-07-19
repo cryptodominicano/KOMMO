@@ -89,6 +89,13 @@ class KommoClient:
                     break
         return {"name": c.get("name") or lead_name, "phone": phone, "lead_name": lead_name}
 
+    async def get_lead_tags(self, lead_id: int | str) -> list[str]:
+        """Lowercased tag names on a lead. Used for NO_REACTIVAR (a human
+        can permanently silence the agent by tagging the lead)."""
+        lead = await self._req("GET", f"/leads/{lead_id}?with=tags") or {}
+        tags = lead.get("_embedded", {}).get("tags", []) or []
+        return [str(t.get("name", "")).strip().lower() for t in tags]
+
     async def add_lead_note(self, lead_id: int | str, text: str) -> dict | None:
         """POST /leads/{id}/notes - a common note visible on the lead card."""
         body = [{"note_type": "common", "params": {"text": text}}]

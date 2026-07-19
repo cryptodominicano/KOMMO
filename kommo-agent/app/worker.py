@@ -115,6 +115,15 @@ async def handle_message(msg: dict) -> None:
         # Kommo does not webhook outgoing messages, so we read history to tell
         # a human reply apart from our own bot sends (free of add-on quota).
         if state.is_handed_off(talk_id):
+            # NO_REACTIVAR tag = a human permanently silenced the agent.
+            entity_id_h = msg.get("entity_id") or msg.get("element_id")
+            if entity_id_h:
+                try:
+                    if "no_reactivar" in await k.get_lead_tags(int(entity_id_h)):
+                        log.info("talk=%s NO_REACTIVAR tag - staying silent", talk_id)
+                        return
+                except KommoError:
+                    pass
             human_min = await _human_last_active_min(k, talk_id)
             if human_min is not None and human_min < grace:
                 log.info("talk=%s handoff, human active %.1fm ago - silent",
@@ -230,20 +239,18 @@ async def handle_message(msg: dict) -> None:
         # Kommo. They never touch this repo, the prompt, the KB, or a log line.
         trigger_text = sb.get("deposit_trigger_text") or ""
         deposit_bot = sb.get("deposit_bot_id", 0)
+        send_bank = False
         if trigger_text and trigger_text in reply:
-            if deposit_bot and not state.first_deposit(talk_id):
-                # Already sent for this talk. Repeats are either a model loop
-                # or someone farming the image; either way, once is enough.
-                log.warning("talk=%s deposit bot already fired - suppressed", talk_id)
-            elif deposit_bot:
-                fire.append(int(deposit_bot))
-                log.info("talk=%s order message sent - firing deposit bot %s",
-                         talk_id, deposit_bot)
+            if not deposit_bot:
+                log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "
+                          "customer promised bank details and will get none", talk_id)
+            elif not state.deposit_cooldown_ok(talk_id):
+                log.warning("talk=%s deposit within cooldown - suppressed", talk_id)
             else:
-                # Loud: the customer was just promised bank details we cannot send.
-                log.error("talk=%s ORDER MESSAGE SENT BUT deposit_bot_id IS 0 - "
-                          "customer promised bank details and will get none",
-                          talk_id)
+                fire.append(int(deposit_bot))
+                send_bank = True
+                log.info("talk=%s deposit message sent - firing bank text + photo %s",
+                         talk_id, deposit_bot)
         for sentinel, bot_id in bots.items():
             if sentinel in reply:
                 reply = reply.replace(sentinel, "").strip()
@@ -254,6 +261,14 @@ async def handle_message(msg: dict) -> None:
 
         if reply:
             await k.send_message(talk_id, reply)
+
+        # Bank details in text (from the secret store), between the reply and
+        # the account image, so the customer sees both. Never from the prompt.
+        if send_bank and settings.bank_details_text:
+            try:
+                await k.send_message(talk_id, settings.bank_details_text)
+            except KommoError as e:
+                log.error("talk=%s bank-text send failed: %s", talk_id, e)
 
         entity_id = msg.get("entity_id") or msg.get("element_id")
         for bot_id in fire:

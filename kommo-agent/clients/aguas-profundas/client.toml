@@ -59,7 +59,7 @@ handoff_marker = "[[HANDOFF]]"
 # agent resumes and answers - so a customer with more questions is never left
 # stranded because a técnico was slow or stepped away. Kommo does NOT webhook
 # outgoing messages, so human activity is read from history (free of quota).
-handoff_grace_minutes = 15
+handoff_grace_minutes = 20
 # On handoff, create a Kommo TASK so a human is actively pinged (not just an
 # unanswered chat). Due window matches the KB promise of "within 2 business
 # hours". The 15-min grace above (bot resume) and this 2h task (human SLA) are
@@ -105,7 +105,7 @@ deposit_trigger_text = "le comparto los datos para el depósito"
 # Where the finished, marked parcel is delivered.
 owner_email = "isaias@inteliard.com"           # TESTING - revert to Sheyla before go-live
 from_email  = "Aguas Profundas <property-lines-submissions@goldcoastai.pro>"
-received_message = "¡Recibimos los límites de su terreno! ✅ Para reservar su estudio se requiere un depósito de RD$5,000, que se abona al costo total del estudio (RD$45,000). ¿Desea reservar ahora? 🙏"
+received_message = "¡Recibimos los límites de su terreno! ✅ El siguiente paso es iniciar su estudio de agua. ¿Desea comenzar ahora? Con gusto le explico el primer paso. 🙏"
 email_brand  = "Tres Golpes"
 email_footer = "Gold Coast AI Automations"
 

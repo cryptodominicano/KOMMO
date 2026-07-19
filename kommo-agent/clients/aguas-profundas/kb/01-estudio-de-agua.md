@@ -16,7 +16,7 @@ El costo aproximado del estudio es de RD$45,000, dependiendo de dónde se encuen
 Es una evaluación técnica del terreno. Con ese estudio sabemos: exactamente dónde perforar, a qué profundidad está el agua, y cuánta agua puede producir ese terreno. Esto es importante para no gastar dinero perforando en el lugar equivocado.
 
 ## ¿Cuánto cuesta el estudio?
-Comienza desde RD$45,000 e incluye los tres estudios (topográfico, radioestesia y geohidrológico). El precio exacto depende del tamaño y la ubicación del terreno.
+Comienza desde RD$45,000 e incluye los tres estudios (topográfico, dos líneas de radiestesia y geohidrológico). El precio exacto depende del tamaño y la ubicación del terreno. Cada línea de radiestesia adicional, si el terreno o el proyecto lo requiere, cuesta RD$10,000. El estudio se paga por etapas: un primer depósito de RD$5,000 (estudio topográfico, no reembolsable) y luego RD$10,000 para reservar la visita presencial.
 
 ## ¿Es obligatorio el estudio? ¿Puedo perforar sin estudio?
 Antes de perforar siempre se realiza primero el estudio de agua del terreno; es un paso necesario para saber dónde y a qué profundidad perforar, y para proteger su inversión. No perforamos sin un estudio previo. La perforación se coordina después de tener los resultados.

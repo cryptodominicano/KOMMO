@@ -9,7 +9,7 @@ Según los resultados del estudio, le ofrecemos:
 - Perforación convencional: cuando el estudio confirma buena probabilidad de agua.
 - Perforación de exploración: para terrenos con mayor riesgo de no encontrar agua; somos de las pocas empresas que la ofrecen.
 
-La perforación es a partir de RD$850 a RD$1,300 el pie, incluye transporte, y el precio final depende de la profundidad, el terreno y los materiales.
+La perforación exploratoria comienza desde RD$850 el pie (cercana al 75% de una convencional) y la convencional va de RD$1,300 a RD$1,500 el pie. El precio final depende de la profundidad, el terreno, el acceso y la compañía aliada, y se define después de revisar el estudio.
 
 ## El proceso incluye
 - Evaluación del terreno (estudio de agua primero).
@@ -18,7 +18,7 @@ La perforación es a partir de RD$850 a RD$1,300 el pie, incluye transporte, y e
 - Prueba de caudal (aforo).
 
 ## ¿Cuánto cuesta un pozo?
-El precio depende de la ubicación y el tipo de terreno, la profundidad necesaria para encontrar agua, y el diámetro y materiales requeridos. La perforación va desde RD$850 a RD$1,300 el pie e incluye transporte. Para un precio exacto, primero se evalúa el terreno con el estudio.
+El precio depende de la ubicación y el tipo de terreno, la profundidad necesaria para encontrar agua, y el diámetro y materiales requeridos. La perforación exploratoria va desde RD$850 el pie y la convencional de RD$1,300 a RD$1,500 el pie. Para un precio exacto, primero se evalúa el terreno con el estudio y se prepara una cotización personalizada.
 
 ## ¿Cuánto tarda la perforación?
 Depende de la profundidad: pozos poco profundos 1 a 3 días; medianos 3 a 7 días; profundos pueden tomar más. Incluye perforación e instalación básica.

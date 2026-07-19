@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     public_base_url: str = "https://kommo-agent.goldcoastai.pro"
     resend_api_key: str = ""
 
+    # Bank details sent in TEXT alongside the account image (client asked for
+    # this to avoid read errors). Sourced from the SECRET store (master.env),
+    # NOT the public repo and NOT the prompt - so the account number is never
+    # in git history and the LLM never sees it (injection cannot extract it).
+    # Contains bank/type/number/holder only. The cédula stays image-only.
+    bank_details_text: str = ""
+
     @property
     def kommo_base(self) -> str:
         return f"https://{self.kommo_subdomain}.kommo.com/api/v4"

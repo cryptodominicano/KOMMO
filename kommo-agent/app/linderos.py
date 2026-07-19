@@ -129,7 +129,21 @@ async def linderos_submit(request: Request):
     return {"ok": True}
 
 
-def _email_html(brand, footer, name, phone, area_m2, tareas, img_url, lead_id) -> str:
+def _centroid(geojson: dict):
+    """Average of the polygon ring vertices -> a single (lat, lng) to navigate to.
+    Good enough for a small parcel; the técnico just needs a point on the map."""
+    try:
+        ring = geojson["coordinates"][0]
+        pts = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
+        lng = sum(p[0] for p in pts) / len(pts)
+        lat = sum(p[1] for p in pts) / len(pts)
+        return round(lat, 6), round(lng, 6)
+    except Exception:
+        return None, None
+
+
+def _email_html(brand, footer, name, phone, area_m2, tareas, img_url, lead_id,
+                lat=None, lng=None) -> str:
     """Branded, email-client-safe HTML (inline styles, table layout)."""
     digits = "".join(ch for ch in (phone or "") if ch.isdigit())
     phone_cell = (f'<a href="https://wa.me/{digits}" style="color:#1b6e87;text-decoration:none;font-weight:600">{phone}</a>'
@@ -149,6 +163,14 @@ def _email_html(brand, footer, name, phone, area_m2, tareas, img_url, lead_id) -
            f'<div style="font-size:11px;color:#9aa4b2;margin-top:6px;text-align:center">'
            f'Mapa satelital con los límites marcados por el cliente. Imagen adjunta también.</div></td></tr>')
 
+    if lat is not None and lng is not None:
+        maps = f"https://www.google.com/maps?q={lat},{lng}"
+        loc_cell = (f'<a href="{maps}" style="color:#1b6e87;text-decoration:none;font-weight:600">'
+                    f'{lat}, {lng}</a> <span style="color:#9aa4b2;font-weight:400">(abrir en Maps)</span>')
+        loc_row = row("Ubicación", loc_cell)
+    else:
+        loc_row = ""
+
     return f"""<!doctype html>
 <html><body style="margin:0;background:#eef1f6;font-family:Arial,Helvetica,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;padding:22px 0">
@@ -164,6 +186,7 @@ def _email_html(brand, footer, name, phone, area_m2, tareas, img_url, lead_id) -
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         {row("Cliente", name_cell)}
         {row("WhatsApp", phone_cell)}
+        {loc_row}
         {row("Área", f"{area_m2:,} m² &nbsp;·&nbsp; ~{tareas} tareas")}
         {row("Lead", f"#{lead_id}")}
       </table>
@@ -187,7 +210,10 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
     pack = client_pack.pack(client_id)
     lin = pack.get("linderos", {})
     k = KommoClient()
-    summary = (f"Linderos recibidos. Área aproximada: {area_m2:,} m² (~{tareas} tareas).")
+    lat, lng = _centroid(geojson)
+    coords = f"{lat}, {lng}" if lat is not None else "n/d"
+    summary = (f"Linderos recibidos. Área aproximada: {area_m2:,} m² (~{tareas} tareas). "
+               f"Centro del terreno: {coords}.")
     name, phone = "", ""
     try:
         try:
@@ -196,7 +222,8 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
         except KommoError as e:
             log.error("linderos: contact lookup failed: %s", e)
         # 1. Note on the lead (técnico sees it on the card)
-        note = summary + (f"\nImagen: {img_url}" if img_url else "")
+        note = summary + (f"\nMapa: https://www.google.com/maps?q={lat},{lng}" if lat is not None else "")
+        note += (f"\nImagen: {img_url}" if img_url else "")
         try:
             await k.add_lead_note(int(lead_id), note)
         except KommoError as e:
@@ -234,7 +261,7 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
             brand=lin.get("email_brand", "Aguas Profundas"),
             footer=lin.get("email_footer", "Gold Coast AI Automations"),
             name=name, phone=phone, area_m2=area_m2, tareas=tareas,
-            img_url=img_url, lead_id=lead_id)
+            img_url=img_url, lead_id=lead_id, lat=lat, lng=lng)
         try:
             async with httpx.AsyncClient(timeout=20.0) as c:
                 r = await c.post("https://api.resend.com/emails",

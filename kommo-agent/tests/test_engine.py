@@ -368,9 +368,16 @@ def test_no_bank_details_anywhere_in_the_client_pack():
     root = Path(__file__).parent.parent / "clients" / "aguas-profundas"
     bad = re.compile(r"\b\d{9,}\b|banco\s+popular|banreservas|c[eé]dula\s*[:#]?\s*\d",
                      re.I)
+    # Kommo config ids (status_id, bot ids) are internal, never sent to a customer,
+    # and are legitimately long digit runs. Skip config-id assignment lines so the
+    # bank-number heuristic does not false-positive on them; still scan all prose.
+    cfg_id = re.compile(r"_id\s*=", re.I)
     for f in list(root.rglob("*.md")) + list(root.rglob("*.toml")):
-        m = bad.search(f.read_text(encoding="utf-8"))
-        assert not m, f"possible bank detail in {f.name}: {m.group(0)!r}"
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if cfg_id.search(line):
+                continue
+            m = bad.search(line)
+            assert not m, f"possible bank detail in {f.name}: {line.strip()!r}"
 
 
 def test_deposit_bot_fires_at_most_once_per_talk(monkeypatch):
@@ -477,3 +484,34 @@ def test_location_message_invites_more_questions():
     from app import client
     msg = client.msg("location_received", "aguas-profundas")
     assert "otra pregunta" in msg.lower()
+
+
+def test_should_notify_fires_once_per_episode(monkeypatch):
+    """Stage move + task must fire once per handoff, not on every message while
+    the customer keeps typing. Reset on resume so a re-handoff signals again."""
+    from app import state
+    with tempfile.TemporaryDirectory() as d:
+        monkeypatch.setattr(state, "_DB", Path(d) / "t.db")
+        state.init()
+        assert state.should_notify("77") is True     # first handoff
+        assert state.should_notify("77") is False    # same episode, no repeat
+        state.clear_handoff("77")                    # agent resumes
+        assert state.should_notify("77") is True     # new episode -> signal again
+
+
+def test_handoff_signal_config_present():
+    """The stage id, task assignee, due window, and task text must all exist,
+    or the handoff would silently fail to surface in the Kommo inbox."""
+    from app import client
+    pack = client.pack("aguas-profundas")
+    assert int(pack["kommo"]["handoff_status_id"]) == 109168423
+    assert int(pack["behavior"]["handoff_task_user_id"]) == 15589135
+    assert float(pack["behavior"]["handoff_task_due_hours"]) == 2
+    assert "atención humana" in client.msg("handoff_task_text", "aguas-profundas").lower()
+
+
+def test_kommo_client_has_lead_and_task_methods():
+    """Guard against a revert of the two API methods the signal needs."""
+    from app.kommo import KommoClient
+    assert hasattr(KommoClient, "update_lead")
+    assert hasattr(KommoClient, "create_task")

@@ -19,6 +19,37 @@ def _entity_type(msg: dict) -> str:
     return t if t.endswith("s") else t + "s"
 
 
+async def _signal_handoff(k: KommoClient, msg: dict, talk_id: str, reason: str) -> None:
+    """Make a handoff VISIBLE to humans in Kommo, once per episode.
+
+    An unanswered chat is easy to miss. Best practice (per Kommo docs) is to
+    also move the lead to a dedicated stage (board visibility) AND drop a task
+    (which actively pings the responsible user). Both are best-effort: if they
+    fail, the customer was still acknowledged and the chat is still unanswered,
+    so we log and move on rather than break the reply path.
+    """
+    if not state.should_notify(talk_id):
+        return                                   # already signalled this episode
+    entity_id = msg.get("entity_id") or msg.get("element_id")
+    if not entity_id:
+        log.warning("talk=%s cannot signal handoff: no entity_id", talk_id)
+        return
+    pack = client_pack.pack()
+    status_id = pack.get("kommo", {}).get("handoff_status_id")
+    try:
+        if status_id:
+            await k.update_lead(int(entity_id), status_id=int(status_id))
+        await k.create_task(
+            entity_id=int(entity_id),
+            text=client_pack.msg("handoff_task_text"),
+            due_seconds=int(float(client_pack.behavior("handoff_task_due_hours")) * 3600),
+            responsible_user_id=int(client_pack.behavior("handoff_task_user_id")),
+        )
+        log.info("talk=%s handoff signalled (stage+task), reason=%s", talk_id, reason)
+    except KommoError as e:
+        log.error("talk=%s handoff signal failed: %s", talk_id, e)
+
+
 async def _human_last_active_min(k: KommoClient, talk_id: str) -> float | None:
     """Minutes since a HUMAN agent last replied, or None if none ever has.
 
@@ -116,6 +147,7 @@ async def handle_message(msg: dict) -> None:
             log.info("talk=%s location pin received", talk_id)
             await k.send_message(talk_id, client_pack.msg("location_received"))
             state.mark_handoff(talk_id, "location_shared")
+            await _signal_handoff(k, msg, talk_id, "location_shared")
             return
 
         # --- Voice note: download -> transcribe -> treat as text ---
@@ -151,6 +183,7 @@ async def handle_message(msg: dict) -> None:
             log.info("talk=%s inbound media (%s) - ack + handoff", talk_id, mtype)
             await k.send_message(talk_id, client_pack.msg("media_received"))
             state.mark_handoff(talk_id, f"media_received:{mtype}")
+            await _signal_handoff(k, msg, talk_id, f"media_received:{mtype}")
             return
 
         if not text:
@@ -228,6 +261,7 @@ async def handle_message(msg: dict) -> None:
 
         if handoff:
             state.mark_handoff(talk_id, "agent_requested")
+            await _signal_handoff(k, msg, talk_id, "agent_requested")
             log.info("talk=%s handed off by agent", talk_id)
 
     except KommoError as e:

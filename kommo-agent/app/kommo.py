@@ -70,6 +70,26 @@ class KommoClient:
         await self._req("POST", f"/bots/{bot_id}/run",
                         json={"entity_id": int(entity_id), "entity_type": entity_type})
 
+    async def update_lead(self, lead_id: int | str, **fields) -> dict | None:
+        """PATCH /leads/{id}. Used to move a lead to the handoff stage."""
+        return await self._req("PATCH", f"/leads/{lead_id}", json=fields)
+
+    async def create_task(self, entity_id: int | str, text: str,
+                          due_seconds: int, responsible_user_id: int,
+                          entity_type: str = "leads", task_type_id: int = 1) -> dict | None:
+        """POST /tasks. A task PINGS the human, unlike an unanswered chat.
+        complete_till is a unix timestamp; text + complete_till are required."""
+        import time as _t
+        body = [{
+            "text": text,
+            "complete_till": int(_t.time()) + int(due_seconds),
+            "entity_id": int(entity_id),
+            "entity_type": entity_type,
+            "responsible_user_id": int(responsible_user_id),
+            "task_type_id": task_type_id,
+        }]
+        return await self._req("POST", "/tasks", json=body)
+
     async def get_talk(self, talk_id: str | int) -> dict | None:
         data = await self._req("GET", "/talks", params={"filter[talk_id][]": talk_id})
         if not data:

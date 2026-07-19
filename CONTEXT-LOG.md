@@ -6,6 +6,64 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 18, 2026 — 20:30 UTC
+
+### Handoff is now VISIBLE in Kommo: stage move + task ping. Verified live.
+
+The prior gap (bot went silent, nothing told a human) is closed. On every
+handoff the agent now does two Kommo-side signals, best-practice per the docs:
+
+1. **Moves the lead to a dedicated stage** — created "Atención humana"
+   (status_id 109168423) in the main pipeline (14130431). The board shows at a
+   glance who is waiting on a person.
+2. **Creates a task** assigned to the responsible user (Sheyla, 15589135), due
+   in 2h — which actively pings the human, unlike a merely-unanswered chat. The
+   2h due matches the KB's "within 2 business hours" promise.
+3. The chat is already unanswered (free), completing the three-signal set.
+
+Fired once per handoff episode (`state.should_notify`, reset on resume), so a
+chatty customer does not spawn a pile of tasks. Best-effort: if the Kommo calls
+fail, the customer was still acknowledged and the reply path is not broken.
+
+**Verified live against a real lead:** update_lead moved it to status 109168423
+(PASS), create_task landed assigned to Sheyla. New KommoClient methods
+`update_lead` (PATCH /leads/{id}) and `create_task` (POST /tasks) both proven.
+
+### Two timers, deliberately different — do not conflate
+
+- `handoff_grace_minutes = 15` → when the BOT resumes if no human replies.
+- `handoff_task_due_hours = 2` → the human's SLA on the task (matches the KB).
+
+A customer is never stranded (bot resumes at 15m) AND a human is properly chased
+(task due 2h). The bot resuming does NOT complete the human task — a human still
+does the human work (satellite map, payment verification).
+
+### Kommo API gotchas found (reusable)
+
+- **Status names with an EMOJI silently save blank.** "🙋 Atención humana"
+  created a stage with an empty name (HTTP 200, name=""). Dropping the emoji
+  ("Atención humana") saved fine. Accents are OK; emoji is not. Also: pass the
+  name as proper UTF-8 JSON — shell-inlined emoji through `curl -d` mangles it.
+- **You cannot PATCH a lead INTO a type-1 stage** ("Incoming leads"): returns
+  400 NotSupportedChoice. Move leads only to normal (type 0) stages. Irrelevant
+  to us (we only move TO Atención humana) but a landmine for any reset logic.
+- **Tasks cannot be deleted via API** (DELETE → 403), only completed
+  (PATCH is_completed=true). Any test that creates tasks must complete them, not
+  delete them, or they nag the assignee forever.
+- `create_task` needs `text` + `complete_till` (unix). `entity_id` +
+  `entity_type` link it to the lead; `responsible_user_id` sets the assignee.
+
+### Bank-detail guard hardened
+
+Adding `handoff_status_id = 109168423` (a 9-digit Kommo id) tripped the
+"no bank details in the pack" test, which flags any 9+ digit run. Correct catch,
+false positive: config ids are internal, never sent to a customer. The guard now
+skips `*_id =` config lines and still scans all prose.
+
+33 tests passing (was 30). New: once-per-episode signal, config presence,
+client-method presence.
+---
+
 ## Session: July 18, 2026 — 19:30 UTC
 
 ### Flow change: handoff is no longer permanent. Graceful 15-min return, live.

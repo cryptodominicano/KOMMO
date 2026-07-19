@@ -12,6 +12,9 @@ subdomain = "infoswecinvestmentscom"
 # VERIFIED live 2026-07-17: WhatsApp Business API origin is "waba".
 # Kommo's docs only ever show "telegram". The wrong value silently drops every message.
 origin    = "waba"
+# Handoff visibility: on handoff the lead moves to this pipeline stage so the
+# Kommo board shows who is waiting on a human. Created 2026-07-18.
+handoff_status_id = 109168423   # "Atención humana" in pipeline 14130431
 
 [messages]
 # Sent verbatim when a GPS pin arrives. Handled in code, never by the model,
@@ -34,6 +37,7 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 # receipt - "envíe el comprobante"). Handled in CODE, never by the model:
 # business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y le confirma en breve."
+handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
 
 [behavior]
 # message_type values that trigger the deterministic location handoff
@@ -53,6 +57,12 @@ handoff_marker = "[[HANDOFF]]"
 # stranded because a técnico was slow or stepped away. Kommo does NOT webhook
 # outgoing messages, so human activity is read from history (free of quota).
 handoff_grace_minutes = 15
+# On handoff, create a Kommo TASK so a human is actively pinged (not just an
+# unanswered chat). Due window matches the KB promise of "within 2 business
+# hours". The 15-min grace above (bot resume) and this 2h task (human SLA) are
+# deliberately different timers.
+handoff_task_user_id  = 15589135   # Sheyla (answers WhatsApp)
+handoff_task_due_hours = 2
 
 [salesbot]
 # THE IMAGE WORKAROUND.

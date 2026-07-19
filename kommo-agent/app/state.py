@@ -38,6 +38,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS deposit_sent ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS notified ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -112,7 +114,21 @@ def mark_handoff(talk_id: str, reason: str) -> None:
                   "VALUES (?, ?, ?)", (str(talk_id), time.time(), reason))
 
 
+def should_notify(talk_id: str) -> bool:
+    """True exactly once per handoff episode - so the stage move + task fire
+    once, not on every message while the customer keeps typing. Reset when the
+    agent resumes (clear_handoff), so a later re-handoff signals again."""
+    with _conn() as c:
+        try:
+            c.execute("INSERT INTO notified (talk_id, at) VALUES (?, ?)",
+                      (str(talk_id), time.time()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
 def clear_handoff(talk_id: str) -> None:
     """Call when a human hands the conversation back to the agent."""
     with _conn() as c:
         c.execute("DELETE FROM handoff WHERE talk_id = ?", (str(talk_id),))
+        c.execute("DELETE FROM notified WHERE talk_id = ?", (str(talk_id),))

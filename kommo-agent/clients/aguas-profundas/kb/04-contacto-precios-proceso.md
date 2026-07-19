@@ -23,6 +23,9 @@ Es importante que la ubicación quede justo sobre el terreno, para que el estudi
 
 ## Proceso general
 
+### Reserva del estudio de agua (depósito)
+Para reservar el estudio de agua se requiere un depósito de RD$5,000, que se abona al costo total del estudio (RD$45,000). Se solicita después de que el cliente marca los linderos de su terreno. Los datos de la cuenta se envían por imagen (nunca por texto); el cliente hace el depósito, envía el comprobante por el mismo chat, y un representante le contacta en un día laborable para confirmar la cita. El asistente nunca escribe números de cuenta.
+
 ### Agua / perforación
 1. Se hace primero el estudio de agua del terreno (topográfico, radioestesia, geohidrológico).
 2. El cliente comparte la ubicación exacta del terreno.

@@ -558,3 +558,30 @@ def test_linderos_client_config_present():
     assert "@" in lin["owner_email"]
     assert lin["from_email"]
     assert "linderos" in client.msg("linderos_invite", "aguas-profundas").lower()
+
+
+def test_agua_reserve_flow_wired():
+    """Agua/perforación now has a booking deposit (reverses the old 'no payment
+    talk for agua' rule). It must reuse the SAME bank-photo trigger as séptico,
+    present only after linderos, and describe the RD$5,000 as a fee toward the
+    RD$45,000 study."""
+    from app import client
+    prompt = client.system_prompt("aguas-profundas")
+    trigger = client.pack("aguas-profundas")["salesbot"]["deposit_trigger_text"]
+
+    # the unified trigger fires the bank photo and appears in the prompt
+    assert trigger == "le comparto los datos para el depósito"
+    assert trigger in prompt
+
+    # the reserve flow exists and is anchored AFTER linderos
+    assert "FLUJO DE RESERVA DE AGUA" in prompt
+    assert "se abona al costo" in prompt          # fee toward the study, not extra
+    assert "45,000" in prompt or "45000" in prompt
+
+    # bank details still never in text
+    assert "cédula" in prompt and "nunca en tu texto" in prompt
+
+    # the linderos submit message invites booking (asks to confirm), no trigger phrase
+    recv = client.pack("aguas-profundas")["linderos"]["received_message"]
+    assert "reservar" in recv.lower()
+    assert trigger not in recv                     # must NOT fire the photo prematurely

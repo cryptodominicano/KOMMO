@@ -6,6 +6,60 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 19, 2026 — 03:10 UTC
+
+### Agua/perforación now reaches PAYMENT, closing the loop like séptico.
+
+Client-approved flow, built + live-verified. The full agua/perforación journey:
+
+    interés → estudio RD$45,000 explicado
+    → "sí, avanzar" → AI pide la ubicación
+    → cliente comparte GPS → sistema envía el enlace de linderos (+ "vuelva a reservar")
+    → cliente marca linderos y envía → sistema pregunta "¿Desea reservar ahora?"
+    → cliente confirma "sí" → AI presenta el depósito RD$5,000 (abona al estudio)
+                              y DISPARA la foto del banco (mismo banco-foto 55956)
+    → cliente sube comprobante → ack (nunca confirma pago) → handoff
+    → "un representante le contactará en un día laborable para confirmar su cita"
+
+### Decisions (Isaias, with the client)
+- Deposit: **RD$5,000, same as séptico**, same bank account/photo.
+- It is a **booking fee that abona al costo del estudio (RD$45,000)**, not extra.
+- Bank photo fires **only after the customer confirms** "sí, quiero reservar"
+  (confirm-first) — the account number never reaches someone who just drew and left.
+
+### How it reuses the existing machinery (no duplication)
+- **Unified the deposit trigger**: `deposit_trigger_text` changed from the
+  séptico-specific "depósito de RD$5,000 para procesar su orden" to
+  **"le comparto los datos para el depósito"**, which appears in BOTH the séptico
+  order message and the new agua reserve message. One phrase → banco-foto (55956)
+  fires for either flow, capped once per conversation (unchanged).
+- New prompt section **FLUJO DE RESERVA DE AGUA** (present the deposit only after
+  linderos + confirmation). Reverses the old "no payment talk for agua" boundary,
+  keeping the hard rule that bank details live ONLY in the photo, never in text.
+- `received_message` (linderos submit) now INVITES booking ("¿Desea reservar
+  ahora?") and deliberately does NOT contain the trigger phrase, so the photo
+  does not fire prematurely.
+- `media_received` reworded to name the 1-business-day appointment (both flows);
+  kept lowercase "verifica" and no "confirm*" so the never-confirm-payment guard
+  still passes.
+- KB (04) gained the agua booking-deposit fact so RAG can answer questions about it.
+
+### Live verification
+- "Sí, quiero reservar" → AI emits the exact deposit message, DEPOSIT trigger
+  present (bank photo would fire), no leak, no handoff. ✓
+- "¿El depósito es reembolsable?" BEFORE confirming → deposit does NOT fire
+  (confirm-first holds). The AI hands off rather than invent a refund policy —
+  correct, since Wellington's refund terms are unknown. If he wants the AI to
+  answer refund questions, he must supply the policy.
+
+37 tests passing (was 36). New: agua reserve flow wiring guard.
+
+### Note
+This makes agua and séptico structurally identical at the payment step (same
+deposit, same bank photo, same proof-upload handoff). Future clients inherit the
+pattern: a drawing/qualification step feeding a confirm-then-deposit close.
+---
+
 ## Session: July 19, 2026 — 02:10 UTC
 
 ### NEW FEATURE (prototype, live): customer draws their own property lines.

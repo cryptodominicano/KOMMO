@@ -36,11 +36,11 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 # Sent verbatim when the customer sends a photo/file (typically a deposit
 # receipt - "envíe el comprobante"). Handled in CODE, never by the model:
 # business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
-media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y le confirma en breve."
+media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y un representante le contactará en un día laborable para coordinar los siguientes pasos."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
 linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.
 
-Para marcar los límites (linderos) de su terreno de forma fácil, abra este enlace desde su teléfono y toque las esquinas de su propiedad sobre el mapa satelital. Al terminar, toque Enviar. Si tiene alguna pregunta, escríbame por aquí. 🙏"""
+Para marcar los límites (linderos) de su terreno de forma fácil, abra este enlace desde su teléfono y toque las esquinas de su propiedad sobre el mapa satelital. Al terminar, toque Enviar y vuelva a este chat para completar su reserva. Si tiene alguna pregunta, escríbame por aquí. 🙏"""
 
 [behavior]
 # message_type values that trigger the deterministic location handoff
@@ -95,7 +95,7 @@ welcome_bot_id = 55340   # "welcome-bot": the saludo as an infographic.
 deposit_bot_id = 55956   # "banco-foto": 1 Message step, bank image, NO trigger.
 # If this exact text appears in a reply, the engine fires deposit_bot_id.
 # Must stay in sync with the order message in prompts/system.md.
-deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
+deposit_trigger_text = "le comparto los datos para el depósito"
 
 [salesbot.triggers]
 "[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.
@@ -105,7 +105,7 @@ deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
 # Where the finished, marked parcel is delivered.
 owner_email = "isaias@inteliard.com"           # TESTING - revert to Sheyla before go-live
 from_email  = "Aguas Profundas <property-lines-submissions@goldcoastai.pro>"
-received_message = "¡Recibimos los límites de su terreno! ✅ Un técnico los revisa y le confirma el mejor punto de perforación en breve. 🙏"
+received_message = "¡Recibimos los límites de su terreno! ✅ Para reservar su estudio se requiere un depósito de RD$5,000, que se abona al costo total del estudio (RD$45,000). ¿Desea reservar ahora? 🙏"
 email_brand  = "Tres Golpes"
 email_footer = "Gold Coast AI Automations"
 

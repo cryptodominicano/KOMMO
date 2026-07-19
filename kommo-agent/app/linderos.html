@@ -3,19 +3,23 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#0e213d" />
 <title>Marque los límites de su terreno — Aguas Profundas</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  html,body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
   #map { position:absolute; inset:0; background:#0e213d; }
+  #loading { position:absolute; inset:0; z-index:1500; display:flex; align-items:center;
+    justify-content:center; background:#0e213d; color:#cdd8ea; font-size:15px; }
   .panel { position:absolute; left:8px; right:8px; top:8px; z-index:1000;
     background:rgba(14,33,61,.95); color:#fff; border-radius:12px; padding:10px 12px;
     box-shadow:0 4px 16px rgba(0,0,0,.35); }
   .panel h1 { margin:0 0 4px; font-size:15px; }
   .panel p { margin:0 0 8px; font-size:12.5px; line-height:1.35; color:#cdd8ea; }
   .search { display:flex; gap:6px; }
-  .search input { flex:1; border:0; border-radius:9px; padding:10px; font-size:14px; }
+  .search input { flex:1; border:0; border-radius:9px; padding:10px; font-size:16px; }
   .search button { border:0; border-radius:9px; padding:10px 12px; font-size:14px; font-weight:700; background:#2a9d8f; color:#fff; }
   .area { position:absolute; left:8px; right:8px; bottom:76px; z-index:1000; background:#fff;
     border-radius:12px; padding:9px 14px; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.3); font-size:14px; color:#12203a; }
@@ -33,12 +37,13 @@
 <body>
 <script>window.__LINDEROS__ = {"token": "__TOKEN__", "lat": __LAT__, "lng": __LNG__};</script>
 <div id="map"></div>
+<div id="loading">Cargando mapa…</div>
 
 <div class="panel">
   <h1>📍 Marque su terreno</h1>
   <p id="hint">Busque su dirección o use su ubicación, luego <b>toque cada esquina</b> de su terreno sobre el mapa. Acerque con dos dedos para mayor precisión.</p>
   <div class="search">
-    <input id="addr" type="text" placeholder="Escriba su dirección o sector…" />
+    <input id="addr" type="text" inputmode="search" placeholder="Escriba su dirección o sector…" />
     <button id="findBtn">Buscar</button>
   </div>
 </div>
@@ -59,97 +64,110 @@
   <p>Gracias. Un técnico de Aguas Profundas revisa los límites de su terreno y le confirma el mejor punto de perforación en breve.</p>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
-<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  var CFG = window.__LINDEROS__ || { token:"", lat:0, lng:0 };
+  var CFG = window.__LINDEROS__ || { token: "", lat: 0, lng: 0 };
   var DEFAULT = [19.12, -70.63]; // Jarabacoa, DR [lat,lng]
 
-  // Leaflet = raster tiles, NO WebGL. Renders on old phones and in-app browsers
-  // that showed a black MapLibre canvas.
-  var map = L.map("map", { center: (CFG.lat && CFG.lng) ? [CFG.lat, CFG.lng] : DEFAULT,
-                           zoom: (CFG.lat && CFG.lng) ? 17 : 8, zoomControl: true, attributionControl: false });
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 19, crossOrigin: "anonymous" }).addTo(map);
-
-  // Center on the phone's GPS (the customer is on their land).
-  map.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true });
-
-  var pts = [], poly = null, markers = [];
-  var areaBox = document.getElementById("areaBox"), sendBtn = document.getElementById("sendBtn");
-
-  function ringLngLat() {
-    var r = pts.map(function (p) { return [p.lng, p.lat]; });
-    if (r.length >= 3) r.push(r[0]);
-    return r;
+  if (typeof L === "undefined") {
+    document.getElementById("loading").innerHTML =
+      "No se pudo cargar el mapa. Abra este enlace en Chrome o Safari e intente de nuevo.";
+  } else {
+    start();
   }
 
-  function render() {
-    if (poly) { map.removeLayer(poly); poly = null; }
-    markers.forEach(function (m) { map.removeLayer(m); }); markers = [];
-    pts.forEach(function (p) {
-      markers.push(L.circleMarker(p, { radius: 6, color: "#12203a", weight: 2,
-        fillColor: "#ffd34e", fillOpacity: 1 }).addTo(map));
-    });
-    if (pts.length >= 2) {
-      poly = (pts.length >= 3)
-        ? L.polygon(pts, { color: "#ffd34e", weight: 3, fillColor: "#2a9d8f", fillOpacity: 0.28 }).addTo(map)
-        : L.polyline(pts, { color: "#ffd34e", weight: 3 }).addTo(map);
+  // Spherical polygon area (m2) - replaces Turf so the page stays light for old
+  // phones. Accurate for a small parcel. pts = array of L.latLng.
+  function areaM2(pts) {
+    if (pts.length < 3) return 0;
+    var R = 6378137, a = 0, i, j, lat1, lat2, dLng;
+    for (i = 0; i < pts.length; i++) {
+      j = (i + 1) % pts.length;
+      lat1 = pts[i].lat * Math.PI / 180;
+      lat2 = pts[j].lat * Math.PI / 180;
+      dLng = (pts[j].lng - pts[i].lng) * Math.PI / 180;
+      a += dLng * (2 + Math.sin(lat1) + Math.sin(lat2));
     }
-    if (pts.length >= 3) {
-      var m2 = turf.area({ type: "Polygon", coordinates: [ringLngLat()] });
-      document.getElementById("areaM2").textContent = Math.round(m2).toLocaleString("es-DO");
-      document.getElementById("areaTa").textContent = (m2 / 628.8).toFixed(1);
-      areaBox.style.display = "block"; sendBtn.disabled = false;
-    } else { areaBox.style.display = "none"; sendBtn.disabled = true; }
+    return Math.abs(a * R * R / 2);
   }
 
-  map.on("click", function (e) { pts.push(e.latlng); render(); });
-  document.getElementById("undoBtn").onclick = function () { pts.pop(); render(); };
-  document.getElementById("clearBtn").onclick = function () { pts = []; render(); };
-
-  function doSearch() {
-    var q = document.getElementById("addr").value.trim(); if (!q) return;
-    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=do&q=" + encodeURIComponent(q))
-      .then(function (r) { return r.json(); })
-      .then(function (a) {
-        if (a && a.length) map.setView([+a[0].lat, +a[0].lon], 18);
-        else alert("No encontramos esa dirección. Acerque el mapa manualmente o use su ubicación.");
-      }).catch(function () { alert("No se pudo buscar. Acerque el mapa manualmente."); });
-  }
-  document.getElementById("findBtn").onclick = doSearch;
-  document.getElementById("addr").addEventListener("keydown", function (e) { if (e.key === "Enter") doSearch(); });
-
-  function capture() {
-    // Best-effort image of the marked map. If it fails (old device), we still
-    // send the coordinates + area, which is the essential data.
-    return new Promise(function (resolve) {
-      var done = false, finish = function (img) { if (!done) { done = true; resolve(img); } };
-      setTimeout(function () { finish(""); }, 6000); // never block the submit
-      try {
-        html2canvas(document.getElementById("map"), { useCORS: true, logging: false })
-          .then(function (c) { finish(c.toDataURL("image/jpeg", 0.82)); })
-          .catch(function () { finish(""); });
-      } catch (e) { finish(""); }
+  function start() {
+    var map = L.map("map", {
+      center: (CFG.lat && CFG.lng) ? [CFG.lat, CFG.lng] : DEFAULT,
+      zoom: (CFG.lat && CFG.lng) ? 17 : 8, zoomControl: true, attributionControl: false
     });
-  }
+    var tiles = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, crossOrigin: "anonymous" });
+    tiles.on("load", function () { var l = document.getElementById("loading"); if (l) l.style.display = "none"; });
+    tiles.addTo(map);
+    setTimeout(function () { var l = document.getElementById("loading"); if (l) l.style.display = "none"; }, 4000);
 
-  document.getElementById("sendBtn").onclick = function () {
-    if (pts.length < 3) return;
-    sendBtn.disabled = true; sendBtn.textContent = "Enviando…";
-    var poly = { type: "Polygon", coordinates: [ringLngLat()] };
-    var m2 = turf.area(poly);
-    capture().then(function (image) {
-      return fetch("/api/linderos", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: CFG.token, geojson: poly, area_m2: Math.round(m2), image: image }) });
-    }).then(function (r) {
-      if (!r.ok) throw 0; document.getElementById("doneScreen").style.display = "flex";
-    }).catch(function () {
-      sendBtn.disabled = false; sendBtn.textContent = "Enviar";
-      alert("No se pudo enviar. Verifique su conexión e intente de nuevo.");
-    });
-  };
+    map.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true });
+
+    var pts = [], poly = null, markers = [];
+    var areaBox = document.getElementById("areaBox"), sendBtn = document.getElementById("sendBtn");
+
+    function ringLngLat() {
+      var r = [], i;
+      for (i = 0; i < pts.length; i++) r.push([pts[i].lng, pts[i].lat]);
+      if (r.length >= 3) r.push(r[0]);
+      return r;
+    }
+
+    function render() {
+      if (poly) { map.removeLayer(poly); poly = null; }
+      for (var m = 0; m < markers.length; m++) map.removeLayer(markers[m]);
+      markers = [];
+      for (var i = 0; i < pts.length; i++) {
+        markers.push(L.circleMarker(pts[i], { radius: 6, color: "#12203a", weight: 2,
+          fillColor: "#ffd34e", fillOpacity: 1 }).addTo(map));
+      }
+      if (pts.length >= 3) {
+        poly = L.polygon(pts, { color: "#ffd34e", weight: 3, fillColor: "#2a9d8f", fillOpacity: 0.28 }).addTo(map);
+      } else if (pts.length === 2) {
+        poly = L.polyline(pts, { color: "#ffd34e", weight: 3 }).addTo(map);
+      }
+      if (pts.length >= 3) {
+        var m2 = areaM2(pts);
+        document.getElementById("areaM2").textContent = Math.round(m2).toLocaleString("es-DO");
+        document.getElementById("areaTa").textContent = (m2 / 628.8).toFixed(1);
+        areaBox.style.display = "block"; sendBtn.disabled = false;
+      } else { areaBox.style.display = "none"; sendBtn.disabled = true; }
+    }
+
+    map.on("click", function (e) { pts.push(e.latlng); render(); });
+    document.getElementById("undoBtn").onclick = function () { pts.pop(); render(); };
+    document.getElementById("clearBtn").onclick = function () { pts = []; render(); };
+
+    function doSearch() {
+      var q = document.getElementById("addr").value.replace(/^\s+|\s+$/g, "");
+      if (!q) return;
+      fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=do&q=" + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (a) {
+          if (a && a.length) map.setView([+a[0].lat, +a[0].lon], 18);
+          else alert("No encontramos esa dirección. Acerque el mapa manualmente o use su ubicación.");
+        })["catch"](function () { alert("No se pudo buscar. Acerque el mapa manualmente."); });
+    }
+    document.getElementById("findBtn").onclick = doSearch;
+    document.getElementById("addr").addEventListener("keydown", function (e) { if (e.key === "Enter") doSearch(); });
+
+    sendBtn.onclick = function () {
+      if (pts.length < 3) return;
+      sendBtn.disabled = true; sendBtn.textContent = "Enviando…";
+      var geo = { type: "Polygon", coordinates: [ringLngLat()] };
+      // Coordinates only - the server renders the marked satellite image. No
+      // browser capture, so nothing to break on old phones or in-app browsers.
+      fetch("/api/linderos", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: CFG.token, geojson: geo, area_m2: Math.round(areaM2(pts)), image: "" }) })
+        .then(function (r) { if (!r.ok) throw 0; document.getElementById("doneScreen").style.display = "flex"; })
+        ["catch"](function () {
+          sendBtn.disabled = false; sendBtn.textContent = "Enviar";
+          alert("No se pudo enviar. Verifique su conexión e intente de nuevo.");
+        });
+    };
+  }
 </script>
 </body>
 </html>

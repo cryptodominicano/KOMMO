@@ -141,6 +141,13 @@ Core engine pieces and why they are the way they are:
 - **Confirmed message types over waba:** text → `text`, voice → `voice`, photo →
   `picture`, GPS pin → `location`. All verified live. Incoming media DOES reach
   the `add_message` webhook (with an attachment link).
+- **Make handoff VISIBLE, do not just go silent.** Best practice (Kommo docs):
+  on handoff, move the lead to a dedicated stage (board visibility) AND create
+  a task via POST /tasks that pings the responsible user - an unanswered chat
+  alone is easy to miss. Fire once per handoff episode. Gotchas found live: a
+  status name with an EMOJI saves blank (use plain text + accents); you cannot
+  PATCH a lead into a type-1 'Incoming' stage (400 NotSupportedChoice); tasks
+  cannot be deleted via API (403), only completed.
 - **Chats API add-on limits** (Trial 100 / Pro 500) — the reset period is
   undocumented. Ask support before a client relies on volume. `GET
   /talks/{id}/messages` is free of that quota; use it for history.

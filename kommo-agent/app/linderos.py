@@ -99,6 +99,89 @@ async def linderos_img(name: str):
 
 
 # ---------------------------------------------------------------- submit
+async def _render_marked_image(geojson: dict) -> bytes | None:
+    """Render the parcel with its boundary drawn, SERVER-SIDE, from the coords.
+
+    The browser html2canvas capture drops Leaflet's SVG polygon overlay (tiles
+    but no lines). The Esri /export endpoint is disabled on the tiled service
+    (500). So we stitch the Esri World Imagery raster TILES that cover the parcel
+    (standard Web Mercator math), then draw the polygon with Pillow. Device-
+    agnostic; frames tightly on the terrain.
+    """
+    import io
+    import math
+    try:
+        ring = geojson["coordinates"][0]
+        lngs = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        minlng, maxlng = min(lngs), max(lngs)
+        minlat, maxlat = min(lats), max(lats)
+        padx = (maxlng - minlng) * 0.35 or 0.0008
+        pady = (maxlat - minlat) * 0.35 or 0.0008
+        minlng -= padx; maxlng += padx; minlat -= pady; maxlat += pady
+
+        def to_px(lat, lng, z):
+            n = 2 ** z
+            x = (lng + 180.0) / 360.0 * n * 256
+            s_ = math.sin(math.radians(lat))
+            y = (0.5 - math.log((1 + s_) / (1 - s_)) / (4 * math.pi)) * n * 256
+            return x, y
+
+        # pick the deepest zoom (<=19) where the parcel bbox stays under ~1100px wide
+        z = 19
+        for zz in range(19, 0, -1):
+            x0, _ = to_px(maxlat, minlng, zz)
+            x1, _ = to_px(maxlat, maxlng, zz)
+            if (x1 - x0) <= 1100:
+                z = zz
+                break
+
+        px_min, py_min = to_px(maxlat, minlng, z)   # top-left pixel
+        px_max, py_max = to_px(minlat, maxlng, z)   # bottom-right pixel
+        tx0, tx1 = int(px_min // 256), int(px_max // 256)
+        ty0, ty1 = int(py_min // 256), int(py_max // 256)
+
+        from PIL import Image, ImageDraw
+        canvas = Image.new("RGB", ((tx1 - tx0 + 1) * 256, (ty1 - ty0 + 1) * 256), (20, 33, 61))
+        base = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile"
+        async with httpx.AsyncClient(timeout=25.0) as c:
+            for tx in range(tx0, tx1 + 1):
+                for ty in range(ty0, ty1 + 1):
+                    try:
+                        r = await c.get(f"{base}/{z}/{ty}/{tx}")
+                        if r.status_code == 200:
+                            t = Image.open(io.BytesIO(r.content)).convert("RGB")
+                            canvas.paste(t, ((tx - tx0) * 256, (ty - ty0) * 256))
+                    except Exception:
+                        pass
+
+        draw = ImageDraw.Draw(canvas, "RGBA")
+
+        def px(lng, lat):
+            x, y = to_px(lat, lng, z)
+            return (x - tx0 * 256, y - ty0 * 256)
+
+        pts = [px(p[0], p[1]) for p in ring]
+        draw.polygon(pts, fill=(42, 157, 143, 85))
+        draw.line(pts + [pts[0]], fill=(255, 211, 78, 255), width=4)
+        for x, y in pts:
+            draw.ellipse([x - 5, y - 5, x + 5, y + 5],
+                         fill=(255, 211, 78, 255), outline=(18, 32, 58, 255))
+
+        # crop to the parcel bbox + margin
+        cx0 = max(0, int(px_min - tx0 * 256) - 45)
+        cy0 = max(0, int(py_min - ty0 * 256) - 45)
+        cx1 = min(canvas.width, int(px_max - tx0 * 256) + 45)
+        cy1 = min(canvas.height, int(py_max - ty0 * 256) + 45)
+        canvas = canvas.crop((cx0, cy0, cx1, cy1))
+        out = io.BytesIO()
+        canvas.save(out, "JPEG", quality=86)
+        return out.getvalue()
+    except Exception:
+        log.exception("linderos: server-side render failed")
+        return None
+
+
 @router.post("/api/linderos")
 async def linderos_submit(request: Request):
     body = await request.json()
@@ -113,14 +196,21 @@ async def linderos_submit(request: Request):
 
     # Persist the marked image if the browser sent one (canvas capture).
     img_url, img_b64 = "", ""
-    image = body.get("image") or ""
-    if image.startswith("data:image"):
+    raw = await _render_marked_image(geojson)          # primary: server-side, device-agnostic
+    if not raw:
+        image = body.get("image") or ""                # fallback: browser capture (may lack lines)
+        if image.startswith("data:image"):
+            try:
+                raw = base64.b64decode(image.split(",", 1)[1])
+            except Exception:
+                raw = None
+    if raw:
         try:
-            img_b64 = image.split(",", 1)[1]          # already base64; reused for the attachment
             _IMG_DIR.mkdir(parents=True, exist_ok=True)
             name = f"{uuid.uuid4().hex}.jpg"
-            (_IMG_DIR / name).write_bytes(base64.b64decode(img_b64))
+            (_IMG_DIR / name).write_bytes(raw)
             img_url = f"{settings.public_base_url}/linderos/img/{name}"
+            img_b64 = base64.b64encode(raw).decode()
         except Exception:
             log.exception("linderos: failed to store image")
 

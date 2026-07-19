@@ -346,7 +346,9 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
 
     # 4. Email the owner via Resend
     owner = lin.get("owner_email")
-    if owner and settings.resend_api_key:
+    recipients = owner if isinstance(owner, list) else ([owner] if owner else [])
+    recipients = [e for e in recipients if e]
+    if recipients and settings.resend_api_key:
         html = _email_html(
             brand=lin.get("email_brand", "Aguas Profundas"),
             footer=lin.get("email_footer", "Gold Coast AI Automations"),
@@ -357,7 +359,7 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
                 r = await c.post("https://api.resend.com/emails",
                                  headers={"Authorization": f"Bearer {settings.resend_api_key}"},
                                  json={"from": lin.get("from_email", "Aguas Profundas <aguas@goldcoastai.pro>"),
-                                       "to": [owner],
+                                       "to": recipients,
                                        "subject": f"Linderos recibidos — lead {lead_id} ({area_m2:,} m²)",
                                        "html": html,
                                        # the marked map as a real .jpg file, so it shows even when

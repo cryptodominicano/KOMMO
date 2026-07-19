@@ -556,7 +556,10 @@ def test_linderos_link_uses_public_base(monkeypatch):
 def test_linderos_client_config_present():
     from app import client
     lin = client.pack("aguas-profundas")["linderos"]
-    assert "@" in lin["owner_email"]
+    _oe = lin["owner_email"]
+    _oe = _oe if isinstance(_oe, list) else [_oe]
+    assert any("@" in e for e in _oe)
+    assert "Info@swecinvestments.com" in _oe   # Sheyla added as a recipient
     assert lin["from_email"]
     assert "linderos" in client.msg("linderos_invite", "aguas-profundas").lower()
 

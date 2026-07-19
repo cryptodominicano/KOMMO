@@ -104,7 +104,7 @@ deposit_trigger_text = "le comparto los datos para el depósito"
 
 [linderos]
 # Where the finished, marked parcel is delivered.
-owner_email = "isaias@inteliard.com"           # TESTING - revert to Sheyla before go-live
+owner_email = ["isaias@inteliard.com", "Info@swecinvestments.com"]   # isaias = testing; Info@ = Sheyla
 from_email  = "Aguas Profundas <property-lines-submissions@goldcoastai.pro>"
 received_message = "¡Recibimos los límites de su terreno! ✅ El siguiente paso es iniciar su estudio de agua. ¿Desea comenzar ahora? Con gusto le explico el primer paso. 🙏"
 email_brand  = "Tres Golpes"

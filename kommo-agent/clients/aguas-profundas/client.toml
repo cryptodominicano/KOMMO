@@ -38,6 +38,7 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 # business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y un representante le contactará en un día laborable para coordinar los siguientes pasos."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
+linderos_fallback = "¡Gracias! 🙏 Recibimos su ubicación. Un técnico de Aguas Profundas le atenderá en breve para marcar los linderos de su terreno y continuar con su caso."
 linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.
 
 Para marcar los límites (linderos) de su terreno de forma fácil, abra este enlace desde su teléfono y toque las esquinas de su propiedad sobre el mapa satelital. Al terminar, toque Enviar y vuelva a este chat para completar su reserva. Si tiene alguna pregunta, escríbame por aquí. 🙏"""

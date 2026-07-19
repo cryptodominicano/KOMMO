@@ -40,6 +40,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS notified ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS linderos_sent ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -77,6 +79,23 @@ def first_contact(talk_id: str) -> bool:
     with _conn() as c:
         try:
             c.execute("INSERT INTO greeted (talk_id, at) VALUES (?, ?)",
+                      (str(talk_id), time.time()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
+def linderos_first(talk_id: str) -> bool:
+    """True exactly once per talk - the first time a GPS pin arrives.
+
+    First pin -> send the drawing link. A SECOND pin means the drawing tool
+    did not work out (bad phone, black screen, no data), so the worker falls
+    back to acknowledging the pin and handing off to a técnico who marks the
+    linderos manually. Deterministic, no model judgement.
+    """
+    with _conn() as c:
+        try:
+            c.execute("INSERT INTO linderos_sent (talk_id, at) VALUES (?, ?)",
                       (str(talk_id), time.time()))
             return True
         except sqlite3.IntegrityError:

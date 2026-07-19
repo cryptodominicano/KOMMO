@@ -621,3 +621,22 @@ def test_bank_number_never_in_repo():
             if cfg_id.search(line):
                 continue
             assert not bad.search(line), f"bank detail in {f.name}: {line.strip()!r}"
+
+
+def test_linderos_backup_path(monkeypatch):
+    """First GPS pin -> drawing link. A SECOND pin means the tool did not work,
+    so the worker falls back to acknowledging + handoff (a técnico marks linderos
+    manually). linderos_first fires exactly once per talk."""
+    from app import state, client
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as d:
+        monkeypatch.setattr(state, "_DB", Path(d) / "t.db")
+        state.init()
+        assert state.linderos_first("400") is True    # first pin -> link
+        assert state.linderos_first("400") is False   # second pin -> backup
+        assert state.linderos_first("401") is True     # different customer
+    fb = client.msg("linderos_fallback", "aguas-profundas")
+    assert "ubicación" in fb.lower() and "técnico" in fb.lower()
+    p = client.system_prompt("aguas-profundas")
+    assert "PROBLEMA CON EL ENLACE DE LINDEROS" in p

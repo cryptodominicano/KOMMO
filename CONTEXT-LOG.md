@@ -6,6 +6,59 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 19, 2026 — 02:10 UTC
+
+### NEW FEATURE (prototype, live): customer draws their own property lines.
+
+Fills the last manual gap in the agua/perforación flow. Instead of a técnico
+sending a satellite screenshot for the customer to scribble on with the WhatsApp
+pencil, the agent sends a link. The customer draws their parcel on a satellite
+map; the marked result flows to the lead card, a WhatsApp confirmation, and the
+owner's email — feeding straight into the existing deposit/payment step.
+
+**Stack (all in the kommo-agent, one repo, reusable per client):**
+- `app/linderos.html` — MapLibre GL JS + @watergis/maplibre-gl-terradraw + Turf,
+  all from CDN. Mobile-first Spanish UI. Centers on the phone's GPS (Kommo does
+  NOT expose the shared pin's lat/lng — verified null in the API — so browser
+  geolocation is the centering source; Jarabacoa is the fallback). Live area in
+  m² AND tareas (628.8 m²/tarea, the DR unit). Captures the map canvas on submit.
+- `app/linderos.py` — HMAC-signed token (reuses webhook_secret) tying a link to
+  one lead+talk with a 24h expiry; GET /linderos (serves the page), POST
+  /api/linderos (verify → store image → deliver), GET /linderos/img/{name}.
+- `worker.py` location branch now sends the link (no immediate handoff — the bot
+  stays available for questions while they draw; handoff fires on SUBMIT).
+
+**Delivery on submit (all best-effort, never fails the customer):**
+1. Note on the Kommo lead with area + image URL (técnico sees it on the card).
+2. Lead → "Atención humana" stage + task (visible in the inbox).
+3. WhatsApp chat confirmation (text send).
+4. Email to Sheyla via Resend with the marked image embedded.
+
+**Verified live end to end:**
+- GET /linderos valid token → 200 + page; bad token → 410.
+- POST /api/linderos (synthetic polygon, 3770 m²) → note landed on the lead
+  (confirmed), stage+task created, **Resend email sent (HTTP 200)**. The chat
+  confirm 404'd only because the test used a fake talk id; send_message is
+  already proven on real talks.
+- Token round-trip / tamper / expiry unit-tested. 36 tests passing (was 33).
+
+### ⚠️ PROTOTYPE LICENSING NOTE — must fix before paying customers
+
+Satellite imagery uses Esri World Imagery's **keyless** tiles. Those are licensed
+for NON-commercial use. Fine for the demo; before this serves revenue customers,
+swap to a licensed MapTiler or Mapbox satellite key — a one-line change to the
+tile URL in linderos.html. No other code changes. Flagged loud so it is not
+forgotten.
+
+### Open / next
+- Isaias to draw his own property from his phone (link issued) — the true test.
+- Inline image INTO the WhatsApp chat (vs the current text confirmation) would
+  need the dynamic image through the Chats API or a Salesbot; deferred. The
+  técnico already sees the image on the lead card and by email.
+- Production: licensed satellite key; consider storing the GeoJSON on a lead
+  custom field (not just a note) for later reuse.
+---
+
 ## Session: July 18, 2026 — 20:30 UTC
 
 ### Handoff is now VISIBLE in Kommo: stage move + task ping. Verified live.

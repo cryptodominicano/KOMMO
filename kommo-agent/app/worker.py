@@ -8,6 +8,7 @@ import time
 from . import rag, agent, state, client as client_pack
 from .kommo import KommoClient, KommoError
 from .transcribe import download_audio, transcribe, TranscriptionRejected
+from . import linderos
 from .config import settings
 
 log = logging.getLogger("worker")
@@ -145,9 +146,16 @@ async def handle_message(msg: dict) -> None:
         # had to be pattern-matched. Deterministic here - no model judgment.
         if mtype in location_types:
             log.info("talk=%s location pin received", talk_id)
-            await k.send_message(talk_id, client_pack.msg("location_received"))
-            state.mark_handoff(talk_id, "location_shared")
-            await _signal_handoff(k, msg, talk_id, "location_shared")
+            entity_id = msg.get("entity_id") or msg.get("element_id")
+            if entity_id and settings.public_base_url:
+                link = linderos.build_link(entity_id, talk_id, settings.client_id)
+                await k.send_message(
+                    talk_id, client_pack.msg("linderos_invite") + "\n\n" + link)
+            else:
+                # Fallback to the old manual flow if we cannot build a link.
+                await k.send_message(talk_id, client_pack.msg("location_received"))
+                state.mark_handoff(talk_id, "location_shared")
+                await _signal_handoff(k, msg, talk_id, "location_shared")
             return
 
         # --- Voice note: download -> transcribe -> treat as text ---

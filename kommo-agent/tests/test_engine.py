@@ -515,3 +515,46 @@ def test_kommo_client_has_lead_and_task_methods():
     from app.kommo import KommoClient
     assert hasattr(KommoClient, "update_lead")
     assert hasattr(KommoClient, "create_task")
+
+
+def test_linderos_token_roundtrip_and_tamper(monkeypatch):
+    """The drawing link is a signed token, not a credential. It must round-trip,
+    reject tampering, and expire - so one customer's link cannot be reused or
+    forged to post boundaries onto someone else's lead."""
+    from app import linderos
+    from app.config import settings
+    monkeypatch.setattr(settings, "webhook_secret", "test-secret-xyz")
+
+    tok = linderos.sign_token(101, 55, "aguas-profundas")
+    data = linderos.verify_token(tok)
+    assert data and data["l"] == "101" and data["t"] == "55" and data["c"] == "aguas-profundas"
+
+    # tampered signature -> rejected
+    assert linderos.verify_token(tok[:-3] + "aaa") is None
+    # tampered payload -> rejected
+    raw, sig = tok.split(".")
+    assert linderos.verify_token("YWJj." + sig) is None
+    # garbage -> rejected, not crash
+    assert linderos.verify_token("not-a-token") is None
+
+    # expired -> rejected
+    old = linderos.sign_token(1, 1, "aguas-profundas", ttl=-10)
+    assert linderos.verify_token(old) is None
+
+
+def test_linderos_link_uses_public_base(monkeypatch):
+    from app import linderos
+    from app.config import settings
+    monkeypatch.setattr(settings, "webhook_secret", "s")
+    monkeypatch.setattr(settings, "public_base_url", "https://x.example")
+    link = linderos.build_link(9, 9, "aguas-profundas")
+    assert link.startswith("https://x.example/linderos?t=")
+    assert linderos.verify_token(link.split("t=", 1)[1]) is not None
+
+
+def test_linderos_client_config_present():
+    from app import client
+    lin = client.pack("aguas-profundas")["linderos"]
+    assert "@" in lin["owner_email"]
+    assert lin["from_email"]
+    assert "linderos" in client.msg("linderos_invite", "aguas-profundas").lower()

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     human_agent_name: str = "un técnico"
     dedupe_ttl_seconds: int = 3600
 
+    # --- Linderos (property-boundary capture) ---
+    # Public HTTPS base the customer opens the drawing link on. Must match the
+    # agent's own public host so /linderos and /api/linderos are reachable.
+    public_base_url: str = "https://kommo-agent.goldcoastai.pro"
+    resend_api_key: str = ""
+
     @property
     def kommo_base(self) -> str:
         return f"https://{self.kommo_subdomain}.kommo.com/api/v4"

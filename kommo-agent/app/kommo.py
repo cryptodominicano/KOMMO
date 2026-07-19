@@ -70,6 +70,11 @@ class KommoClient:
         await self._req("POST", f"/bots/{bot_id}/run",
                         json={"entity_id": int(entity_id), "entity_type": entity_type})
 
+    async def add_lead_note(self, lead_id: int | str, text: str) -> dict | None:
+        """POST /leads/{id}/notes - a common note visible on the lead card."""
+        body = [{"note_type": "common", "params": {"text": text}}]
+        return await self._req("POST", f"/leads/{lead_id}/notes", json=body)
+
     async def update_lead(self, lead_id: int | str, **fields) -> dict | None:
         """PATCH /leads/{id}. Used to move a lead to the handoff stage."""
         return await self._req("PATCH", f"/leads/{lead_id}", json=fields)

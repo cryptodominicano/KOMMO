@@ -38,6 +38,9 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 # business rule is NEVER confirm a payment. Acknowledge, hand off, go silent.
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y le confirma en breve."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
+linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.
+
+Para marcar los límites (linderos) de su terreno de forma fácil, abra este enlace desde su teléfono y toque las esquinas de su propiedad sobre el mapa satelital. Al terminar, toque Enviar. Si tiene alguna pregunta, escríbame por aquí. 🙏"""
 
 [behavior]
 # message_type values that trigger the deterministic location handoff
@@ -97,6 +100,12 @@ deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
 [salesbot.triggers]
 "[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.
 "[[FOTO_AGUA]]"     = 55348  # "agua-foto": the 5-step water process infographic.
+
+[linderos]
+# Where the finished, marked parcel is delivered.
+owner_email = "Info@swecinvestments.com"
+from_email  = "Aguas Profundas <aguas@goldcoastai.pro>"
+received_message = "¡Recibimos los límites de su terreno! ✅ Un técnico los revisa y le confirma el mejor punto de perforación en breve. 🙏"
 
 [assets]
 # Hosted in this repo - NOT on a platform CDN. Botpress's CDN died with the

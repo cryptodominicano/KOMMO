@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Marque los límites de su terreno — Aguas Profundas</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link href="https://unpkg.com/@watergis/maplibre-gl-terradraw@1.0.2/dist/maplibre-gl-terradraw.css" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; height:100%; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  #map { position:absolute; inset:0; }
+  .panel {
+    position:absolute; left:8px; right:8px; top:8px; z-index:5;
+    background:rgba(14,33,61,.94); color:#fff; border-radius:12px; padding:12px 14px;
+    box-shadow:0 4px 16px rgba(0,0,0,.35);
+  }
+  .panel h1 { margin:0 0 4px; font-size:16px; }
+  .panel p { margin:0; font-size:13px; line-height:1.35; color:#cdd8ea; }
+  .area {
+    position:absolute; left:8px; right:8px; bottom:78px; z-index:5;
+    background:#fff; border-radius:12px; padding:10px 14px; text-align:center;
+    box-shadow:0 4px 16px rgba(0,0,0,.3); font-size:15px; color:#12203a;
+  }
+  .area b { color:#1b6e87; font-size:19px; }
+  .bar { position:absolute; left:8px; right:8px; bottom:12px; z-index:6; display:flex; gap:8px; }
+  .btn { flex:1; border:0; border-radius:12px; padding:15px 0; font-size:16px; font-weight:700; }
+  .send { background:#2a9d8f; color:#fff; }
+  .send:disabled { background:#9db8b2; }
+  .clear { background:#e7ebf2; color:#334; flex:0 0 96px; }
+  .done {
+    position:absolute; inset:0; z-index:20; background:#0e213d; color:#fff;
+    display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:28px;
+  }
+  .done .chk { font-size:60px; }
+  .done h2 { margin:14px 0 6px; font-size:22px; }
+  .done p { color:#cdd8ea; font-size:15px; max-width:320px; }
+  .maplibregl-terradraw-add-control-button-render,
+  .maplibregl-terradraw-render-button { display:none !important; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel">
+  <h1>📍 Marque su terreno</h1>
+  <p id="hint">Toque una esquina de su terreno, luego las demás. Cierre la figura tocando de nuevo la primera esquina. Puede acercar con dos dedos.</p>
+</div>
+
+<div class="area" id="areaBox" style="display:none">
+  Área aproximada: <b id="areaM2">0</b> m² &nbsp;·&nbsp; <b id="areaTa">0</b> tareas
+</div>
+
+<div class="bar">
+  <button class="btn clear" id="clearBtn">Borrar</button>
+  <button class="btn send" id="sendBtn" disabled>Enviar</button>
+</div>
+
+<div class="done" id="doneScreen">
+  <div class="chk">✅</div>
+  <h2>¡Recibido!</h2>
+  <p>Gracias. Un técnico de Aguas Profundas revisa los límites de su terreno y le confirma el mejor punto de perforación en breve.</p>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+<script src="https://unpkg.com/@watergis/maplibre-gl-terradraw@1.0.2/dist/maplibre-gl-terradraw.umd.js"></script>
+<script>
+  // Injected by the server (verified token + optional center).
+  var CFG = window.__LINDEROS__ || { token: "", lat: 0, lng: 0 };
+  var DEFAULT = [-70.63, 19.12]; // Jarabacoa, DR — fallback center
+
+  var map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: {
+        esri: {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          attribution: "Imagery © Esri"
+        }
+      },
+      layers: [{ id: "esri", type: "raster", source: "esri" }]
+    },
+    center: (CFG.lat && CFG.lng) ? [CFG.lng, CFG.lat] : DEFAULT,
+    zoom: (CFG.lat && CFG.lng) ? 17 : 8,
+    preserveDrawingBuffer: true // required for canvas capture
+  });
+
+  // Center on the phone's GPS — the customer is on their land.
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      map.jumpTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 18 });
+    }, function () {}, { enableHighAccuracy: true, timeout: 8000 });
+  }
+
+  var draw, areaBox = document.getElementById("areaBox"),
+      sendBtn = document.getElementById("sendBtn");
+
+  map.on("load", function () {
+    draw = new MaplibreTerradrawControl.MaplibreTerradrawControl({
+      modes: ["polygon", "delete"],
+      open: true
+    });
+    map.addControl(draw, "top-right");
+    var td = draw.getTerraDrawInstance();
+    td.setMode("polygon");
+    td.on("change", refresh);
+  });
+
+  function currentPolygon() {
+    var td = draw.getTerraDrawInstance();
+    var feats = td.getSnapshot().filter(function (f) { return f.geometry.type === "Polygon"; });
+    return feats.length ? feats[feats.length - 1] : null;
+  }
+
+  function refresh() {
+    var poly = currentPolygon();
+    if (!poly) { areaBox.style.display = "none"; sendBtn.disabled = true; return; }
+    var ring = poly.geometry.coordinates[0];
+    if (!ring || ring.length < 4) { sendBtn.disabled = true; return; }
+    var m2 = turf.area(poly);
+    document.getElementById("areaM2").textContent = Math.round(m2).toLocaleString("es-DO");
+    document.getElementById("areaTa").textContent = (m2 / 628.8).toFixed(1);
+    areaBox.style.display = "block";
+    sendBtn.disabled = false;
+  }
+
+  document.getElementById("clearBtn").onclick = function () {
+    var td = draw.getTerraDrawInstance();
+    td.clear(); td.setMode("polygon");
+    areaBox.style.display = "none"; sendBtn.disabled = true;
+  };
+
+  sendBtn.onclick = function () {
+    var poly = currentPolygon();
+    if (!poly) return;
+    sendBtn.disabled = true; sendBtn.textContent = "Enviando…";
+    var m2 = turf.area(poly);
+    var image = "";
+    try { image = map.getCanvas().toDataURL("image/jpeg", 0.82); } catch (e) { image = ""; }
+    fetch("/api/linderos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: CFG.token,
+        geojson: poly.geometry,
+        area_m2: Math.round(m2),
+        image: image
+      })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("bad");
+      document.getElementById("doneScreen").style.display = "flex";
+    }).catch(function () {
+      sendBtn.disabled = false; sendBtn.textContent = "Enviar";
+      alert("No se pudo enviar. Verifique su conexión e intente de nuevo.");
+    });
+  };
+</script>
+</body>
+</html>

@@ -4,30 +4,27 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Marque los límites de su terreno — Aguas Profundas</title>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
-  #map { position:absolute; inset:0; }
-  .panel { position:absolute; left:8px; right:8px; top:8px; z-index:5;
+  #map { position:absolute; inset:0; background:#0e213d; }
+  .panel { position:absolute; left:8px; right:8px; top:8px; z-index:1000;
     background:rgba(14,33,61,.95); color:#fff; border-radius:12px; padding:10px 12px;
     box-shadow:0 4px 16px rgba(0,0,0,.35); }
   .panel h1 { margin:0 0 4px; font-size:15px; }
   .panel p { margin:0 0 8px; font-size:12.5px; line-height:1.35; color:#cdd8ea; }
   .search { display:flex; gap:6px; }
   .search input { flex:1; border:0; border-radius:9px; padding:10px; font-size:14px; }
-  .search button { border:0; border-radius:9px; padding:10px 12px; font-size:14px; font-weight:700;
-    background:#2a9d8f; color:#fff; }
-  .area { position:absolute; left:8px; right:8px; bottom:76px; z-index:5; background:#fff;
-    border-radius:12px; padding:9px 14px; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.3);
-    font-size:14px; color:#12203a; }
+  .search button { border:0; border-radius:9px; padding:10px 12px; font-size:14px; font-weight:700; background:#2a9d8f; color:#fff; }
+  .area { position:absolute; left:8px; right:8px; bottom:76px; z-index:1000; background:#fff;
+    border-radius:12px; padding:9px 14px; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.3); font-size:14px; color:#12203a; }
   .area b { color:#1b6e87; font-size:18px; }
-  .bar { position:absolute; left:8px; right:8px; bottom:12px; z-index:6; display:flex; gap:8px; }
+  .bar { position:absolute; left:8px; right:8px; bottom:12px; z-index:1000; display:flex; gap:8px; }
   .btn { border:0; border-radius:12px; padding:14px 0; font-size:15px; font-weight:700; }
-  .send { flex:1; background:#2a9d8f; color:#fff; }
-  .send:disabled { background:#9db8b2; }
+  .send { flex:1; background:#2a9d8f; color:#fff; } .send:disabled { background:#9db8b2; }
   .undo, .clear { flex:0 0 84px; background:#e7ebf2; color:#334; }
-  .done { position:absolute; inset:0; z-index:20; background:#0e213d; color:#fff; display:none;
+  .done { position:absolute; inset:0; z-index:2000; background:#0e213d; color:#fff; display:none;
     flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:28px; }
   .done .chk { font-size:60px; } .done h2 { margin:14px 0 6px; font-size:22px; }
   .done p { color:#cdd8ea; font-size:15px; max-width:320px; }
@@ -62,94 +59,96 @@
   <p>Gracias. Un técnico de Aguas Profundas revisa los límites de su terreno y le confirma el mejor punto de perforación en breve.</p>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
   var CFG = window.__LINDEROS__ || { token:"", lat:0, lng:0 };
-  var DEFAULT = [-70.63, 19.12]; // Jarabacoa, DR
+  var DEFAULT = [19.12, -70.63]; // Jarabacoa, DR [lat,lng]
 
-  var map = new maplibregl.Map({
-    container: "map",
-    style: { version:8,
-      sources: { esri: { type:"raster",
-        tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        tileSize:256, attribution:"Imagery © Esri" } },
-      layers: [{ id:"esri", type:"raster", source:"esri" }] },
-    center: (CFG.lat && CFG.lng) ? [CFG.lng, CFG.lat] : DEFAULT,
-    zoom: (CFG.lat && CFG.lng) ? 17 : 8,
-    preserveDrawingBuffer: true
-  });
-  map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+  // Leaflet = raster tiles, NO WebGL. Renders on old phones and in-app browsers
+  // that showed a black MapLibre canvas.
+  var map = L.map("map", { center: (CFG.lat && CFG.lng) ? [CFG.lat, CFG.lng] : DEFAULT,
+                           zoom: (CFG.lat && CFG.lng) ? 17 : 8, zoomControl: true, attributionControl: false });
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, crossOrigin: "anonymous" }).addTo(map);
 
-  // Center on the phone's GPS if allowed (desktop usually has none — the search box covers that).
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(function (p) {
-      map.jumpTo({ center:[p.coords.longitude, p.coords.latitude], zoom:18 });
-    }, function(){}, { enableHighAccuracy:true, timeout:8000 });
-  }
+  // Center on the phone's GPS (the customer is on their land).
+  map.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true });
 
-  var pts = [];  // [lng,lat] corners
+  var pts = [], poly = null, markers = [];
   var areaBox = document.getElementById("areaBox"), sendBtn = document.getElementById("sendBtn");
 
-  function ring() { return pts.length >= 3 ? pts.concat([pts[0]]) : pts.slice(); }
+  function ringLngLat() {
+    var r = pts.map(function (p) { return [p.lng, p.lat]; });
+    if (r.length >= 3) r.push(r[0]);
+    return r;
+  }
 
   function render() {
-    map.getSource("verts").setData({ type:"FeatureCollection",
-      features: pts.map(function(c){ return { type:"Feature", geometry:{ type:"Point", coordinates:c } }; }) });
-    map.getSource("edge").setData({ type:"Feature",
-      geometry:{ type:"LineString", coordinates: ring() } });
-    map.getSource("fill").setData({ type:"Feature",
-      geometry:{ type:"Polygon", coordinates: pts.length >= 3 ? [ring()] : [[]] } });
-
-    if (pts.length >= 3) {
-      var m2 = turf.area({ type:"Polygon", coordinates:[ring()] });
-      document.getElementById("areaM2").textContent = Math.round(m2).toLocaleString("es-DO");
-      document.getElementById("areaTa").textContent = (m2/628.8).toFixed(1);
-      areaBox.style.display = "block"; sendBtn.disabled = false;
-    } else {
-      areaBox.style.display = "none"; sendBtn.disabled = true;
+    if (poly) { map.removeLayer(poly); poly = null; }
+    markers.forEach(function (m) { map.removeLayer(m); }); markers = [];
+    pts.forEach(function (p) {
+      markers.push(L.circleMarker(p, { radius: 6, color: "#12203a", weight: 2,
+        fillColor: "#ffd34e", fillOpacity: 1 }).addTo(map));
+    });
+    if (pts.length >= 2) {
+      poly = (pts.length >= 3)
+        ? L.polygon(pts, { color: "#ffd34e", weight: 3, fillColor: "#2a9d8f", fillOpacity: 0.28 }).addTo(map)
+        : L.polyline(pts, { color: "#ffd34e", weight: 3 }).addTo(map);
     }
+    if (pts.length >= 3) {
+      var m2 = turf.area({ type: "Polygon", coordinates: [ringLngLat()] });
+      document.getElementById("areaM2").textContent = Math.round(m2).toLocaleString("es-DO");
+      document.getElementById("areaTa").textContent = (m2 / 628.8).toFixed(1);
+      areaBox.style.display = "block"; sendBtn.disabled = false;
+    } else { areaBox.style.display = "none"; sendBtn.disabled = true; }
   }
 
-  map.on("load", function () {
-    map.addSource("fill", { type:"geojson", data:{ type:"Feature", geometry:{ type:"Polygon", coordinates:[[]] } } });
-    map.addSource("edge", { type:"geojson", data:{ type:"Feature", geometry:{ type:"LineString", coordinates:[] } } });
-    map.addSource("verts",{ type:"geojson", data:{ type:"FeatureCollection", features:[] } });
-    map.addLayer({ id:"fill", type:"fill", source:"fill", paint:{ "fill-color":"#2a9d8f", "fill-opacity":0.28 } });
-    map.addLayer({ id:"edge", type:"line", source:"edge", paint:{ "line-color":"#ffd34e", "line-width":3 } });
-    map.addLayer({ id:"verts", type:"circle", source:"verts",
-      paint:{ "circle-radius":6, "circle-color":"#ffd34e", "circle-stroke-color":"#12203a", "circle-stroke-width":2 } });
-    map.on("click", function (e) { pts.push([e.lngLat.lng, e.lngLat.lat]); render(); });
-  });
+  map.on("click", function (e) { pts.push(e.latlng); render(); });
+  document.getElementById("undoBtn").onclick = function () { pts.pop(); render(); };
+  document.getElementById("clearBtn").onclick = function () { pts = []; render(); };
 
-  document.getElementById("undoBtn").onclick = function(){ pts.pop(); render(); };
-  document.getElementById("clearBtn").onclick = function(){ pts = []; render(); };
-
-  // Address search (Nominatim / OpenStreetMap, biased to the Dominican Republic).
   function doSearch() {
-    var q = document.getElementById("addr").value.trim();
-    if (!q) return;
+    var q = document.getElementById("addr").value.trim(); if (!q) return;
     fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=do&q=" + encodeURIComponent(q))
-      .then(function(r){ return r.json(); })
-      .then(function(a){
-        if (a && a.length) map.flyTo({ center:[+a[0].lon, +a[0].lat], zoom:18 });
+      .then(function (r) { return r.json(); })
+      .then(function (a) {
+        if (a && a.length) map.setView([+a[0].lat, +a[0].lon], 18);
         else alert("No encontramos esa dirección. Acerque el mapa manualmente o use su ubicación.");
-      }).catch(function(){ alert("No se pudo buscar. Acerque el mapa manualmente."); });
+      }).catch(function () { alert("No se pudo buscar. Acerque el mapa manualmente."); });
   }
   document.getElementById("findBtn").onclick = doSearch;
-  document.getElementById("addr").addEventListener("keydown", function(e){ if (e.key === "Enter") doSearch(); });
+  document.getElementById("addr").addEventListener("keydown", function (e) { if (e.key === "Enter") doSearch(); });
+
+  function capture() {
+    // Best-effort image of the marked map. If it fails (old device), we still
+    // send the coordinates + area, which is the essential data.
+    return new Promise(function (resolve) {
+      var done = false, finish = function (img) { if (!done) { done = true; resolve(img); } };
+      setTimeout(function () { finish(""); }, 6000); // never block the submit
+      try {
+        html2canvas(document.getElementById("map"), { useCORS: true, logging: false })
+          .then(function (c) { finish(c.toDataURL("image/jpeg", 0.82)); })
+          .catch(function () { finish(""); });
+      } catch (e) { finish(""); }
+    });
+  }
 
   document.getElementById("sendBtn").onclick = function () {
     if (pts.length < 3) return;
     sendBtn.disabled = true; sendBtn.textContent = "Enviando…";
-    var poly = { type:"Polygon", coordinates:[ring()] };
-    var m2 = turf.area(poly), image = "";
-    try { image = map.getCanvas().toDataURL("image/jpeg", 0.82); } catch(e) { image = ""; }
-    fetch("/api/linderos", { method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ token:CFG.token, geojson:poly, area_m2:Math.round(m2), image:image }) })
-      .then(function(r){ if(!r.ok) throw 0; document.getElementById("doneScreen").style.display = "flex"; })
-      .catch(function(){ sendBtn.disabled=false; sendBtn.textContent="Enviar";
-        alert("No se pudo enviar. Verifique su conexión e intente de nuevo."); });
+    var poly = { type: "Polygon", coordinates: [ringLngLat()] };
+    var m2 = turf.area(poly);
+    capture().then(function (image) {
+      return fetch("/api/linderos", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: CFG.token, geojson: poly, area_m2: Math.round(m2), image: image }) });
+    }).then(function (r) {
+      if (!r.ok) throw 0; document.getElementById("doneScreen").style.display = "flex";
+    }).catch(function () {
+      sendBtn.disabled = false; sendBtn.textContent = "Enviar";
+      alert("No se pudo enviar. Verifique su conexión e intente de nuevo.");
+    });
   };
 </script>
 </body>

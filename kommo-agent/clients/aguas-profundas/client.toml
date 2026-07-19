@@ -106,6 +106,8 @@ deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
 owner_email = "isaias@inteliard.com"           # TESTING - revert to Sheyla before go-live
 from_email  = "Aguas Profundas <property-lines-submissions@goldcoastai.pro>"
 received_message = "¡Recibimos los límites de su terreno! ✅ Un técnico los revisa y le confirma el mejor punto de perforación en breve. 🙏"
+email_brand  = "Tres Golpes"
+email_footer = "Gold Coast AI Automations"
 
 [assets]
 # Hosted in this repo - NOT on a platform CDN. Botpress's CDN died with the

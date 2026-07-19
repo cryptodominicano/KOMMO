@@ -129,12 +129,72 @@ async def linderos_submit(request: Request):
     return {"ok": True}
 
 
+def _email_html(brand, footer, name, phone, area_m2, tareas, img_url, lead_id) -> str:
+    """Branded, email-client-safe HTML (inline styles, table layout)."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    phone_cell = (f'<a href="https://wa.me/{digits}" style="color:#1b6e87;text-decoration:none;font-weight:600">{phone}</a>'
+                  if phone else '<span style="color:#9aa4b2">no disponible</span>')
+    name_cell = name if name else '<span style="color:#9aa4b2">no disponible</span>'
+
+    def row(label, val):
+        return (f'<tr><td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:13px;'
+                f'color:#6b7280;width:130px;vertical-align:top">{label}</td>'
+                f'<td style="padding:10px 0;border-bottom:1px solid #eef1f6;font-size:15px;'
+                f'color:#12203a;font-weight:600">{val}</td></tr>')
+
+    img = ("" if not img_url else
+           f'<tr><td style="padding:4px 28px 8px">'
+           f'<img src="{img_url}" width="100%" alt="Linderos del terreno" '
+           f'style="display:block;width:100%;border-radius:10px;border:1px solid #e3e9f2"/>'
+           f'<div style="font-size:11px;color:#9aa4b2;margin-top:6px;text-align:center">'
+           f'Mapa satelital con los límites marcados por el cliente. Imagen adjunta también.</div></td></tr>')
+
+    return f"""<!doctype html>
+<html><body style="margin:0;background:#eef1f6;font-family:Arial,Helvetica,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;padding:22px 0">
+<tr><td align="center">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+         style="max-width:600px;width:100%;background:#fff;border-radius:14px;overflow:hidden;
+                box-shadow:0 2px 10px rgba(20,33,61,.08)">
+    <tr><td style="background:#0e213d;padding:20px 28px">
+      <div style="color:#35c1b6;font-size:12px;letter-spacing:2px;font-weight:700">{brand.upper()}</div>
+      <div style="color:#fff;font-size:20px;font-weight:700;margin-top:2px">Nuevos linderos recibidos</div>
+    </td></tr>
+    <tr><td style="padding:22px 28px 6px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {row("Cliente", name_cell)}
+        {row("WhatsApp", phone_cell)}
+        {row("Área", f"{area_m2:,} m² &nbsp;·&nbsp; ~{tareas} tareas")}
+        {row("Lead", f"#{lead_id}")}
+      </table>
+    </td></tr>
+    {img}
+    <tr><td style="padding:14px 28px 22px">
+      <div style="font-size:13px;color:#6b7280;line-height:1.5">
+        El cliente marcó los límites de su terreno. Un técnico debe revisar el mapa,
+        confirmar el mejor punto de perforación y continuar con el cliente por WhatsApp.
+      </div>
+    </td></tr>
+    <tr><td style="background:#f3f6fb;padding:16px 28px;text-align:center">
+      <div style="font-size:13px;color:#12203a;font-weight:700">{footer}</div>
+      <div style="font-size:11px;color:#9aa4b2;margin-top:2px">goldcoastai.pro · Automatización con IA</div>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>"""
+
+
 async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b64, geojson):
     pack = client_pack.pack(client_id)
     lin = pack.get("linderos", {})
     k = KommoClient()
     summary = (f"Linderos recibidos. Área aproximada: {area_m2:,} m² (~{tareas} tareas).")
+    name, phone = "", ""
     try:
+        try:
+            info = await k.get_lead_contact(int(lead_id))
+            name, phone = info.get("name", ""), info.get("phone", "")
+        except KommoError as e:
+            log.error("linderos: contact lookup failed: %s", e)
         # 1. Note on the lead (técnico sees it on the card)
         note = summary + (f"\nImagen: {img_url}" if img_url else "")
         try:
@@ -170,10 +230,11 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b6
     # 4. Email the owner via Resend
     owner = lin.get("owner_email")
     if owner and settings.resend_api_key:
-        html = (f"<h2>Linderos recibidos</h2>"
-                f"<p>Área aproximada: <b>{area_m2:,} m²</b> (~{tareas} tareas).</p>"
-                + (f'<p><img src="{img_url}" style="max-width:100%;border-radius:8px"></p>' if img_url else "")
-                + f'<pre style="font-size:11px;color:#555">{json.dumps(geojson)[:1500]}</pre>')
+        html = _email_html(
+            brand=lin.get("email_brand", "Aguas Profundas"),
+            footer=lin.get("email_footer", "Gold Coast AI Automations"),
+            name=name, phone=phone, area_m2=area_m2, tareas=tareas,
+            img_url=img_url, lead_id=lead_id)
         try:
             async with httpx.AsyncClient(timeout=20.0) as c:
                 r = await c.post("https://api.resend.com/emails",

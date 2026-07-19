@@ -70,6 +70,25 @@ class KommoClient:
         await self._req("POST", f"/bots/{bot_id}/run",
                         json={"entity_id": int(entity_id), "entity_type": entity_type})
 
+    async def get_lead_contact(self, lead_id: int | str) -> dict:
+        """Name + WhatsApp number for a lead's main contact.
+        Kommo stores the phone as a contact custom field with field_code PHONE."""
+        lead = await self._req("GET", f"/leads/{lead_id}?with=contacts")
+        lead_name = (lead or {}).get("name", "")
+        contacts = (lead or {}).get("_embedded", {}).get("contacts", [])
+        if not contacts:
+            return {"name": lead_name, "phone": "", "lead_name": lead_name}
+        cid = next((c["id"] for c in contacts if c.get("is_main")), contacts[0]["id"])
+        c = await self._req("GET", f"/contacts/{cid}") or {}
+        phone = ""
+        for f in c.get("custom_fields_values") or []:
+            if f.get("field_code") == "PHONE":
+                vals = f.get("values") or []
+                if vals:
+                    phone = vals[0].get("value", "")
+                    break
+        return {"name": c.get("name") or lead_name, "phone": phone, "lead_name": lead_name}
+
     async def add_lead_note(self, lead_id: int | str, text: str) -> dict | None:
         """POST /leads/{id}/notes - a common note visible on the lead card."""
         body = [{"note_type": "common", "params": {"text": text}}]

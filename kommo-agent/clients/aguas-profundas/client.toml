@@ -103,8 +103,8 @@ deposit_trigger_text = "depósito de RD$5,000 para procesar su orden"
 
 [linderos]
 # Where the finished, marked parcel is delivered.
-owner_email = "Info@swecinvestments.com"
-from_email  = "Aguas Profundas <aguas@goldcoastai.pro>"
+owner_email = "isaias@inteliard.com"           # TESTING - revert to Sheyla before go-live
+from_email  = "Aguas Profundas <property-line-submit@goldcoastai.pro>"
 received_message = "¡Recibimos los límites de su terreno! ✅ Un técnico los revisa y le confirma el mejor punto de perforación en breve. 🙏"
 
 [assets]

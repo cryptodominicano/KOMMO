@@ -112,24 +112,24 @@ async def linderos_submit(request: Request):
     geojson = body.get("geojson") or {}
 
     # Persist the marked image if the browser sent one (canvas capture).
-    img_url = ""
+    img_url, img_b64 = "", ""
     image = body.get("image") or ""
     if image.startswith("data:image"):
         try:
-            raw = base64.b64decode(image.split(",", 1)[1])
+            img_b64 = image.split(",", 1)[1]          # already base64; reused for the attachment
             _IMG_DIR.mkdir(parents=True, exist_ok=True)
             name = f"{uuid.uuid4().hex}.jpg"
-            (_IMG_DIR / name).write_bytes(raw)
+            (_IMG_DIR / name).write_bytes(base64.b64decode(img_b64))
             img_url = f"{settings.public_base_url}/linderos/img/{name}"
         except Exception:
             log.exception("linderos: failed to store image")
 
     # Deliver everywhere, best-effort (never fail the customer's submit).
-    await _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, geojson)
+    await _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b64, geojson)
     return {"ok": True}
 
 
-async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, geojson):
+async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, img_b64, geojson):
     pack = client_pack.pack(client_id)
     lin = pack.get("linderos", {})
     k = KommoClient()
@@ -181,7 +181,11 @@ async def _deliver(client_id, lead_id, talk_id, area_m2, tareas, img_url, geojso
                                  json={"from": lin.get("from_email", "Aguas Profundas <aguas@goldcoastai.pro>"),
                                        "to": [owner],
                                        "subject": f"Linderos recibidos — lead {lead_id} ({area_m2:,} m²)",
-                                       "html": html})
+                                       "html": html,
+                                       # the marked map as a real .jpg file, so it shows even when
+                                       # the mail client blocks remote (inline) images
+                                       "attachments": ([{"filename": "linderos.jpg", "content": img_b64}]
+                                                       if img_b64 else [])})
                 if r.status_code >= 300:
                     log.error("linderos: resend %s %s", r.status_code, r.text[:200])
         except Exception:

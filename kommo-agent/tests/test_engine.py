@@ -580,7 +580,7 @@ def test_agua_reserve_flow_wired():
     # the reserve flow exists, staged: RD$5,000 topographic + RD$10,000 visit
     assert "FLUJO DE RESERVA DE AGUA" in prompt
     assert "RD$5,000" in prompt and "RD$10,000" in prompt
-    assert "no es reembolsable" in prompt          # stage-1 refund rule stated
+    assert "reembolsable" in prompt                 # stage-1 refund rule stated in POLÍTICA
 
     # bank details still never in text
     assert "cédula" in prompt and "solo aparece en la imagen" in prompt
@@ -617,9 +617,30 @@ def test_deposit_amounts_corrected():
     """Client manual: séptico RD$10,000; agua staged RD$5,000 + RD$10,000."""
     from app import client
     p = client.system_prompt("aguas-profundas")
-    assert "depósito inicial de RD$10,000" in p
-    assert "RD$5,000 para el estudio topográfico" in p
-    assert "segundo depósito de RD$10,000" in p
+    assert "depósito de RD$10,000 de reserva" in p          # séptico (approved wording)
+    assert "depósito de RD$5,000" in p                      # agua stage-1
+    assert "segundo depósito de RD$10,000" in p             # agua stage-2 visit
+
+
+def test_hybrid_script_and_deposit_sentinel():
+    """Client-approved hybrid: verbatim script lines ship intact; the bank photo
+    fires off a hidden [[DEPOSITO]] marker so approved wording needs no trigger
+    phrase; Dominican tone + rotating closers are present."""
+    from app import client
+    from pathlib import Path
+    p = client.system_prompt("aguas-profundas")
+    # approved verbatim fragments (spelling-corrected)
+    assert "El costo aproximado del estudio es de RD$45,000" in p
+    assert "le enviaré el número de cuenta para que me haga un depósito de RD$5,000" in p
+    assert "pedimos un depósito de RD$10,000 de reserva y el restante contra entrega" in p
+    # hidden deposit marker in the prompt AND handled (stripped) by the worker
+    assert "[[DEPOSITO]]" in p
+    wsrc = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert '[[DEPOSITO]]' in wsrc and 'deposit_requested' in wsrc
+    assert 'reply.replace("[[DEPOSITO]]", "")' in wsrc      # stripped before send
+    # tone + rotating closers
+    assert "TONO DOMINICANO" in p
+    assert "CIERRES ROTATIVOS" in p
 
 
 def test_bank_number_never_in_repo():

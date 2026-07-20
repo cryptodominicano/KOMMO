@@ -249,7 +249,16 @@ async def handle_message(msg: dict) -> None:
         trigger_text = sb.get("deposit_trigger_text") or ""
         deposit_bot = sb.get("deposit_bot_id", 0)
         send_bank = False
+        # Hidden [[DEPOSITO]] sentinel decouples the bank-photo trigger from the
+        # client-facing wording, so client-approved verbatim deposit lines ship
+        # intact. Strip it BEFORE the reply is sent. The legacy text phrase is
+        # kept as a fallback so older deposit messages still fire.
+        deposit_requested = "[[DEPOSITO]]" in reply
+        if deposit_requested:
+            reply = reply.replace("[[DEPOSITO]]", "").strip()
         if trigger_text and trigger_text in reply:
+            deposit_requested = True
+        if deposit_requested:
             if not deposit_bot:
                 log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "
                           "customer promised bank details and will get none", talk_id)

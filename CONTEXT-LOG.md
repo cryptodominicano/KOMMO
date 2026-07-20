@@ -6,6 +6,97 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 20, 2026 — 12:00 UTC
+
+### Hybrid script, voice note, human pacing, and the Pro-plan unblock. 46 tests.
+
+Long session iterating Isla toward the client's exact flow while keeping Meta
+compliance. All changes deployed to root-kommo-agent and pushed to main.
+
+**Kommo went live on Pro (the 402 mystery, solved).** Outgoing sends were failing
+with HTTP 402 "Over chat API limit". Per Kommo's own docs, 402 = the account's
+paid/trial period is exhausted, and specifically **Chats API messages require the
+Pro plan or higher** (in-app banner confirmed it; trial includes only 100 outgoing
+Chats-API messages, and the meter was at 100/100). This is not an agent bug and no
+code fixes it. Isaias subscribed to **Pro ($45/user/mo, min 6 months = $270) + the
+Chats API message package ($10 / 3,000 msgs)**. After activation a live test send
+returned **202 Accepted** (was 402). Manual replies and automated sends both flow now.
+
+**OpenAI key rotated.** Tested the new project key (auth + a real completion both
+200) BEFORE swapping. Updated OPENAI_API_KEY in /app/data/master.env and
+/root/kommo-agent/.env; old key backed up at /app/data/.openai_key.bak-* and
+/root/kommo-agent/.env.openai.bak. Container reloaded llm=openai/gpt-4o clean.
+
+**Town/sector capture (early).** After the customer picks a service and BEFORE any
+quote, Isla asks the pueblo/sector once (zone affects price). One-question rule
+preserved; if a price question comes first she gives the "desde" range and asks
+location in the same turn.
+
+**Hybrid verbatim script (client-approved).** Client sent "Flow de AP.docx" and
+asked: follow the body word-for-word, only the closing nudge should vary, sound
+more human and Dominican. Built an approval doc (Isla_Guion_Aprobado, in the KOMMO
+folder), Wellington approved, then wired it in:
+- Agua/Perforación and Séptico now ship the approved verbatim blocks (Spanish
+  spelling cleaned, wording kept). Study explanation block with RD$45,000 + the
+  agua-foto infographic. Perforación follows the SAME water rails (study first);
+  range kept: convencional RD$1,300-1,500/pie, exploratoria desde RD$850/pie.
+- **Dominican tone + rotating closers.** Body (prices, amounts, accounts) is fixed
+  and never varies; only the final "any questions or shall we advance" line rotates
+  among ~6 warm Dominican variants, so it never reads canned.
+- Séptico order corrected to the approved wording (RD$10,000 reserva, resto contra
+  entrega, entrega 7-10 días). RD$10,000 is the confirmed séptico deposit; this
+  doc's "$5,000" line was wrong and was corrected up.
+
+**Hidden [[DEPOSITO]] sentinel (decouples the bank photo from the wording).** The
+bank photo used to fire only when the reply literally contained "le comparto los
+datos para el depósito". The approved deposit lines don't use that phrase, so the
+worker now also fires on a hidden **[[DEPOSITO]]** marker that Isla appends to any
+legit deposit message; the worker strips it before send and fires banco-foto + the
+bank text. Legacy text-phrase kept as a fallback. Client-approved wording ships
+untouched.
+
+**Payment-Audio voice note (bot 59058).** New Salesbot "Payment-Audio" plays a
+Wellington voice note **right before the bank details, on the agua study deposit
+only** (after linderos). Fired via a hidden **[[AUDIO_PAGO]]** marker (scoped to
+ETAPA 1), gated on a real deposit, launched ~2s before the bank text/photo so it
+lands first. Same image-workaround pattern as the photos.
+
+**Double self-introduction fixed.** Live test showed Isla greeting twice: the menu
+saludo ("Soy Isla…") then the water explanation ("Le saluda Isla…"). Dropped the
+reintro in the explanation block and added a no-re-greet rule. The explanation now
+opens "Gracias. Es un placer orientarle…".
+
+**Human-like typing delay (4-9s, welcome exempt).** Researched best practice (~2s
+comfortable, ~10s practical max, ~20s typing-indicator timeout; long delays
+frustrate and look broken). Isaias wanted 30-50s; steered him to a randomized
+**4-9s** band. Applied to conversational replies only; the first greeting is exempt
+(instant). Runs INSIDE the background task (webhook already returned 200), so it
+cannot trigger Kommo retry/duplicates. Tunable in [behavior]
+reply_delay_min/max_seconds (max 0 disables).
+
+### Verified
+- Live send returns 202 after Pro activation (402 gone). Plan active.
+- 46 pytest passing. Container healthy after each rebuild.
+- Bot inventory (GET /api/v4/bots, shape `_embedded.items`): 55238 NPS,
+  55306 septico-fotos, 55340 welcome, 55348 agua-foto, 55956 banco-foto,
+  59058 Payment-Audio. All customer bots have EMPTY trigger panels.
+
+### Blocked / pending
+- **Payment-Audio "Convert to voice".** It arrived as a downloadable file, not a
+  playable voice note. Per Kommo docs that means Convert-to-voice was not applied
+  (or the step has text/a button). Fix is in the Kommo UI (not API-reachable):
+  select Convert to voice, no text/buttons. Test on Android AND iPhone (ogg can
+  land as an attachment on iOS). Formats: WAV/MP3/OGG/M4A/AAC/FLAC/OPUS, max 16MB.
+- **ETAPA 2 visit deposit (RD$10,000)** kept scripted for returning clients; the
+  approved one-pager doesn't script it. Confirm keep vs move to human step.
+- **Per-flow proof acknowledgment.** Approved step-5 ("arrancamos el primer
+  estudio… 24-48h") not wired; the post-proof reply is still the generic
+  media_received + handoff. Needs flow-aware media handling.
+- Detailed "how to share location" instructions kept over the approved one-liner
+  (better for non-technical users) — flagged for Isaias.
+
+---
+
 ## Session: July 19, 2026 — 04:30 UTC
 
 ### Aligned the build to the client's Master Manual. Isla. Deployed. 40 tests.

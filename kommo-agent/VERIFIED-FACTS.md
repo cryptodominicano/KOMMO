@@ -45,3 +45,45 @@ Contact phone lands in the `PHONE` custom field (e.g. `+16103575363`).
 - Whether the **incoming** webhook payload includes `attachment.link` for voice (docs only show a text sample). Fallback to `GET /talks/{id}/messages` is implemented either way.
 - `message_type` for a **location** pin, and whether coordinates are exposed anywhere.
 - **Chats API add-on limit reset period** (Trial 100 / Pro 500 — per day? month? lifetime?). Undocumented; ask Kommo support before purchase.
+
+
+## Session 2026-07-20 additions
+
+### Billing / Chats API
+- **402 "Over chat API limit"** = account paid/trial period exhausted. **Chats API
+  messages require the Pro plan or higher.** Trial includes only 100 outgoing
+  Chats-API messages. Account is now on Pro + a 3,000-message Chats API package.
+- A **successful outgoing send returns HTTP 202 Accepted** (not 200).
+
+### Salesbot bot inventory (GET /api/v4/bots → `_embedded.items`)
+| id | name | role |
+|---|---|---|
+| 55340 | welcome-bot | saludo infographic, first contact |
+| 55348 | agua-foto | 5-step water process infographic ([[FOTO_AGUA]]) |
+| 55306 | septico-fotos | 3 séptico promo photos ([[FOTOS_SEPTICO]]) |
+| 55956 | banco-foto | bank details + cédula image (deposit) |
+| 59058 | Payment-Audio | Wellington voice note before bank details ([[AUDIO_PAGO]]) |
+| 55238 | NPS Bot | inactive |
+
+All customer-facing bots must have an EMPTY Triggers panel (Kommo defaults new
+bots to "Any new conversation"; left in place it double-fires).
+
+### Model markers (stripped by the worker before send)
+| Marker | Effect |
+|---|---|
+| `[[HANDOFF]]` | pause agent, hand off to a human, create SLA task |
+| `[[FOTO_AGUA]]` | fire agua-foto (55348) |
+| `[[FOTOS_SEPTICO]]` | fire septico-fotos (55306) |
+| `[[DEPOSITO]]` | fire banco-foto (55956) + send bank text; legacy text phrase "le comparto los datos para el depósito" also still fires it |
+| `[[AUDIO_PAGO]]` | fire Payment-Audio (59058) ~2s before the bank details; only on the agua study deposit |
+
+### Human-like reply delay
+- Randomized 4-9s before conversational replies; first greeting exempt. Config in
+  client.toml [behavior] reply_delay_min_seconds / reply_delay_max_seconds.
+- Runs inside the FastAPI BackgroundTask (webhook returns 200 first), so it never
+  causes Kommo webhook retries.
+
+### Salesbot voice notes (from Kommo docs, for future audio steps)
+- Max 16MB. Convertible formats: WAV, MP3, OGG, M4A, AAC, FLAC, OPUS.
+- "Convert to voice" required; step must have NO text and NO buttons or it sends as
+  a downloadable file. iOS can still deliver .ogg as an attachment — test both OSes.

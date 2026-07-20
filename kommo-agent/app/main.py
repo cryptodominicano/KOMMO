@@ -4,18 +4,56 @@ Kommo gives us a HARD 2-second window to respond to a webhook, and disables the
 hook after >100 invalid responses in 2 hours. So: parse, ack, and do all real
 work (Whisper, Claude, Qdrant) in the background. Never inline.
 """
+import asyncio
 import logging
 import re
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks, Response, HTTPException
 
 from .config import settings
 from . import state, client as client_pack
 from .worker import handle_message
+from .kommo import KommoClient, KommoError
 from . import linderos
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
+
+async def _followup_loop():
+    """Send ONE gentle "still there?" nudge to conversations that went quiet after
+    we asked something. Timers are armed in the worker; claimed atomically here so
+    multiple uvicorn processes never double-send. 15 min is inside Meta's 24h
+    service window, so this sends as normal free-form text."""
+    while True:
+        try:
+            await asyncio.sleep(60)
+            now = time.time()
+            claimed = state.claim_due_followups(now)
+            if not claimed:
+                continue
+            nudge = (client_pack.pack().get("messages", {}) or {}).get("followup_nudge") or ""
+            if not nudge:
+                continue
+            k = KommoClient()
+            try:
+                for talk_id, due_at in claimed:
+                    if state.is_handed_off(talk_id):
+                        continue                     # human is handling it
+                    if now - due_at > 3600:
+                        continue                     # stale (loop was down) - skip
+                    try:
+                        await k.send_message(talk_id, nudge)
+                        log.info("talk=%s follow-up nudge sent", talk_id)
+                    except KommoError as e:
+                        log.error("talk=%s follow-up send failed: %s", talk_id, e)
+            finally:
+                await k.aclose()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error("followup loop error: %s", e)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,7 +70,11 @@ async def lifespan(app: FastAPI):
     )
     if not settings.webhook_secret:
         log.warning("WEBHOOK_SECRET is empty - the webhook endpoint will reject everything")
-    yield
+    _fu_task = asyncio.create_task(_followup_loop())
+    try:
+        yield
+    finally:
+        _fu_task.cancel()
 
 
 app = FastAPI(title="kommo-agent", version="1.0.0", lifespan=lifespan)

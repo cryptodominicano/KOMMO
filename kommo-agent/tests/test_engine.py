@@ -712,6 +712,38 @@ def test_water_ad_direct_entry():
     assert "is_first and not from_water_ad" in w   # welcome image suppressed
 
 
+def test_followup_config_and_wiring():
+    """One-time inactivity follow-up: config present, worker arms/clears it with
+    the right guards, main.py runs the scheduler loop."""
+    from app import client
+    from pathlib import Path
+    assert int(float(client.behavior("followup_delay_minutes"))) == 15
+    assert client.pack("aguas-profundas")["messages"]["followup_nudge"]
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "arm_followup" in w and "clear_followup" in w
+    assert "not handoff and not send_bank" in w      # skip handoff + deposit moment
+    m = (Path(__file__).parent.parent / "app" / "main.py").read_text(encoding="utf-8")
+    assert "_followup_loop" in m and "claim_due_followups" in m
+
+
+def test_followup_state_once_only(tmp_path, monkeypatch):
+    """Fires at most once per conversation, and a customer reply disarms it."""
+    from app import state
+    monkeypatch.setattr(state, "_DB", tmp_path / "s.db")
+    state.init()
+    # armed in the past -> due now
+    state.arm_followup("T1", -1)
+    assert [t for t, _ in state.claim_due_followups()] == ["T1"]
+    # once-only: nothing left, and re-arming a spent one is a no-op
+    assert state.claim_due_followups() == []
+    state.arm_followup("T1", -1)
+    assert state.claim_due_followups() == []
+    # a customer reply (clear) disarms before it can fire
+    state.arm_followup("T2", -1)
+    state.clear_followup("T2")
+    assert state.claim_due_followups() == []
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

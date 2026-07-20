@@ -100,6 +100,10 @@ async def handle_message(msg: dict) -> None:
         log.warning("no talk_id, skipping msg=%s", msg_id)
         return
 
+    # Customer just messaged -> they are active; disarm any pending inactivity
+    # follow-up. It is re-armed after we reply if we end up waiting on them.
+    state.clear_followup(talk_id)
+
     location_types = set(client_pack.behavior("location_types"))
     audio_types = set(client_pack.behavior("audio_types"))
     media_types = set(client_pack.behavior("media_types"))
@@ -346,6 +350,17 @@ async def handle_message(msg: dict) -> None:
             state.mark_handoff(talk_id, "agent_requested")
             await _signal_handoff(k, msg, talk_id, "agent_requested")
             log.info("talk=%s handed off by agent", talk_id)
+
+        # One-time "still there?" follow-up: arm only when we answered and are
+        # now waiting on the customer. Skip on handoff (a human is handling it)
+        # and on the deposit moment (they are off making the transfer).
+        if reply and not handoff and not send_bank and not state.is_handed_off(talk_id):
+            try:
+                _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
+            except Exception:
+                _fu_delay = 0
+            if _fu_delay > 0:
+                state.arm_followup(talk_id, _fu_delay)
 
     except KommoError as e:
         log.error("talk=%s kommo error: %s", talk_id, e)

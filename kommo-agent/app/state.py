@@ -42,6 +42,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS linderos_sent ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS followup ("
+                  "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -178,3 +180,41 @@ def clear_handoff(talk_id: str) -> None:
     with _conn() as c:
         c.execute("DELETE FROM handoff WHERE talk_id = ?", (str(talk_id),))
         c.execute("DELETE FROM notified WHERE talk_id = ?", (str(talk_id),))
+
+
+def arm_followup(talk_id: str, delay_seconds: int) -> None:
+    """Arm a one-time inactivity follow-up at now+delay. No-op if one already
+    fired for this conversation (done=1), so it can never nudge twice."""
+    now = time.time()
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO followup (talk_id, due_at, done) VALUES (?, ?, 0) "
+            "ON CONFLICT(talk_id) DO UPDATE SET due_at=excluded.due_at "
+            "WHERE followup.done=0",
+            (talk_id, now + delay_seconds))
+
+
+def clear_followup(talk_id: str) -> None:
+    """Customer replied / is active -> disarm the pending follow-up (keep the
+    done flag so a spent follow-up is never re-armed)."""
+    with _conn() as c:
+        c.execute("UPDATE followup SET due_at=NULL WHERE talk_id=?", (talk_id,))
+
+
+def claim_due_followups(now: float | None = None) -> list:
+    """Atomically claim due follow-ups. Flipping done=0->1 in a WHERE-guarded
+    UPDATE means only ONE uvicorn process ever claims (and sends) each one.
+    Returns [(talk_id, due_at), ...] claimed by THIS call."""
+    now = time.time() if now is None else now
+    claimed = []
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT talk_id, due_at FROM followup "
+            "WHERE due_at IS NOT NULL AND due_at <= ? AND done=0", (now,)).fetchall()
+        for talk_id, due_at in rows:
+            cur = c.execute("UPDATE followup SET done=1, due_at=NULL "
+                            "WHERE talk_id=? AND done=0", (talk_id,))
+            if cur.rowcount == 1:
+                claimed.append((talk_id, due_at))
+    return claimed
+

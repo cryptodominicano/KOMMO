@@ -666,6 +666,22 @@ def test_payment_audio_wired_before_bank():
     assert i_audio < i_bank, "audio must fire before the bank text/photo"
 
 
+def test_human_reply_delay_configured():
+    """Randomized human-like typing delay before conversational replies; welcome
+    exempt; bounds sane (best practice: short, under the ~20s typing timeout)."""
+    from app import client
+    from pathlib import Path
+    lo = float(client.behavior("reply_delay_min_seconds"))
+    hi = float(client.behavior("reply_delay_max_seconds"))
+    assert (lo, hi) == (4.0, 9.0)
+    assert 0 <= lo <= hi <= 15, "delay band should stay short per best practice"
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "import random" in w
+    assert "random.uniform" in w
+    assert "reply and not is_first" in w        # greeting exempt
+    assert "is_first = state.first_contact" in w
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

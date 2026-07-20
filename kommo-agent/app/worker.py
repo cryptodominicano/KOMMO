@@ -5,6 +5,7 @@ pack (clients/<id>/client.toml). Onboarding a client is a new directory.
 """
 import asyncio
 import logging
+import random
 import time
 from . import rag, agent, state, client as client_pack
 from .kommo import KommoClient, KommoError
@@ -143,7 +144,8 @@ async def handle_message(msg: dict) -> None:
         # is NOT guaranteed. Acceptable here - they reinforce each other.
         welcome_bot = client_pack.pack().get("salesbot", {}).get("welcome_bot_id", 0)
         entity_id = msg.get("entity_id") or msg.get("element_id")
-        if welcome_bot and entity_id and state.first_contact(talk_id):
+        is_first = state.first_contact(talk_id)   # marks first contact; reused to exempt the greeting from the typing delay
+        if welcome_bot and entity_id and is_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)
@@ -283,6 +285,19 @@ async def handle_message(msg: dict) -> None:
                     fire.append(int(bot_id))
                 else:
                     log.warning("sentinel %s has no bot_id configured", sentinel)
+
+        # Human-like typing delay before a conversational reply (best practice:
+        # short, under the typing-indicator timeout). The first greeting is
+        # exempt so the welcome lands instantly. This runs in the background
+        # task (webhook already returned 200), so it never triggers a retry.
+        if reply and not is_first:
+            try:
+                lo = float(client_pack.behavior("reply_delay_min_seconds"))
+                hi = float(client_pack.behavior("reply_delay_max_seconds"))
+            except Exception:
+                lo, hi = 0.0, 0.0
+            if hi > 0:
+                await asyncio.sleep(random.uniform(min(lo, hi), max(lo, hi)))
 
         if reply:
             await k.send_message(talk_id, reply)

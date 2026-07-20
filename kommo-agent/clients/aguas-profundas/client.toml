@@ -68,6 +68,12 @@ handoff_grace_minutes = 20
 # deliberately different timers.
 handoff_task_user_id  = 15589135   # Sheyla (answers WhatsApp)
 handoff_task_due_hours = 2
+# Human-like typing delay before each CONVERSATIONAL reply (per 2026 best
+# practice: short, well under the ~20s typing-indicator timeout). The very
+# first greeting is exempt so the welcome lands instantly. Set max to 0 to
+# disable. Runs in the background task, so it never delays the webhook 200.
+reply_delay_min_seconds = 4
+reply_delay_max_seconds = 9
 
 [salesbot]
 # THE IMAGE WORKAROUND.

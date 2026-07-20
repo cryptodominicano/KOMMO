@@ -12,6 +12,11 @@ subdomain = "infoswecinvestmentscom"
 # VERIFIED live 2026-07-17: WhatsApp Business API origin is "waba".
 # Kommo's docs only ever show "telegram". The wrong value silently drops every message.
 origin    = "waba"
+# Channels the agent answers on (allow-list). "waba" + "instagram_business"
+# VERIFIED live 2026-07-20. Facebook Messenger origin not yet observed; the
+# likely strings are included so it works on first contact, and the exact value
+# is confirmed from the "skipping origin=" log on the first FB message.
+origins   = ["waba", "instagram_business", "messenger", "fbmessenger", "facebook"]
 # Handoff visibility: on handoff the lead moves to this pipeline stage so the
 # Kommo board shows who is waiting on a human. Created 2026-07-18.
 handoff_status_id = 109168423   # "Atención humana" in pipeline 14130431

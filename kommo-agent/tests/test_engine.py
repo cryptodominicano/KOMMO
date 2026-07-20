@@ -682,6 +682,20 @@ def test_human_reply_delay_configured():
     assert "is_first = state.first_contact" in w
 
 
+def test_multichannel_origin_allowlist():
+    """Agent answers WhatsApp, Instagram, and Facebook via an origin allow-list
+    (not a single-origin equality). instagram_business verified live 2026-07-20."""
+    from app import client
+    from pathlib import Path
+    origins = [o.lower() for o in client.pack("aguas-profundas")["kommo"]["origins"]]
+    assert "waba" in origins
+    assert "instagram_business" in origins
+    assert any(o in origins for o in ("messenger", "fbmessenger", "facebook"))
+    src = (Path(__file__).parent.parent / "app" / "main.py").read_text(encoding="utf-8")
+    assert "not in allowed" in src            # membership test, not == want_origin
+    assert 'kcfg.get("origins")' in src
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

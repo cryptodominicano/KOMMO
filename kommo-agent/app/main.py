@@ -105,10 +105,12 @@ async def kommo_webhook(secret: str, request: Request, background: BackgroundTas
             continue
         if msg.get("type") != "incoming":
             continue                                     # ignore our own/outgoing
-        want_origin = client_pack.pack()["kommo"]["origin"]
+        kcfg = client_pack.pack()["kommo"]
+        allowed = [o.lower() for o in (kcfg.get("origins")
+                    or ([kcfg["origin"]] if kcfg.get("origin") else []))]
         origin = (msg.get("origin") or "").lower()
-        if want_origin and origin and origin != want_origin:
-            log.info("skipping origin=%s", origin)
+        if allowed and origin and origin not in allowed:
+            log.info("skipping origin=%s (not in allow-list)", origin)
             continue
         mid = str(msg.get("id") or "")
         if mid and state.already_seen(mid, settings.dedupe_ttl_seconds):

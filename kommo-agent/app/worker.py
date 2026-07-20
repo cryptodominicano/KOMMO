@@ -3,6 +3,7 @@
 Client-agnostic: every Spanish string and channel value comes from the client
 pack (clients/<id>/client.toml). Onboarding a client is a new directory.
 """
+import asyncio
 import logging
 import time
 from . import rag, agent, state, client as client_pack
@@ -258,6 +259,12 @@ async def handle_message(msg: dict) -> None:
             reply = reply.replace("[[DEPOSITO]]", "").strip()
         if trigger_text and trigger_text in reply:
             deposit_requested = True
+        # Optional payment voice note, scoped to the agua study deposit via
+        # [[AUDIO_PAGO]]; plays right before the bank details. Strip it always.
+        audio_bot = int(sb.get("payment_audio_bot_id", 0) or 0)
+        audio_requested = "[[AUDIO_PAGO]]" in reply
+        if audio_requested:
+            reply = reply.replace("[[AUDIO_PAGO]]", "").strip()
         if deposit_requested:
             if not deposit_bot:
                 log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "
@@ -280,6 +287,17 @@ async def handle_message(msg: dict) -> None:
         if reply:
             await k.send_message(talk_id, reply)
 
+        entity_id = msg.get("entity_id") or msg.get("element_id")
+
+        # Payment voice note fires BEFORE the bank details, only on a real deposit.
+        if send_bank and audio_requested and audio_bot and entity_id:
+            try:
+                await k.run_bot(audio_bot, entity_id, _entity_type(msg))
+                log.info("talk=%s launched payment-audio bot %s", talk_id, audio_bot)
+                await asyncio.sleep(2)   # let the voice note land before the bank details
+            except KommoError as e:
+                log.error("talk=%s payment-audio launch failed: %s", talk_id, e)
+
         # Bank details in text (from the secret store), between the reply and
         # the account image, so the customer sees both. Never from the prompt.
         if send_bank and settings.bank_details_text:
@@ -288,7 +306,6 @@ async def handle_message(msg: dict) -> None:
             except KommoError as e:
                 log.error("talk=%s bank-text send failed: %s", talk_id, e)
 
-        entity_id = msg.get("entity_id") or msg.get("element_id")
         for bot_id in fire:
             if not entity_id:
                 log.warning("talk=%s cannot launch bot %s: no entity_id", talk_id, bot_id)

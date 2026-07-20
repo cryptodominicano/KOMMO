@@ -643,6 +643,29 @@ def test_hybrid_script_and_deposit_sentinel():
     assert "CIERRES ROTATIVOS" in p
 
 
+def test_payment_audio_wired_before_bank():
+    """Voice note (Wellington) plays before the bank details, scoped to the agua
+    study deposit via [[AUDIO_PAGO]]; the worker fires it before bank text/photo."""
+    from app import client
+    from pathlib import Path
+    sb = client.pack("aguas-profundas").get("salesbot", {})
+    assert int(sb.get("payment_audio_bot_id", 0)) == 59058
+    p = client.system_prompt("aguas-profundas")
+    # marker rides only on the study deposit line, alongside [[DEPOSITO]]
+    assert "[[DEPOSITO]] [[AUDIO_PAGO]]" in p
+    # not on the séptico deposit
+    assert p.count("[[AUDIO_PAGO]]") >= 1
+    wsrc = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "payment_audio_bot_id" in wsrc
+    assert 'reply.replace("[[AUDIO_PAGO]]", "")' in wsrc
+    assert "import asyncio" in wsrc
+    # audio must be gated on a real deposit and launched before bank text
+    assert "send_bank and audio_requested" in wsrc
+    i_audio = wsrc.index("launched payment-audio bot")
+    i_bank  = wsrc.index("bank-text send failed")
+    assert i_audio < i_bank, "audio must fire before the bank text/photo"
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

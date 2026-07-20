@@ -98,6 +98,9 @@ deposit_bot_id = 55956   # "banco-foto": 1 Message step, bank image, NO trigger.
 # If this exact text appears in a reply, the engine fires deposit_bot_id.
 # Must stay in sync with the order message in prompts/system.md.
 deposit_trigger_text = "le comparto los datos para el depósito"
+# Optional voice note (Wellington) played right BEFORE the bank details, only
+# on the agua study deposit (after linderos), via the [[AUDIO_PAGO]] marker. NO trigger.
+payment_audio_bot_id = 59058   # "Payment-Audio": 1 voice-note step.
 
 [salesbot.triggers]
 "[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.

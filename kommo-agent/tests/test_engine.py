@@ -696,6 +696,22 @@ def test_multichannel_origin_allowlist():
     assert 'kcfg.get("origins")' in src
 
 
+def test_water_ad_direct_entry():
+    """The CTWA water-ad phrase routes straight into the agua flow: worker skips
+    the welcome menu, prompt asks pueblo directly instead of the 3-option menu."""
+    from app import client
+    from pathlib import Path
+    phrase = client.behavior("ad_direct_entry_text")
+    assert phrase.strip().lower() == "hola! quiero agua en mi tierra."
+    p = client.system_prompt("aguas-profundas")
+    assert "ENTRADA DIRECTA DESDE ANUNCIO DE AGUA" in p
+    assert "Hola! Quiero Agua en Mi Tierra." in p
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "from_water_ad" in w
+    assert "ad_direct_entry_text" in w
+    assert "is_first and not from_water_ad" in w   # welcome image suppressed
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

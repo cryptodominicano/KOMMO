@@ -145,7 +145,17 @@ async def handle_message(msg: dict) -> None:
         welcome_bot = client_pack.pack().get("salesbot", {}).get("welcome_bot_id", 0)
         entity_id = msg.get("entity_id") or msg.get("element_id")
         is_first = state.first_contact(talk_id)   # marks first contact; reused to exempt the greeting from the typing delay
-        if welcome_bot and entity_id and is_first:
+        # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
+        # straight into the agua flow (no 3-option menu / welcome infographic).
+        # The prompt has the matching reply rule; here we suppress the menu image.
+        try:
+            _ad_text = (client_pack.behavior("ad_direct_entry_text") or "").strip().lower()
+        except Exception:
+            _ad_text = ""
+        from_water_ad = bool(_ad_text) and is_first and text.lower() == _ad_text
+        if from_water_ad:
+            log.info("talk=%s water-ad direct entry - skipping welcome menu", talk_id)
+        if welcome_bot and entity_id and is_first and not from_water_ad:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)

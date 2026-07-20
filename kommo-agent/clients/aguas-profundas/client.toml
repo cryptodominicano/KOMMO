@@ -79,6 +79,10 @@ handoff_task_due_hours = 2
 # disable. Runs in the background task, so it never delays the webhook 200.
 reply_delay_min_seconds = 4
 reply_delay_max_seconds = 9
+# Click-to-WhatsApp water ad: this EXACT first message routes the lead straight
+# into the agua flow, skipping the 3-option welcome menu + infographic. The
+# prompt holds the matching reply rule; the worker suppresses the menu image.
+ad_direct_entry_text = "Hola! Quiero Agua en Mi Tierra."
 
 [salesbot]
 # THE IMAGE WORKAROUND.

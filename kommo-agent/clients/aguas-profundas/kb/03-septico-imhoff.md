@@ -38,6 +38,12 @@ No sume ni invente un precio total para el conjunto. Indique la combinación rec
 ## Tamaño de los módulos
 El Módulo 8 mide 5 pies de profundidad por 5 pies de circunferencia. El Módulo 16 mide 6 pies de profundidad por 6 pies de circunferencia. El Módulo 8 es el más pequeño y funciona para 1 a 8 baños de uso constante.
 
+## ¿Cuántos galones o litros almacena? ¿Cuál es la capacidad del módulo?
+Nuestros módulos no se clasifican por la cantidad de galones o litros que almacenan, sino por la cantidad de baños de uso continuo que pueden manejar.
+- Módulo 8: diseñado para hasta 8 baños de uso continuo.
+- Módulo 16: diseñado para hasta 16 baños de uso continuo.
+En proyectos residenciales o desarrollos con varias viviendas, es posible interconectar varios módulos para adaptarse a la cantidad total de baños del proyecto. De esta manera dimensionamos el sistema según las necesidades específicas de cada desarrollo, garantizando un funcionamiento adecuado.
+
 ## ¿Incluyen la instalación?
 No incluimos la instalación. El precio incluye el envío y una ficha técnica instructiva de instalación, la cual deberá entregarse al plomero que usted elija para realizar la instalación. Este documento contiene las indicaciones necesarias para instalar el sistema correctamente. Es sumamente fácil de instalar: con esa ficha, cualquier plomero de su confianza lo instala sin problema.
 

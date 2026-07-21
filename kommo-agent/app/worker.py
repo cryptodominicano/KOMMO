@@ -91,6 +91,31 @@ async def _history(k: KommoClient, talk_id: str, limit: int = 20) -> list[dict]:
     return out[-limit:]
 
 
+_CLOSING_WORDS = (
+    "gracias", "hasta luego", "hasta pronto", "nos vemos", "adios", "adiós",
+    "bendiciones", "amen", "amén", "igualmente", "saludos", "feliz día", "feliz dia",
+    "que esté bien", "que este bien", "buen día", "buen dia", "dios te bendiga",
+    "excelente día", "excelente dia",
+)
+_CLOSING_EXACT = {
+    "ok", "okay", "oki", "okey", "okok", "bien", "listo", "dale", "va", "perfecto",
+    "correcto", "entiendo", "esta bien", "está bien", "ya", "de acuerdo", "vale",
+    "👍", "👍🏽", "🙏", "ok gracias", "muchas gracias", "gracias", "gracias igual",
+}
+
+
+def _looks_like_closing(text: str) -> bool:
+    """Best practice: a re-engagement nudge should stand down when the conversation
+    has naturally closed. The clearest signal is the customer's own last message
+    being a thank-you, goodbye, or a bare acknowledgement."""
+    t = (text or "").strip().lower().rstrip("!.")
+    if not t:
+        return False
+    if t in _CLOSING_EXACT:
+        return True
+    return len(t) <= 45 and any(word in t for word in _CLOSING_WORDS)
+
+
 async def handle_message(msg: dict) -> None:
     talk_id = str(msg.get("talk_id") or "")
     msg_id = str(msg.get("id") or "")
@@ -410,7 +435,8 @@ async def handle_message(msg: dict) -> None:
             "buen día", "buen dia", "buen día!", "hasta luego", "hasta pronto",
             "excelente día", "excelente dia", "igualmente", "que le vaya"))
         if (reply and not is_first and not handoff and not send_bank
-                and not _farewell and not state.is_handed_off(talk_id)):
+                and not _farewell and not _looks_like_closing(text)
+                and not state.is_handed_off(talk_id)):
             try:
                 _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
             except Exception:

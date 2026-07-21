@@ -810,6 +810,21 @@ def test_out_of_country_and_zone_tagging():
     assert "async def tag_lead_contact" in kk and "/contacts/" in kk
 
 
+def test_followup_stands_down_on_customer_closing():
+    """Best practice: no re-engagement nudge after the customer says thanks/goodbye
+    or a bare acknowledgement."""
+    from app.worker import _looks_like_closing
+    for closing in ("gracias", "Ok gracias", "Muchas gracias", "bien", "ok",
+                    "hasta luego", "Gracias igual", "listo", "👍"):
+        assert _looks_like_closing(closing), closing
+    for keep in ("cuanto cuesta el estudio", "quiero avanzar", "en samana",
+                 "si me interesa"):
+        assert not _looks_like_closing(keep), keep
+    from pathlib import Path
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "not _looks_like_closing(text)" in w   # wired into the follow-up guard
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

@@ -96,6 +96,24 @@ class KommoClient:
         tags = lead.get("_embedded", {}).get("tags", []) or []
         return [str(t.get("name", "")).strip().lower() for t in tags]
 
+    async def tag_lead_contact(self, lead_id: int | str, tag: str) -> dict | None:
+        """Add a tag to the lead's MAIN contact. Geographic/audience data belongs
+        to the PERSON (persists across deals, and broadcasts target contacts), not
+        the deal. Merges so existing tags are kept. Idempotent."""
+        lead = await self._req("GET", f"/leads/{lead_id}?with=contacts") or {}
+        contacts = lead.get("_embedded", {}).get("contacts", []) or []
+        if not contacts:
+            return None
+        cid = next((c["id"] for c in contacts if c.get("is_main")), contacts[0]["id"])
+        c = await self._req("GET", f"/contacts/{cid}?with=tags") or {}
+        names = {str(t.get("name", "")).strip()
+                 for t in c.get("_embedded", {}).get("tags", []) or [] if t.get("name")}
+        if tag in names:
+            return None
+        names.add(tag)
+        return await self._req("PATCH", f"/contacts/{cid}",
+                               json={"_embedded": {"tags": [{"name": n} for n in sorted(names)]}})
+
     async def add_lead_tag(self, lead_id: int | str, tag: str) -> dict | None:
         """Add ONE tag to a lead without dropping the others. PATCH replaces the
         whole tag set, so we read the existing tags and merge. Idempotent."""

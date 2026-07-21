@@ -828,6 +828,17 @@ def test_followup_stands_down_on_customer_closing():
     assert "not _looks_like_closing(text)" in w   # wired into the follow-up guard
 
 
+def test_callback_request_flow():
+    """When a customer asks to talk to a rep / be called, Isla takes their callback
+    number (same or another) before handing off, then asks if there's anything else."""
+    from app import client
+    p = client.system_prompt("aguas-profundas")
+    assert "SOLICITUD DE LLAMADA" in p
+    assert "le devuelva la llamada" in p
+    assert "este mismo número desde el que me escribe, o prefiere otro número" in p
+    assert "otra pregunta" in p
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

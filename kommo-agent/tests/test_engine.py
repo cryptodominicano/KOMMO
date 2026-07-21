@@ -803,9 +803,9 @@ def test_out_of_country_and_zone_tagging():
     p = client.system_prompt("aguas-profundas")
     assert "FUERA DE REPÚBLICA DOMINICANA" in p
     assert "únicamente en la República Dominicana" in p
-    assert "[[SECTOR:" in p and "CLASIFICACIÓN POR ZONA" in p
+    assert "[[SECTOR:" in p and "MARCADOR DE PROVINCIA" in p
     w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
-    assert "SECTOR:" in w and "add_lead_tag" in w and "Zona: " in w
+    assert "SECTOR:" in w and "add_lead_tag" in w and "Provincia: " in w
     kk = (Path(__file__).parent.parent / "app" / "kommo.py").read_text(encoding="utf-8")
     assert "async def add_lead_tag" in kk and "with=tags" in kk
 

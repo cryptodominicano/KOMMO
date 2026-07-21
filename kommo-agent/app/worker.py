@@ -373,7 +373,7 @@ async def handle_message(msg: dict) -> None:
         # Auto-tag the lead by zone so the team can build per-sector lists.
         if _sector and entity_id:
             try:
-                await k.add_lead_tag(entity_id, f"Zona: {_sector}")
+                await k.add_lead_tag(entity_id, f"Provincia: {_sector}")
                 log.info("talk=%s tagged zone %r", talk_id, _sector)
             except KommoError as e:
                 log.error("talk=%s zone tag failed: %s", talk_id, e)

@@ -678,8 +678,9 @@ def test_human_reply_delay_configured():
     w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
     assert "import random" in w
     assert "random.uniform" in w
-    assert "reply and not is_first" in w        # greeting exempt
     assert "is_first = state.first_contact" in w
+    # the wait now doubles as an inbound debounce with a supersede check
+    assert "is_latest_inbound" in w and "superseded" in w
 
 
 def test_multichannel_origin_allowlist():
@@ -764,6 +765,23 @@ def test_linderos_map_continues_to_deposit(tmp_path, monkeypatch):
     p = client.system_prompt("aguas-profundas")
     assert "SEÑAL DE MAPA DE LINDEROS RECIBIDO" in p
     assert "[[LINDEROS_LISTO]]" in p
+
+
+def test_inbound_debounce_supersede(tmp_path, monkeypatch):
+    """Consecutive messages: only the newest stays 'latest'; older ones are
+    superseded so their reply tasks abort and the customer gets ONE answer."""
+    from app import state
+    from pathlib import Path
+    monkeypatch.setattr(state, "_DB", tmp_path / "s.db")
+    state.init()
+    state.note_inbound("T1", "m1")
+    assert state.is_latest_inbound("T1", "m1")
+    state.note_inbound("T1", "m2")                     # newer message arrives
+    assert not state.is_latest_inbound("T1", "m1")     # m1 superseded -> its task aborts
+    assert state.is_latest_inbound("T1", "m2")         # m2 is the one that replies
+    # main.py records inbound order; worker checks it before replying
+    m = (Path(__file__).parent.parent / "app" / "main.py").read_text(encoding="utf-8")
+    assert "note_inbound" in m
 
 
 def test_bank_number_never_in_repo():

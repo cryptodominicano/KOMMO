@@ -46,6 +46,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS awaiting_linderos ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS last_inbound ("
+                  "talk_id TEXT PRIMARY KEY, msg_id TEXT, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -237,4 +239,22 @@ def is_awaiting_linderos(talk_id: str) -> bool:
 def clear_awaiting_linderos(talk_id: str) -> None:
     with _conn() as c:
         c.execute("DELETE FROM awaiting_linderos WHERE talk_id=?", (talk_id,))
+
+
+def note_inbound(talk_id: str, msg_id: str) -> None:
+    """Record the most recent inbound message id for a talk, so a debounced reply
+    task can tell whether a NEWER customer message has since arrived."""
+    if not talk_id or not msg_id:
+        return
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO last_inbound (talk_id, msg_id, at) "
+                  "VALUES (?, ?, ?)", (talk_id, msg_id, time.time()))
+
+
+def is_latest_inbound(talk_id: str, msg_id: str) -> bool:
+    """True if msg_id is still the newest inbound for this talk (not superseded)."""
+    with _conn() as c:
+        row = c.execute("SELECT msg_id FROM last_inbound WHERE talk_id=?",
+                        (talk_id,)).fetchone()
+    return row is None or row[0] == msg_id
 

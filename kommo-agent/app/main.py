@@ -158,6 +158,7 @@ async def kommo_webhook(secret: str, request: Request, background: BackgroundTas
         if mid and state.already_seen(mid, settings.dedupe_ttl_seconds):
             log.info("duplicate message %s ignored", mid)
             continue
+        state.note_inbound(str(msg.get("talk_id") or ""), mid)
         background.add_task(handle_message, msg)
         queued += 1
 

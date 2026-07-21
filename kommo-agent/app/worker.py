@@ -243,6 +243,25 @@ async def handle_message(msg: dict) -> None:
             log.info("talk=%s nothing to answer (type=%s)", talk_id, mtype)
             return
 
+        # DEBOUNCE: consecutive messages from the same customer are answered ONCE.
+        # Wait a short window (doubles as the human-like pause); if a NEWER message
+        # arrives while we wait, abort and let that newer task reply - by then all
+        # the messages are in history, so the single reply addresses them together.
+        # The first greeting is exempt (instant), as is the deterministic linderos
+        # map signal. This runs in the background task, so it never delays the ack.
+        if not is_first and text != "[[LINDEROS_LISTO]]":
+            try:
+                lo = float(client_pack.behavior("reply_delay_min_seconds"))
+                hi = float(client_pack.behavior("reply_delay_max_seconds"))
+            except Exception:
+                lo, hi = 0.0, 0.0
+            if hi > 0:
+                await asyncio.sleep(random.uniform(min(lo, hi), max(lo, hi)))
+            if msg_id and not state.is_latest_inbound(talk_id, msg_id):
+                log.info("talk=%s superseded by a newer message - skipping reply",
+                         talk_id)
+                return
+
         # --- RAG + LLM ---
         kb = await rag.retrieve(text)
         history = await _history(k, talk_id)
@@ -310,19 +329,6 @@ async def handle_message(msg: dict) -> None:
                     fire.append(int(bot_id))
                 else:
                     log.warning("sentinel %s has no bot_id configured", sentinel)
-
-        # Human-like typing delay before a conversational reply (best practice:
-        # short, under the typing-indicator timeout). The first greeting is
-        # exempt so the welcome lands instantly. This runs in the background
-        # task (webhook already returned 200), so it never triggers a retry.
-        if reply and not is_first:
-            try:
-                lo = float(client_pack.behavior("reply_delay_min_seconds"))
-                hi = float(client_pack.behavior("reply_delay_max_seconds"))
-            except Exception:
-                lo, hi = 0.0, 0.0
-            if hi > 0:
-                await asyncio.sleep(random.uniform(min(lo, hi), max(lo, hi)))
 
         if reply:
             await k.send_message(talk_id, reply)

@@ -6,6 +6,56 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 21, 2026 — 19:25 UTC
+
+### Out-of-country decline, province/town lead segmentation, and a follow-up refinement. 55 tests.
+
+Continuation. All deployed + pushed.
+
+**Out-of-country decline.** If the customer's terrain is outside RD (names another
+country / says they're abroad), Isla now gives a consistent polite decline: thanks
+them, explains Aguas Profundas serves only the Dominican Republic, closes warmly.
+No location ask, no study pitch, no referral promise. Confirmed live today (Mexico
+leads, talks 182/188).
+
+**Lead segmentation by zone (Provincia + Pueblo) — on the CONTACT.**
+- Isla emits a hidden marker [[SECTOR:Provincia|Pueblo]] once she knows the
+  customer's town (she maps town->province herself). Worker tags the lead's MAIN
+  CONTACT with "Provincia: X" AND "Pueblo: Y".
+- WHY the contact, not the lead: geographic/audience data belongs to the PERSON
+  (persists across deals, survives lead closure) and broadcasts target contacts.
+  This is the "we'll be in your area" campaign audience: filter Contacts by tag.
+- The marker was first buried/soft and the model did NOT emit it (verified via API:
+  Nagua lead had no tag). Made it an OBLIGATORY, prominent rule with town->province
+  examples. Kommo tag PATCH replaces the whole set, so add_lead_tag / tag_lead_contact
+  read-merge-write.
+- Backfilled 19 historical leads: read all 82 past transcripts, extracted the town,
+  mapped to province, tagged the CONTACT with both Provincia + Pueblo. (Foreign /
+  no-location / spam skipped.)
+
+**Follow-up nudge refined (best practice).** Today's review found it still fired
+after a customer's goodbye when Isla's own reply wasn't a farewell phrase (talk 189:
+customer said "Gracias igual", got nudged). Now it also stands down when the
+CUSTOMER's last message is a pure thanks/goodbye/ack (_looks_like_closing). Critical
+nuance: a "gracias" WITH a question or request ("gracias, ¿y cuánto tarda?") is NOT a
+close (intent-word / "?" guard), so mid-conversation thanks still keeps nudging.
+
+### Today's live review (post-fix, 21 conversations)
+Fixes holding in real traffic: softened follow-up wording everywhere; out-of-country
+working; the phantom "En breve le responderemos" is GONE (Meta Instant-reply was
+disabled in Business Suite); séptico installation answer now correct (ficha técnica
+for the client's plumber); debounce collapsing back-to-back messages; scope guard
+redirecting religious/spam. Only open item: province/town auto-tagging still needs a
+fresh town-stating conversation to confirm the model now emits the marker.
+
+### Kommo data model (for reference)
+A new inbound auto-creates a linked Contact + Lead + Talk. Contact = the person
+(deduped by phone, reused across future leads); Lead = one inquiry; Talk = the
+thread. Tags on a lead vs a contact are SEPARATE. Our zone tags live on the Contact.
+"Lists" are just a saved Contacts filter by tag, not a distinct object.
+
+---
+
 ## Session: July 21, 2026 — 03:50 UTC
 
 ### Multichannel, guardrails, a full 52-conversation review, and 5 fixes.

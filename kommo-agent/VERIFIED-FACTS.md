@@ -125,3 +125,26 @@ Config: `[kommo].origins`. Single-value equality would drop the other channels.
 - `reply_delay_min/max_seconds` (4/9): the debounce window + human pause.
 - `followup_delay_minutes` (15) + `[messages].followup_nudge`.
 - `ad_direct_entry_text` = "Hola! Quiero Agua en Mi Tierra." routes to the agua flow.
+
+
+## Session 2026-07-21 (pm) additions
+
+### Lead segmentation tags (on the CONTACT)
+- Marker: `[[SECTOR:Provincia|Pueblo]]` (province first, town second, pipe-separated).
+  Worker strips it and tags the lead's MAIN contact with `Provincia: X` + `Pueblo: Y`.
+- Tags live on the CONTACT (person), not the lead: persists across deals, survives
+  lead closure, and broadcasts/audiences target contacts. Build a per-area list by
+  filtering Contacts by the tag (Lists -> Contacts -> Tags filter).
+- Kommo tag PATCH REPLACES the whole tag set -> always read existing tags and merge
+  (`tag_lead_contact` / `add_lead_tag` do this). Contact-tag endpoint:
+  `PATCH /contacts/{id}` with `_embedded.tags`.
+- `?with=tags` and `?with=contacts` on GET leads/contacts return the linked data.
+
+### Follow-up close-detection
+- Nudge stands down if the customer's last message is a PURE close (_looks_like_closing:
+  bare gracias/ok/bien/hasta luego/👍). A "gracias" + question/intent word ("?", cuanto,
+  precio, quiero, ubicación, módulo, ...) is NOT a close and still nudges.
+
+### Kommo object model
+- One inbound from a new number auto-creates Contact + Lead + Talk (linked). Repeat
+  phone reuses the same Contact. Lead/contact tags are separate namespaces.

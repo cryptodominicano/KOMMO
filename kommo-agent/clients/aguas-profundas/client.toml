@@ -44,7 +44,7 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y un representante le contactará en un día laborable para coordinar los siguientes pasos."
 media_received_generic = "¡Recibido! Gracias 🙏 Un técnico de Aguas Profundas revisará lo que nos envió y le responderá en breve."
 # Sent ONCE, ~15 min after Isla asks something and the customer goes quiet.
-followup_nudge = "¿Sigue ahí? 🙂 ¿Le puedo ayudar con alguna otra pregunta o inquietud, o prefiere que cerremos este chat por ahora?"
+followup_nudge = "¿Sigue por ahí? 🙂 Quedo atenta por si le puedo ayudar con alguna otra pregunta o si desea avanzar. Cuando usted guste, retomamos."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
 linderos_fallback = "¡Gracias! 🙏 Recibimos su ubicación. Un técnico de Aguas Profundas le atenderá en breve para marcar los linderos de su terreno y continuar con su caso."
 linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.

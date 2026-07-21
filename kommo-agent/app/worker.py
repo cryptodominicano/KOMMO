@@ -373,10 +373,16 @@ async def handle_message(msg: dict) -> None:
             await _signal_handoff(k, msg, talk_id, "agent_requested")
             log.info("talk=%s handed off by agent", talk_id)
 
-        # One-time "still there?" follow-up: arm only when we answered and are
-        # now waiting on the customer. Skip on handoff (a human is handling it)
-        # and on the deposit moment (they are off making the transfer).
-        if reply and not handoff and not send_bank and not state.is_handed_off(talk_id):
+        # One-time "still there?" follow-up: arm only when we answered and are now
+        # waiting on the customer. Skip on handoff (a human is handling it), on the
+        # deposit moment (they are off making the transfer), on the very first
+        # welcome/ad turn (too pushy for a fresh lead), and when our reply was a
+        # farewell (the conversation just closed naturally).
+        _farewell = any(f in reply.lower() for f in (
+            "buen día", "buen dia", "buen día!", "hasta luego", "hasta pronto",
+            "excelente día", "excelente dia", "igualmente", "que le vaya"))
+        if (reply and not is_first and not handoff and not send_bank
+                and not _farewell and not state.is_handed_off(talk_id)):
             try:
                 _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
             except Exception:

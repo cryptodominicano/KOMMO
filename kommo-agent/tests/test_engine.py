@@ -725,6 +725,8 @@ def test_followup_config_and_wiring():
     assert "not handoff and not send_bank" in w      # skip handoff + deposit moment
     m = (Path(__file__).parent.parent / "app" / "main.py").read_text(encoding="utf-8")
     assert "_followup_loop" in m and "claim_due_followups" in m
+    # not too aggressive: never on the first turn, never after a farewell
+    assert "not is_first" in w and "_farewell" in w
 
 
 def test_followup_state_once_only(tmp_path, monkeypatch):

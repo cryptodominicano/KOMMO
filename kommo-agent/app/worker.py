@@ -372,11 +372,18 @@ async def handle_message(msg: dict) -> None:
 
         # Auto-tag the lead by zone so the team can build per-sector lists.
         if _sector and entity_id:
-            try:
-                await k.tag_lead_contact(entity_id, f"Provincia: {_sector}")
-                log.info("talk=%s tagged contact province %r", talk_id, _sector)
-            except KommoError as e:
-                log.error("talk=%s zone tag failed: %s", talk_id, e)
+            _parts = [p.strip() for p in _sector.split("|") if p.strip()]
+            _tags = []
+            if _parts:
+                _tags.append("Provincia: " + _parts[0])
+                if len(_parts) > 1:
+                    _tags.append("Pueblo: " + _parts[1])
+            for _tg in _tags:
+                try:
+                    await k.tag_lead_contact(entity_id, _tg)
+                    log.info("talk=%s tagged contact %r", talk_id, _tg)
+                except KommoError as e:
+                    log.error("talk=%s contact tag failed: %s", talk_id, e)
 
         for bot_id in fire:
             if not entity_id:

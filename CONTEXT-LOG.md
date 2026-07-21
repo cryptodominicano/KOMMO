@@ -6,6 +6,23 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 21, 2026 — 19:40 UTC
+
+### Callback-capture flow for "can I talk to someone / call me".
+
+Was deflecting ("keep writing here"). Now a proper two-step flow, in the prompt
+(SOLICITUD DE LLAMADA O HABLAR CON UN REPRESENTANTE), placed before TRANSFERENCIA
+A HUMANO, and the human-transfer rule points call/person requests at it:
+1. Isla offers the call and asks the callback number ("¿a este mismo número desde
+   el que me escribe, o prefiere otro número?") - NO [[HANDOFF]] on this turn.
+2. When the customer confirms the number, Isla says a rep will call, adds [[HANDOFF]]
+   (task + Atención humana stage; the number is visible in the chat for whoever
+   calls), and asks "¿tiene alguna otra pregunta mientras tanto?".
+Graceful resume keeps Isla answering further questions while the callback is pending.
+56 tests.
+
+---
+
 ## Session: July 21, 2026 — 19:25 UTC
 
 ### Out-of-country decline, province/town lead segmentation, and a follow-up refinement. 55 tests.

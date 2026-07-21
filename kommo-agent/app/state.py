@@ -44,6 +44,8 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS followup ("
                   "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0)")
+        c.execute("CREATE TABLE IF NOT EXISTS awaiting_linderos ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -217,4 +219,22 @@ def claim_due_followups(now: float | None = None) -> list:
             if cur.rowcount == 1:
                 claimed.append((talk_id, due_at))
     return claimed
+
+
+def set_awaiting_linderos(talk_id: str) -> None:
+    """Isla asked for the terrain -> the next inbound image is the marked map."""
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO awaiting_linderos (talk_id, at) VALUES (?, ?)",
+                  (talk_id, time.time()))
+
+
+def is_awaiting_linderos(talk_id: str) -> bool:
+    with _conn() as c:
+        return c.execute("SELECT 1 FROM awaiting_linderos WHERE talk_id=?",
+                         (talk_id,)).fetchone() is not None
+
+
+def clear_awaiting_linderos(talk_id: str) -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM awaiting_linderos WHERE talk_id=?", (talk_id,))
 

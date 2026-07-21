@@ -179,6 +179,7 @@ async def handle_message(msg: dict) -> None:
                 link = linderos.build_link(entity_id, talk_id, settings.client_id)
                 await k.send_message(
                     talk_id, client_pack.msg("linderos_invite") + "\n\n" + link)
+                state.set_awaiting_linderos(talk_id)
             else:
                 # BACKUP PATH: a second pin (the drawing tool did not work) or no
                 # link possible. Acknowledge the pin and hand off - a técnico marks
@@ -218,16 +219,25 @@ async def handle_message(msg: dict) -> None:
         # the exact moment they send proof of payment. Deterministic, in code:
         # the business rule is NEVER confirm a payment.
         if mtype in media_types:
-            # Only call it a "comprobante" if a deposit was actually presented;
-            # otherwise it is some other image (terrain photo, etc.) - neutral ack.
             is_receipt = state.deposit_was_presented(talk_id)
-            key = "media_received" if is_receipt else "media_received_generic"
-            log.info("talk=%s inbound media (%s) receipt=%s - ack + handoff",
-                     talk_id, mtype, is_receipt)
-            await k.send_message(talk_id, client_pack.msg(key))
-            state.mark_handoff(talk_id, f"media_received:{mtype}")
-            await _signal_handoff(k, msg, talk_id, f"media_received:{mtype}")
-            return
+            # Linderos map: if we asked for the terrain and no deposit has been
+            # presented yet, an inbound image IS the customer's marked map. Do NOT
+            # hand off - route straight into the RD$5,000 deposit flow. The prompt
+            # answers the "[[LINDEROS_LISTO]]" signal with the ETAPA 1 deposit
+            # message, which fires the voice note + bank details automatically.
+            if not is_receipt and state.is_awaiting_linderos(talk_id):
+                state.clear_awaiting_linderos(talk_id)
+                log.info("talk=%s linderos map received - continuing to deposit "
+                         "(no handoff)", talk_id)
+                text = "[[LINDEROS_LISTO]]"
+            else:
+                key = "media_received" if is_receipt else "media_received_generic"
+                log.info("talk=%s inbound media (%s) receipt=%s - ack + handoff",
+                         talk_id, mtype, is_receipt)
+                await k.send_message(talk_id, client_pack.msg(key))
+                state.mark_handoff(talk_id, f"media_received:{mtype}")
+                await _signal_handoff(k, msg, talk_id, f"media_received:{mtype}")
+                return
 
         if not text:
             log.info("talk=%s nothing to answer (type=%s)", talk_id, mtype)
@@ -290,6 +300,7 @@ async def handle_message(msg: dict) -> None:
             else:
                 fire.append(int(deposit_bot))
                 send_bank = True
+                state.clear_awaiting_linderos(talk_id)
                 log.info("talk=%s deposit message sent - firing bank text + photo %s",
                          talk_id, deposit_bot)
         for sentinel, bot_id in bots.items():
@@ -315,6 +326,11 @@ async def handle_message(msg: dict) -> None:
 
         if reply:
             await k.send_message(talk_id, reply)
+
+        # We just asked for the terrain location/linderos -> the next inbound
+        # image is the customer's marked map, so arm the linderos-map path.
+        if reply and "necesito la ubicación de su terreno" in reply.lower():
+            state.set_awaiting_linderos(talk_id)
 
         entity_id = msg.get("entity_id") or msg.get("element_id")
 

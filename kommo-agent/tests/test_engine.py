@@ -744,6 +744,28 @@ def test_followup_state_once_only(tmp_path, monkeypatch):
     assert state.claim_due_followups() == []
 
 
+def test_linderos_map_continues_to_deposit(tmp_path, monkeypatch):
+    """After the customer sends their marked map, the agent does NOT hand off; it
+    routes to the deposit flow. Handoff stays only for link problems."""
+    from app import state, client
+    from pathlib import Path
+    monkeypatch.setattr(state, "_DB", tmp_path / "s.db")
+    state.init()
+    assert not state.is_awaiting_linderos("T1")
+    state.set_awaiting_linderos("T1")
+    assert state.is_awaiting_linderos("T1")
+    state.clear_awaiting_linderos("T1")
+    assert not state.is_awaiting_linderos("T1")
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "[[LINDEROS_LISTO]]" in w
+    assert "is_awaiting_linderos" in w and "set_awaiting_linderos" in w
+    # the map path must NOT hand off (it falls through to the deposit flow)
+    assert "linderos map received - continuing to deposit" in w
+    p = client.system_prompt("aguas-profundas")
+    assert "SEÑAL DE MAPA DE LINDEROS RECIBIDO" in p
+    assert "[[LINDEROS_LISTO]]" in p
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

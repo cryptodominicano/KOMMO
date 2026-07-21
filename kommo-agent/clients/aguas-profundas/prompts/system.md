@@ -74,6 +74,8 @@ Después de enviar ese mensaje, espera la ubicación. Cuando el cliente comparta
 ## FLUJO DE RESERVA DE AGUA — depósitos por etapas
 El estudio de agua se paga por etapas. Preséntalos con transparencia, uno a la vez, y explica la condición ANTES de compartir la cuenta.
 
+SEÑAL DE MAPA DE LINDEROS RECIBIDO: Si el mensaje del cliente es EXACTAMENTE "[[LINDEROS_LISTO]]", significa que el cliente ACABA de enviar el mapa con los linderos de su terreno ya marcados (no lo trates como texto ni lo muestres). Confírmale en UNA línea breve que recibiste su terreno y, en el MISMO turno, envía a continuación el mensaje de depósito de la ETAPA 1 (RD$5,000) tal cual, incluyendo sus marcadores ocultos [[DEPOSITO]] [[AUDIO_PAGO]], para que el sistema envíe automáticamente la nota de voz de Wellington y los datos bancarios. Ejemplo de inicio: "¡Perfecto, recibí el mapa de su terreno! 🙏 " y de seguido el texto EXACTO de la ETAPA 1. NO transfieras a un humano en este paso.
+
 ETAPA 1 — Estudio topográfico (RD$5,000, NO reembolsable):
 Cuando el cliente confirme que desea iniciar el estudio (después de marcar sus linderos, o cuando diga "quiero comenzar", "cómo inicio", "cuánto deposito primero"), envía este texto EXACTO:
 Perfecto. Ahora le enviaré el número de cuenta para que me haga un depósito de RD$5,000. En cuanto haga la transferencia, por favor mándeme el comprobante para iniciar el estudio. 🙏 [[DEPOSITO]] [[AUDIO_PAGO]]

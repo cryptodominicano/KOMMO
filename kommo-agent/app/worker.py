@@ -166,12 +166,17 @@ async def handle_message(msg: dict) -> None:
             except KommoError as e:
                 log.error("talk=%s welcome bot launch failed: %s", talk_id, e)
 
-        # --- GPS pin: recognize, send verbatim text, hand off, stop ---
-        # message_type == "location" is a first-class Kommo enum. On the previous
-        # platform this arrived as the opaque string "[Unsupported message]" and
-        # had to be pattern-matched. Deterministic here - no model judgment.
-        if mtype in location_types:
-            log.info("talk=%s location pin received", talk_id)
+        # --- GPS pin OR a pasted Google Maps link: treat both as a location share ---
+        # message_type == "location" is a first-class Kommo enum. Customers also
+        # very often PASTE a Google Maps URL as text instead of sharing a pin; that
+        # is still a location, so route it into the same linderos flow rather than
+        # letting the model repeat "send me your location".
+        maps_link = mtype == "text" and any(h in text.lower() for h in (
+            "maps.app.goo.gl", "goo.gl/maps", "google.com/maps",
+            "maps.google.", "/maps/place", "/maps?"))
+        if mtype in location_types or maps_link:
+            log.info("talk=%s location received (%s)", talk_id,
+                     "maps-link" if maps_link else "pin")
             entity_id = msg.get("entity_id") or msg.get("element_id")
             first = state.linderos_first(talk_id) if entity_id else False
             if entity_id and settings.public_base_url and first:

@@ -747,6 +747,15 @@ def test_followup_state_once_only(tmp_path, monkeypatch):
     assert state.claim_due_followups() == []
 
 
+def test_pasted_maps_link_treated_as_location():
+    """A pasted Google Maps URL is handled like a shared location (routes into the
+    linderos flow), not repeated back with 'send me your location'."""
+    from pathlib import Path
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "maps.app.goo.gl" in w and "google.com/maps" in w
+    assert "or maps_link" in w
+
+
 def test_linderos_map_continues_to_deposit(tmp_path, monkeypatch):
     """After the customer sends their marked map, the agent does NOT hand off; it
     routes to the deposit flow. Handoff stays only for link problems."""

@@ -6,6 +6,7 @@ pack (clients/<id>/client.toml). Onboarding a client is a new directory.
 import asyncio
 import logging
 import random
+import re
 import time
 from . import rag, agent, state, client as client_pack
 from .kommo import KommoClient, KommoError
@@ -315,6 +316,13 @@ async def handle_message(msg: dict) -> None:
         audio_requested = "[[AUDIO_PAGO]]" in reply
         if audio_requested:
             reply = reply.replace("[[AUDIO_PAGO]]", "").strip()
+        # Zone/sector tag for per-zone lists. Isla appends [[SECTOR:Town]] when she
+        # captures the pueblo; strip it here, apply the tag once entity_id is known.
+        _sector = ""
+        _sm = re.search(r"\[\[SECTOR:([^\]]+)\]\]", reply)
+        if _sm:
+            _sector = _sm.group(1).strip()
+            reply = re.sub(r"\s*\[\[SECTOR:[^\]]+\]\]\s*", " ", reply).strip()
         if deposit_requested:
             if not deposit_bot:
                 log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "
@@ -361,6 +369,14 @@ async def handle_message(msg: dict) -> None:
                 await k.send_message(talk_id, settings.bank_details_text)
             except KommoError as e:
                 log.error("talk=%s bank-text send failed: %s", talk_id, e)
+
+        # Auto-tag the lead by zone so the team can build per-sector lists.
+        if _sector and entity_id:
+            try:
+                await k.add_lead_tag(entity_id, f"Zona: {_sector}")
+                log.info("talk=%s tagged zone %r", talk_id, _sector)
+            except KommoError as e:
+                log.error("talk=%s zone tag failed: %s", talk_id, e)
 
         for bot_id in fire:
             if not entity_id:

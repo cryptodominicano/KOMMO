@@ -96,6 +96,18 @@ class KommoClient:
         tags = lead.get("_embedded", {}).get("tags", []) or []
         return [str(t.get("name", "")).strip().lower() for t in tags]
 
+    async def add_lead_tag(self, lead_id: int | str, tag: str) -> dict | None:
+        """Add ONE tag to a lead without dropping the others. PATCH replaces the
+        whole tag set, so we read the existing tags and merge. Idempotent."""
+        lead = await self._req("GET", f"/leads/{lead_id}?with=tags") or {}
+        existing = lead.get("_embedded", {}).get("tags", []) or []
+        names = {str(t.get("name", "")).strip() for t in existing if t.get("name")}
+        if tag in names:
+            return None
+        names.add(tag)
+        return await self._req("PATCH", f"/leads/{lead_id}",
+                               json={"_embedded": {"tags": [{"name": n} for n in sorted(names)]}})
+
     async def add_lead_note(self, lead_id: int | str, text: str) -> dict | None:
         """POST /leads/{id}/notes - a common note visible on the lead card."""
         body = [{"note_type": "common", "params": {"text": text}}]

@@ -795,6 +795,21 @@ def test_inbound_debounce_supersede(tmp_path, monkeypatch):
     assert "note_inbound" in m
 
 
+def test_out_of_country_and_zone_tagging():
+    """Polite 'DR only' reply for foreign leads; and Isla emits [[SECTOR:town]]
+    which the worker turns into a Kommo 'Zona:' tag for per-sector lists."""
+    from app import client
+    from pathlib import Path
+    p = client.system_prompt("aguas-profundas")
+    assert "FUERA DE REPÚBLICA DOMINICANA" in p
+    assert "únicamente en la República Dominicana" in p
+    assert "[[SECTOR:" in p and "CLASIFICACIÓN POR ZONA" in p
+    w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
+    assert "SECTOR:" in w and "add_lead_tag" in w and "Zona: " in w
+    kk = (Path(__file__).parent.parent / "app" / "kommo.py").read_text(encoding="utf-8")
+    assert "async def add_lead_tag" in kk and "with=tags" in kk
+
+
 def test_bank_number_never_in_repo():
     """Bank details go in text now, but from the SECRET store - never the repo."""
     import re

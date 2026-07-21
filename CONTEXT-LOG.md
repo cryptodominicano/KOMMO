@@ -6,6 +6,88 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: July 21, 2026 — 03:50 UTC
+
+### Multichannel, guardrails, a full 52-conversation review, and 5 fixes.
+
+Continuation of the July 20 session. Everything deployed to root-kommo-agent and
+pushed to main. Test suite grew from 43 to 53.
+
+**Instagram + Facebook now answered (origin allow-list).** The webhook filter was
+locked to a single origin ("waba"); it is now an allow-list. Confirmed live:
+Instagram = `instagram_business`, Facebook Messenger = `facebook`. Isla runs the
+same flows on all three (RAG, welcome image, photos, deposit, handoff). Config in
+[kommo].origins. Note the GPS-pin linderos flow is WhatsApp-only; on IG/FB Isla
+converses + hands off. Instagram public comments now also reach her.
+
+**Water CTWA ad -> straight into the agua flow.** The ad pre-fills "Hola! Quiero
+Agua en Mi Tierra." That EXACT first message now skips the 3-option menu and the
+welcome infographic and opens the water flow: Isla introduces herself once (as
+"la asistente del señor Wellington Valenzuela") and asks the pueblo. Config
+[behavior].ad_direct_entry_text; worker suppresses the menu image; prompt has the
+reply rule. No double-intro (menu path and ad path are mutually exclusive).
+
+**One-time inactivity follow-up (15 min).** New background scheduler + state. If
+Isla asks something and the customer goes quiet, ONE gentle nudge fires ~15 min
+later, then never again (atomic claim = safe across uvicorn processes). After the
+52-convo review it was softened: warmer wording (no "cerremos este chat"), and it
+never fires on the first welcome turn or after a farewell reply. Config
+[behavior].followup_delay_minutes + [messages].followup_nudge.
+
+**Linderos map -> continue to deposit (no handoff).** When Isla has asked for the
+terrain and the customer sends their marked map (image), the agent no longer hands
+off; it routes into the RD$5,000 deposit automatically (voice note + bank details).
+Armed by a state flag (set_awaiting_linderos) when Isla asks for the location;
+media branch emits "[[LINDEROS_LISTO]]" which the prompt answers with the ETAPA 1
+deposit. Handoff stays ONLY for a link problem (backup path).
+
+**Debounce for back-to-back messages.** Three quick messages used to produce three
+replies. Now each inbound records itself (state.note_inbound); a reply waits the
+4-9s window and, if a NEWER message arrived, aborts (superseded) so only the last
+task replies, with all messages in history. The old before-send typing delay was
+folded into this one wait.
+
+**Pasted Google Maps link = a location.** Customers paste maps.app.goo.gl /
+google.com/maps URLs instead of a pin; those now route into the linderos flow
+instead of Isla repeating "send me your location."
+
+**KB corrections (all re-ingested to Qdrant, 40 points).**
+- Séptico: NOT installed by us. Price includes shipping + a ficha técnica for the
+  client's own plumber. (Removed the false "transporte e instalación considerados".)
+- Séptico capacity: rated by bathrooms, not gallons; interconnect for big projects.
+- Perforación: RD$1,300-1,500/pie INCLUDES the 6-inch PVC pipes (was contradicting
+  itself). Study recommended first.
+- Study coverage: RD$45,000 for 16 provinces, RD$50,000 for 15 others (Isla maps a
+  named town to its province). RD$5,000 difficult-access surcharge, with prior
+  approval. (Samaná = RD$45,000, confirmed by Isaias.)
+
+**Prompt guardrails from the review.**
+- RD$10,000 visit deposit (ETAPA 2) is now gated: never presented until the customer
+  confirms they received the first study; a "when do you come" question gets a
+  process answer, not a deposit.
+- Payment-receipt reply now fires only on a real payment CLAIM, never on a "when"
+  timing question.
+
+### The 52-conversation review (this is the reusable method)
+Pulled every talk with activity today via GET /api/v4/talks (maps entity_id=lead ->
+talk_id), then GET /talks/{id}/messages per talk, dumped compact transcripts, read
+all 52. Core flows are healthy (ad entry, province->price, séptico, deposit, receipt
+handoff, multichannel). The review surfaced the 5 fixes above plus one Meta-side
+issue: a phantom "Hola! Gracias por contactar Aguas Profundas. En breve le
+responderemos." on some Instagram chats. It was NOT our agent and NOT a Kommo bot -
+it was Meta's Instagram **Instant reply** (Business Suite -> Inbox -> Automations).
+Isaias disabled Auto reply / FAQ / Away message there. Lesson: audit Meta Business
+Suite automations per channel, or they double-reply against your agent.
+
+### Blocked / pending
+- Kommo plan tier for the Chats API: account UI gated it to Pro; the public plan
+  comparison does not clearly break it out. Confirm Advanced-vs-Pro with the Kommo
+  partner rep (could save $20/user/mo).
+- Payment-Audio "Convert to voice" toggle still to be confirmed in the Kommo UI.
+- A daily conversation-review is being scheduled to catch regressions each morning.
+
+---
+
 ## Session: July 20, 2026 — 12:00 UTC
 
 ### Hybrid script, voice note, human pacing, and the Pro-plan unblock. 46 tests.

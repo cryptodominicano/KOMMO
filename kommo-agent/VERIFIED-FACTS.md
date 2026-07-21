@@ -87,3 +87,41 @@ bots to "Any new conversation"; left in place it double-fires).
 - Max 16MB. Convertible formats: WAV, MP3, OGG, M4A, AAC, FLAC, OPUS.
 - "Convert to voice" required; step must have NO text and NO buttons or it sends as
   a downloadable file. iOS can still deliver .ogg as an attachment — test both OSes.
+
+
+## Session 2026-07-21 additions
+
+### Channel origins (allow-list) — all verified live
+| Channel | origin string |
+|---|---|
+| WhatsApp | `waba` |
+| Instagram | `instagram_business` |
+| Facebook Messenger | `facebook` |
+
+Config: `[kommo].origins`. Single-value equality would drop the other channels.
+
+### Talks lookup (for reviews / lead->conversation mapping)
+- `GET /api/v4/talks?limit=100` returns `_embedded.talks`, newest talk_id first,
+  each with `talk_id`, `entity_id` (the lead), `entity_type`, `origin`, timestamps.
+- `GET /api/v4/talks/{talk_id}/messages` returns the transcript (free of add-on
+  quota). Message: `type` (incoming/outgoing), `message_type`, `text`,
+  `author.type` (external=customer, bot=Isla, internal=human agent), `created_at`.
+- The `updated_at` filter on `GET /leads` is unreliable for "today"; use the talks
+  list + timestamps instead.
+
+### Meta-side auto-reply gotcha
+- A phantom "En breve le responderemos" on Instagram came from Meta's **Instant
+  reply** automation (Business Suite -> Inbox -> Automations: Auto reply / FAQ /
+  Away message), NOT from our agent or any Kommo bot. Disable per channel or it
+  double-replies against the agent.
+
+### New model markers / state
+- `[[LINDEROS_LISTO]]` — worker emits it when a marked map arrives while awaiting
+  linderos; prompt answers with the ETAPA 1 deposit (no handoff).
+- New SQLite tables: `followup` (inactivity nudge), `awaiting_linderos`,
+  `last_inbound` (debounce supersede).
+
+### Behavior config knobs
+- `reply_delay_min/max_seconds` (4/9): the debounce window + human pause.
+- `followup_delay_minutes` (15) + `[messages].followup_nudge`.
+- `ad_direct_entry_text` = "Hola! Quiero Agua en Mi Tierra." routes to the agua flow.

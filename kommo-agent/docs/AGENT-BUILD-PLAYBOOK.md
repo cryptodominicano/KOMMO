@@ -210,6 +210,37 @@ These generalise to any client. All were proven live.
   already sent. Tunable in `[behavior]`; max 0 disables. Do NOT honour requests for
   30-50s — it tanks the experience and no typing indicator covers it.
 
+- **Multichannel is an origin allow-list, not one string.** WhatsApp `waba`,
+  Instagram `instagram_business`, Facebook Messenger `facebook` (all verified live).
+  Send + Salesbots are channel-agnostic, so widening the filter is most of the work.
+  Caveats: the GPS-pin flow is WhatsApp-only; Instagram public comments also arrive.
+
+- **A pasted Google Maps link is a location.** Customers paste maps.app.goo.gl /
+  google.com/maps URLs instead of a pin. Detect them in text and route into the same
+  location flow, or the model just repeats "send me your location."
+
+- **One-time inactivity follow-up.** A single gentle "still there?" ~15 min after the
+  agent asks and the customer goes quiet. Arm on reply, clear on the customer's next
+  message, claim atomically so multiple processes never double-send. Guardrails learned
+  the hard way: never on the first welcome turn (pushy for a fresh lead), never after a
+  farewell, never on handoff or the deposit moment, and keep the wording warm (no
+  "should I close this chat"). It will otherwise fire in most conversations.
+
+- **Debounce back-to-back messages.** One reply per inbound = three replies to three
+  quick messages. Record the latest inbound id per talk; a reply waits a short window
+  and aborts if a newer message arrived (superseded), so only the last task replies
+  with everything in history. Fold the human-pause delay into this same wait.
+
+- **Review real conversations regularly via the API.** `GET /api/v4/talks` maps
+  entity_id(lead)->talk_id; `GET /talks/{id}/messages` gives the transcript free of
+  add-on quota (author.type: external/bot/internal). Reading a day of real transcripts
+  found more real bugs than any eval. Do it on a schedule.
+
+- **Audit Meta Business Suite automations per channel.** Instagram/Facebook "Instant
+  reply / Away message / FAQ" (Business Suite -> Inbox -> Automations) fire OUTSIDE
+  your agent and will double-reply ("we'll respond shortly" then the agent answers).
+  Turn them off, or the client's own Meta settings fight the agent.
+
 ## 4. Meta compliance (these can cost the client their WABA)
 
 Source: WhatsApp Business Solution Terms + Business Messaging Policy. Re-read
@@ -321,7 +352,7 @@ before each client; Meta changes these.
 
 ---
 
-## 8. Capability matrix (proven live on Aguas Profundas, 2026-07-20)
+## 8. Capability matrix (proven live on Aguas Profundas, 2026-07-21)
 
 | Capability | How it works | Status |
 |---|---|---|
@@ -336,6 +367,12 @@ before each client; Meta changes these.
 | Send a voice note (owner) | model appends `[[AUDIO_PAGO]]` → code fires audio Salesbot before bank details | ✅ live (Convert-to-voice set in UI) |
 | Hybrid verbatim script + AI zones | fixed money/compliance blocks + LLM conversation + rotating closers | ✅ live |
 | Human-like typing delay | randomized 4-9s in the background task, welcome exempt | ✅ live |
+| Multichannel | WhatsApp + Instagram + Facebook via origin allow-list | ✅ live |
+| Debounce back-to-back | newer inbound supersedes older reply tasks | ✅ live |
+| Inactivity follow-up | one warm nudge ~15 min, guarded (no first-turn/farewell) | ✅ live |
+| Linderos map -> deposit | marked map continues to deposit, no handoff | ✅ live |
+| Pasted Maps link | google.com/maps URL treated as a shared location | ✅ live |
+| CTWA ad direct-entry | exact ad phrase skips the menu into the target flow | ✅ live |
 | Prompt-injection resistance | SEGURIDAD prompt + once-per-talk code cap | ✅ red-teamed |
 
 ---

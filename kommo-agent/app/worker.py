@@ -104,13 +104,26 @@ _CLOSING_EXACT = {
 }
 
 
+# Words that signal the customer still wants something (a question or intent).
+# If ANY of these appear, the message is NOT a close, even if it also says "gracias".
+_INTENT_HINTS = (
+    "?", "cuant", "precio", "costo", "como", "cómo", "donde", "dónde", "cuando",
+    "cuándo", "quiero", "avanz", "interes", "modulo", "módulo", "pozo", "estudio",
+    "septic", "séptic", "baño", "ubicaci", "cuenta", "deposit", "depósit", "cotiz",
+    "informaci", "foto", "tama", "profund", "cuánto", "qué ", "necesito",
+)
+
+
 def _looks_like_closing(text: str) -> bool:
     """Best practice: a re-engagement nudge should stand down when the conversation
-    has naturally closed. The clearest signal is the customer's own last message
-    being a thank-you, goodbye, or a bare acknowledgement."""
-    t = (text or "").strip().lower().rstrip("!.")
+    has naturally closed - but ONLY on a PURE thank-you / goodbye / acknowledgement.
+    A "gracias" that comes with a question or a request ("gracias, ¿y cuánto tarda?")
+    still means the customer is engaged, so we keep nudging enabled for those."""
+    t = (text or "").strip().lower().rstrip("!. ")
     if not t:
         return False
+    if any(h in t for h in _INTENT_HINTS):
+        return False                       # a question / request is never a close
     if t in _CLOSING_EXACT:
         return True
     return len(t) <= 45 and any(word in t for word in _CLOSING_WORDS)

@@ -818,7 +818,10 @@ def test_followup_stands_down_on_customer_closing():
                     "hasta luego", "Gracias igual", "listo", "👍"):
         assert _looks_like_closing(closing), closing
     for keep in ("cuanto cuesta el estudio", "quiero avanzar", "en samana",
-                 "si me interesa"):
+                 "si me interesa",
+                 "gracias, y cuánto tarda?",      # thanks WITH a question -> still engaged
+                 "gracias cuanto cuesta el pozo",  # thanks + request
+                 "ok y donde estan ubicados"):
         assert not _looks_like_closing(keep), keep
     from pathlib import Path
     w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")

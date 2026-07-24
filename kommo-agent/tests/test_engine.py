@@ -889,3 +889,38 @@ def test_sticker_is_not_a_receipt(monkeypatch):
         assert state.deposit_was_presented("500") is False
         state.deposit_cooldown_ok("500")             # simulate a deposit presented
         assert state.deposit_was_presented("500") is True
+
+
+def test_dr_geo_maps_towns_to_correct_province():
+    from app import dr_geo
+    cases = {
+        "La Caleta": "Santo Domingo",
+        "Santo Domingo Este": "Santo Domingo",
+        "Nagua": "Maria Trinidad Sanchez",
+        "Jarabacoa": "La Vega",
+        "Constanza": "La Vega",
+        "Higuey": "La Altagracia",
+        "Punta Cana": "La Altagracia",
+        "Imbert": "Puerto Plata",
+        "San Juan de la Maguana": "San Juan",
+        "Bani": "Peravia",
+        "Mao": "Valverde",
+        "Cotui": "Sanchez Ramirez",
+        "Las Terrenas": "Samana",
+    }
+    for town, prov in cases.items():
+        assert dr_geo.province_for(town) == prov, town
+
+
+def test_dr_geo_is_accent_and_prefix_insensitive():
+    from app import dr_geo
+    assert dr_geo.province_for("higüey") == "La Altagracia"
+    assert dr_geo.province_for("en Jarabacoa") == "La Vega"
+    assert dr_geo.province_for("La Caleta.") == "Santo Domingo"
+    assert dr_geo.province_for("SANTIAGO") == "Santiago"
+
+
+def test_dr_geo_unknown_town_returns_none():
+    from app import dr_geo
+    assert dr_geo.province_for("un pueblo que no existe") is None
+    assert dr_geo.province_for("") is None

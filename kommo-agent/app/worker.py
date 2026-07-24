@@ -10,6 +10,7 @@ import re
 import time
 from . import rag, agent, state, client as client_pack
 from .kommo import KommoClient, KommoError
+from . import dr_geo
 from .transcribe import download_audio, transcribe, TranscriptionRejected
 from . import linderos
 from .config import settings
@@ -413,9 +414,18 @@ async def handle_message(msg: dict) -> None:
             _parts = [p.strip() for p in _sector.split("|") if p.strip()]
             _tags = []
             if _parts:
-                _tags.append("Provincia: " + _parts[0])
+                # Marker is [[SECTOR:Provincia|Pueblo]]. The town is the reliable
+                # part (model extraction); the province is looked up deterministically
+                # from dr_geo so the tag/price tier never ride on a geography guess.
+                _town = _parts[1] if len(_parts) > 1 else _parts[0]
+                _prov = dr_geo.province_for(_town) or (_parts[0] if len(_parts) > 1 else "")
+                if _prov and dr_geo.province_for(_town) and len(_parts) > 1 and _prov != _parts[0]:
+                    log.info("talk=%s province corrected %r -> %r for town %r",
+                             talk_id, _parts[0], _prov, _town)
+                if _prov:
+                    _tags.append("Provincia: " + _prov)
                 if len(_parts) > 1:
-                    _tags.append("Pueblo: " + _parts[1])
+                    _tags.append("Pueblo: " + _town)
             for _tg in _tags:
                 try:
                     await k.tag_lead_contact(entity_id, _tg)

@@ -710,7 +710,6 @@ def test_water_ad_direct_entry():
     w = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
     assert "from_water_ad" in w
     assert "ad_direct_entry_text" in w
-    assert "is_first and not from_water_ad" in w   # welcome image suppressed
 
 
 def test_followup_config_and_wiring():

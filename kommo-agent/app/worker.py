@@ -198,7 +198,7 @@ async def handle_message(msg: dict) -> None:
         from_water_ad = bool(_ad_text) and is_first and text.lower() == _ad_text
         if from_water_ad:
             log.info("talk=%s water-ad direct entry - skipping welcome menu", talk_id)
-        if welcome_bot and entity_id and is_first and not from_water_ad:
+        if welcome_bot and entity_id and is_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)

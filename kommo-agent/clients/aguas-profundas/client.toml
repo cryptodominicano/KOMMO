@@ -124,8 +124,13 @@ deposit_trigger_text = "le comparto los datos para el depósito"
 payment_audio_bot_id = 59058   # "Payment-Audio": 1 voice-note step.
 
 [salesbot.triggers]
-"[[FOTOS_SEPTICO]]" = 55306  # "septico-fotos": 3 Message steps, 1 photo each, NO trigger.
+# Septico images, split per manual timing (each bot: 1 Message step, EMPTY triggers).
+"[[SEPTICO_COMPARATIVA]]"   = 76632  # comparison IMHOFF vs traditional - sent with the welcome.
+"[[SEPTICO_FUNCIONAMIENTO]]" = 76634  # how-it-works - on "que es / como funciona".
+"[[SEPTICO_FICHA]]"          = 76624  # ficha tecnica install guide - on an installation question.
+"[[SEPTICO_VENTAJAS]]"       = 76646  # why-ours-is-better - during price / objection moments.
 "[[FOTO_AGUA]]"     = 55348  # "agua-foto": the 5-step water process infographic.
+# Retired: "[[FOTOS_SEPTICO]]" = 55306 (bundled 3-in-1). Delete bot 55306 after cutover.
 
 [linderos]
 # Where the finished, marked parcel is delivered.

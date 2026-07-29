@@ -99,8 +99,8 @@ def test_salesbot_trigger_configured():
     Salesbot, whose Message step CAN attach images."""
     from app import client
     triggers = client.pack("aguas-profundas").get("salesbot", {}).get("triggers", {})
-    assert "[[FOTOS_SEPTICO]]" in triggers
-    assert "[[FOTOS_SEPTICO]]" in client.system_prompt("aguas-profundas")
+    assert "[[SEPTICO_COMPARATIVA]]" in triggers
+    assert "[[SEPTICO_COMPARATIVA]]" in client.system_prompt("aguas-profundas")
 
 
 def test_inbound_media_is_configured_not_dropped():
@@ -230,7 +230,7 @@ def test_system_prompt_carries_the_guardrails_into_the_llm_call():
     assert "FUENTES DE CONOCIMIENTO" in system
     assert "[[HANDOFF]]" in system                     # handoff still reachable
     assert "datos bancarios" in system                 # never send bank details
-    assert "[[FOTOS_SEPTICO]]" in system
+    assert "[[SEPTICO_FICHA]]" in system
     assert "[[FOTO_AGUA]]" in system
 
 
@@ -617,7 +617,7 @@ def test_deposit_amounts_corrected():
     """Client manual: séptico RD$10,000; agua staged RD$5,000 + RD$10,000."""
     from app import client
     p = client.system_prompt("aguas-profundas")
-    assert "depósito de RD$10,000 de reserva" in p          # séptico (approved wording)
+    assert "depósito de RD$10,000" in p                    # séptico reserve deposit
     assert "depósito de RD$5,000" in p                      # agua stage-1
     assert "segundo depósito de RD$10,000" in p             # agua stage-2 visit
 
@@ -632,7 +632,7 @@ def test_hybrid_script_and_deposit_sentinel():
     # approved verbatim fragments (spelling-corrected)
     assert "El costo aproximado del estudio es de RD$45,000" in p
     assert "le enviaré el número de cuenta para que me haga un depósito de RD$5,000" in p
-    assert "pedimos un depósito de RD$10,000 de reserva y el restante contra entrega" in p
+    assert "se hace un depósito de RD$10,000 y el restante se paga por transferencia" in p
     # hidden deposit marker in the prompt AND handled (stripped) by the worker
     assert "[[DEPOSITO]]" in p
     wsrc = (Path(__file__).parent.parent / "app" / "worker.py").read_text(encoding="utf-8")
@@ -924,3 +924,49 @@ def test_dr_geo_unknown_town_returns_none():
     from app import dr_geo
     assert dr_geo.province_for("un pueblo que no existe") is None
     assert dr_geo.province_for("") is None
+
+
+def test_agent_system_injects_discount_state():
+    from app import agent
+    base = agent._system("KB")
+    assert "interno, NO lo muestres" not in base            # header only on injection
+    withx = agent._system("KB", "DESCUENTO_5: DISPONIBLE")
+    assert "interno, NO lo muestres" in withx               # injected header present
+    # the value appears once more than in the static prompt (which references it)
+    assert withx.count("DESCUENTO_5: DISPONIBLE") == base.count("DESCUENTO_5: DISPONIBLE") + 1
+
+
+def test_septico_discount_window_state(monkeypatch):
+    import tempfile
+    from pathlib import Path
+    from app import state
+    with tempfile.TemporaryDirectory() as d:
+        monkeypatch.setattr(state, "_DB", Path(d) / "t.db")
+        state.init()
+        t = "900"
+        assert state.hours_since_first(t) is None
+        state.note_first_seen(t)
+        h = state.hours_since_first(t)
+        assert h is not None and h < 1.0
+        state.note_first_seen(t)           # idempotent, does not reset the clock
+        assert state.discount_offered(t) is False
+        state.mark_discount_offered(t)
+        assert state.discount_offered(t) is True
+
+
+def test_septico_image_bots_and_markers_wired():
+    import tomllib
+    from pathlib import Path
+    root = Path(__file__).parent.parent / "clients" / "aguas-profundas"
+    trig = tomllib.load(open(root / "client.toml", "rb"))["salesbot"]["triggers"]
+    assert trig["[[SEPTICO_COMPARATIVA]]"] == 76632
+    assert trig["[[SEPTICO_FUNCIONAMIENTO]]"] == 76634
+    assert trig["[[SEPTICO_FICHA]]"] == 76624
+    assert trig["[[SEPTICO_VENTAJAS]]"] == 76646
+    assert "[[FOTOS_SEPTICO]]" not in trig
+    md = (root / "prompts" / "system.md").read_text(encoding="utf-8")
+    for mk in ("[[SEPTICO_COMPARATIVA]]", "[[SEPTICO_FUNCIONAMIENTO]]",
+               "[[SEPTICO_FICHA]]", "[[SEPTICO_VENTAJAS]]", "[[DESC_OFRECIDO]]"):
+        assert mk in md, mk
+    assert "[[FOTOS_SEPTICO]]" not in md
+    assert "IMOFF " not in md and "IMOFF." not in md

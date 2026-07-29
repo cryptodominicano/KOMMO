@@ -48,6 +48,10 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS last_inbound ("
                   "talk_id TEXT PRIMARY KEY, msg_id TEXT, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS first_seen ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS discount_offered ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -258,3 +262,34 @@ def is_latest_inbound(talk_id: str, msg_id: str) -> bool:
                         (talk_id,)).fetchone()
     return row is None or row[0] == msg_id
 
+
+
+def note_first_seen(talk_id: str) -> None:
+    """Record the timestamp of the first time we ever saw this talk. Drives the
+    24-hour septico discount window. INSERT OR IGNORE so only the first sticks."""
+    if not talk_id:
+        return
+    with _conn() as c:
+        c.execute("INSERT OR IGNORE INTO first_seen (talk_id, at) VALUES (?, ?)",
+                  (str(talk_id), time.time()))
+
+
+def hours_since_first(talk_id: str):
+    """Hours elapsed since first contact, or None if never recorded."""
+    with _conn() as c:
+        row = c.execute("SELECT at FROM first_seen WHERE talk_id=?",
+                        (str(talk_id),)).fetchone()
+    return None if not row else (time.time() - row[0]) / 3600.0
+
+
+def mark_discount_offered(talk_id: str) -> None:
+    """The 5% recovery discount was presented once. Never offer it twice."""
+    with _conn() as c:
+        c.execute("INSERT OR IGNORE INTO discount_offered (talk_id, at) VALUES (?, ?)",
+                  (str(talk_id), time.time()))
+
+
+def discount_offered(talk_id: str) -> bool:
+    with _conn() as c:
+        return c.execute("SELECT 1 FROM discount_offered WHERE talk_id=?",
+                         (str(talk_id),)).fetchone() is not None

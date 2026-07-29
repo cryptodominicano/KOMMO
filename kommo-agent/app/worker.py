@@ -199,7 +199,14 @@ async def handle_message(msg: dict) -> None:
         from_water_ad = bool(_ad_text) and is_first and text.lower() == _ad_text
         if from_water_ad:
             log.info("talk=%s water-ad direct entry - skipping welcome menu", talk_id)
-        if welcome_bot and entity_id and is_first:
+        # Septico first-contact gets its OWN welcome visual (the comparison image,
+        # sent via [[SEPTICO_COMPARATIVA]] in the reply), so skip the generic
+        # agua/menu infographic to avoid two competing welcome images.
+        _septico_first = is_first and any(w in text.lower() for w in (
+            "septic", "séptic", "imhoff", "planta de trat"))
+        if _septico_first:
+            log.info("talk=%s septico first-contact - skipping generic welcome image", talk_id)
+        if welcome_bot and entity_id and is_first and not _septico_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)
@@ -312,7 +319,26 @@ async def handle_message(msg: dict) -> None:
         history = await _history(k, talk_id)
         if history and history[-1]["role"] == "user":
             history = history[:-1]               # current message passed separately
-        reply = await agent.generate(text, kb, history)
+        # Septico 5% recovery discount window (24h from first contact, once).
+        # The engine owns the HARD gates (route + window + not-yet-offered) and
+        # tells the model DISPONIBLE / NO_DISPONIBLE; the model owns the JUDGEMENT
+        # (only on real hesitation). Sheyla requires an agent to authorize the
+        # actual discount, so the model only OFFERS - acceptance hands off.
+        extra = ""
+        try:
+            state.note_first_seen(talk_id)
+            _tl = text.lower()
+            _hb = " ".join(m.get("content", "") for m in history[-8:]).lower()
+            _sep = any(w in _tl or w in _hb for w in (
+                "septic", "séptic", "imhoff", "planta de trat", "modulo",
+                "módulo", "bano", "baño"))
+            if _sep:
+                _hrs = state.hours_since_first(talk_id)
+                _avail = (_hrs is not None and _hrs < 24.0) and not state.discount_offered(talk_id)
+                extra = "DESCUENTO_5: " + ("DISPONIBLE" if _avail else "NO_DISPONIBLE")
+        except Exception as e:
+            log.warning("talk=%s discount-window calc failed: %s", talk_id, e)
+        reply = await agent.generate(text, kb, history, extra)
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)
             return
@@ -320,6 +346,13 @@ async def handle_message(msg: dict) -> None:
         # Model signals handoff with a sentinel; the pause is enforced here.
         handoff = marker in reply
         reply = reply.replace(marker, "").strip()
+
+        # Septico 5% discount was presented -> record it so it is never offered
+        # again in this conversation. Strip the hidden marker before sending.
+        if "[[DESC_OFRECIDO]]" in reply:
+            reply = reply.replace("[[DESC_OFRECIDO]]", "").strip()
+            state.mark_discount_offered(talk_id)
+            log.info("talk=%s septico 5%% discount offered - locked", talk_id)
 
         # IMAGE WORKAROUND: send_message is text-only, but a Salesbot can attach
         # images. The model emits a sentinel; we strip it and launch the bot.

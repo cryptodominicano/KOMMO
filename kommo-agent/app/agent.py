@@ -19,12 +19,16 @@ def system_prompt() -> str:
     return client_pack.system_prompt()
 
 
-def _system(kb_context: str) -> str:
-    return (
+def _system(kb_context: str, extra: str = "") -> str:
+    base = (
         system_prompt()
         + "\n\n# FUENTES DE CONOCIMIENTO (usa SOLO esta información)\n"
         + kb_context
     )
+    if extra:
+        base += ("\n\n# ESTADO DEL SISTEMA (interno, NO lo muestres al cliente)\n"
+                 + extra)
+    return base
 
 
 async def _openai(system: str, msgs: list[dict]) -> str:
@@ -65,9 +69,10 @@ async def _anthropic(system: str, msgs: list[dict]) -> str:
                        if b["type"] == "text").strip()
 
 
-async def generate(user_text: str, kb_context: str, history: list[dict]) -> str:
+async def generate(user_text: str, kb_context: str, history: list[dict],
+                   extra_system: str = "") -> str:
     """history: [{"role": "user"|"assistant", "content": str}] oldest-first."""
-    system = _system(kb_context)
+    system = _system(kb_context, extra_system)
     msgs = history + [{"role": "user", "content": user_text}]
     if settings.llm_provider == "anthropic":
         return await _anthropic(system, msgs)

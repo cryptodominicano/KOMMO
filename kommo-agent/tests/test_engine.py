@@ -970,3 +970,40 @@ def test_septico_image_bots_and_markers_wired():
         assert mk in md, mk
     assert "[[FOTOS_SEPTICO]]" not in md
     assert "IMOFF " not in md and "IMOFF." not in md
+
+
+def test_deferral_phrase_detection_covers_the_variety():
+    """The 'I'll think about it / get back to you' stall family must be detected
+    (accent-insensitive) so the engine offers the 5% recovery discount; engaged,
+    still-qualifying messages must NOT match (no discount to decided buyers)."""
+    from app import worker
+    def hit(msg):
+        na = worker._deaccent(msg)
+        return any(p in na for p in worker._HES_PHRASES)
+    stalls = [
+        "Excelente. Yo le aviso",
+        "gracias, después le confirmo",
+        "déjame pensarlo",
+        "lo voy a hablar con mi esposa",
+        "cualquier cosa le escribo",
+        "más adelante le aviso",
+        "voy a cotizar primero",
+        "tá muy caro",
+        "no estoy seguro todavía",
+        "déjame consultarlo con mi socio",
+        "I'll think about it",
+        "let me get back to you",
+        "me cotizaron uno más barato",
+        "lo conseguí más barato en otro lugar",
+    ]
+    for m in stalls:
+        assert hit(m), f"should detect stall: {m!r}"
+    engaged = [
+        "tengo 6 baños",
+        "¿cuánto cuesta el módulo 16?",
+        "quiero ordenarlo ya",
+        "le mando la ubicación ahora",
+        "sí, quiero proceder con el depósito",
+    ]
+    for m in engaged:
+        assert not hit(m), f"should NOT detect stall: {m!r}"

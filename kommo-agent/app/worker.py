@@ -199,6 +199,12 @@ async def handle_message(msg: dict) -> None:
     msg_id = str(msg.get("id") or "")
     mtype = (msg.get("message_type") or "text").lower()
     text = (msg.get("text") or "").strip()
+    # Channel origin — voice bots only work reliably on WhatsApp (waba).
+    # Instagram and Facebook Messenger do not support proactive audio
+    # delivery via Kommo Salesbot (Meta API restriction). Best practice:
+    # gate all voice bot calls behind is_waba and fall back to text.
+    _origin = (msg.get("origin") or "").lower()
+    _is_waba = (_origin == "waba")
 
     if not talk_id:
         log.warning("no talk_id, skipping msg=%s", msg_id)
@@ -252,6 +258,21 @@ async def handle_message(msg: dict) -> None:
         # is NOT guaranteed. Acceptable here - they reinforce each other.
         welcome_bot = client_pack.pack().get("salesbot", {}).get("welcome_bot_id", 0)
         entity_id = msg.get("entity_id") or msg.get("element_id")
+        # entity_id is null when a contact messages without an open lead.
+        # Best practice: look up the most recent lead for this contact so
+        # Salesbot bot.run() (which requires a lead entity) can still fire.
+        # We do NOT create a lead automatically — that is a human decision.
+        if not entity_id:
+            try:
+                _contact_id = (msg.get("contact_id")
+                               or talk_id)  # fallback: talk maps to contact
+                _leads_r = await k.get_contact_leads(int(_contact_id))
+                if _leads_r:
+                    entity_id = str(_leads_r[0])  # most recent lead
+                    log.info("talk=%s resolved entity_id=%s from contact",
+                             talk_id, entity_id)
+            except Exception as _e:
+                log.warning("talk=%s entity_id lookup failed: %s", talk_id, _e)
         is_first = state.first_contact(talk_id)   # marks first contact; reused to exempt the greeting from the typing delay
         # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
         # straight into the agua flow (no 3-option menu / welcome infographic).
@@ -269,13 +290,50 @@ async def handle_message(msg: dict) -> None:
         _septico_first = is_first and any(w in text.lower() for w in (
             "septic", "séptic", "imhoff", "planta de trat"))
         if _septico_first:
-            log.info("talk=%s septico first-contact - skipping generic welcome image", talk_id)
-        if welcome_bot and entity_id and is_first and not _septico_first:
+            log.info("talk=%s septico first-contact detected - welcome image will fire", talk_id)
+        if welcome_bot and entity_id and is_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)
             except KommoError as e:
                 log.error("talk=%s welcome bot launch failed: %s", talk_id, e)
+
+        # Tracks which voice note fired this turn so the LLM text follows up correctly.
+        _voz_fired = None
+
+        # --- VOZ_AGUA_1: welcome voice note, first contact, water flow only -------
+        _sb = client_pack.pack().get("salesbot", {})
+        _voz_triggers = _sb.get("voz_agua_triggers", {})
+        _imhoff_triggers = _sb.get("voz_imhoff_triggers", {})
+        if (is_first and not _septico_first and not from_water_ad
+                and entity_id and _is_waba
+                and _voz_triggers.get("VOZ_AGUA_1")):
+            _vk1 = "VOZ_AGUA_1"
+            if not state.voice_already_sent(talk_id, _vk1):
+                try:
+                    await asyncio.sleep(1)
+                    await k.run_bot(int(_voz_triggers[_vk1]), entity_id, _entity_type(msg))
+                    state.mark_voice_sent(talk_id, _vk1)
+                    _voz_fired = _vk1
+                    log.info("talk=%s launched VOZ_AGUA_1 %s", talk_id, _voz_triggers[_vk1])
+                except KommoError as e:
+                    log.error("talk=%s VOZ_AGUA_1 failed: %s", talk_id, e)
+
+        # --- VOZ_IMHOFF_1: welcome voice note, first contact, séptico flow only ---
+        if (is_first and _septico_first
+                and entity_id and _is_waba
+                and _imhoff_triggers.get("[[VOZ_IMHOFF_1]]")):
+            _vk_i1 = "[[VOZ_IMHOFF_1]]"
+            if not state.voice_already_sent(talk_id, _vk_i1):
+                try:
+                    await asyncio.sleep(1)
+                    await k.run_bot(int(_imhoff_triggers[_vk_i1]), entity_id, _entity_type(msg))
+                    state.mark_voice_sent(talk_id, _vk_i1)
+                    _voz_fired = _vk_i1
+                    log.info("talk=%s launched VOZ_IMHOFF_1 %s",
+                             talk_id, _imhoff_triggers[_vk_i1])
+                except KommoError as e:
+                    log.error("talk=%s VOZ_IMHOFF_1 failed: %s", talk_id, e)
 
         # --- GPS pin OR a pasted Google Maps link: treat both as a location share ---
         # message_type == "location" is a first-class Kommo enum. Customers also
@@ -372,11 +430,178 @@ async def handle_message(msg: dict) -> None:
             except Exception:
                 lo, hi = 0.0, 0.0
             if hi > 0:
-                await asyncio.sleep(random.uniform(min(lo, hi), max(lo, hi)))
+                # Scale to message length: short ~3s, long ~9s.
+                _dl_lo = max(3.0, min(lo, hi))
+                _dl_hi = max(_dl_lo, max(lo, hi))
+                _char_ratio = min(1.0, len(text) / 200.0)
+                _scaled = _dl_lo + _char_ratio * (_dl_hi - _dl_lo)
+                _jitter = random.uniform(-0.5, 0.5)
+                await asyncio.sleep(max(_dl_lo, _scaled + _jitter))
             if msg_id and not state.is_latest_inbound(talk_id, msg_id):
                 log.info("talk=%s superseded by a newer message - skipping reply",
                          talk_id)
                 return
+
+        # --- VOZ_AGUA_2-8: keyword-triggered, audio-first, no-repeat ─────────────
+        if entity_id and _voz_triggers and not is_first and _is_waba:
+            _tna = _deaccent(text)
+            _VOZ_KW = [
+                ("VOZ_AGUA_5", ["esta muy caro","muy costoso","es mucho dinero",
+                    "pense que era menos","no tengo ese presupuesto","muy alto",
+                    "muy elevado","no puedo pagar eso","fuera de mi presupuesto",
+                    "demasiado caro","hacen descuento","pueden bajar",
+                    "ese es el mejor precio","no hay oferta","por que cuesta tanto",
+                    "esta fuerte ese precio","lo voy a pensar","dejame ver",
+                    "esta dificil","muy costoso para mi"]),
+                ("VOZ_AGUA_4", ["quiero pagar","donde deposito","enviame la cuenta",
+                    "voy a pagar","como hago el pago","a que cuenta",
+                    "enviame los datos","donde transfiero","listo para pagar",
+                    "quiero reservar","procedamos","ya tengo todo",
+                    "aqui esta mi ubicacion","ya envie la ubicacion"]),
+                ("VOZ_AGUA_3", ["quiero hacer el estudio","vamos a hacerlo",
+                    "quiero proceder","que necesito","cual es el siguiente paso",
+                    "como funciona","como se hace","que debo enviar",
+                    "que necesitan de mi","como empezamos","quiero contratar el estudio",
+                    "estoy listo","quiero iniciar","como es el procedimiento",
+                    "expliqueme el proceso","que sigue","que hago ahora",
+                    "quiero coordinar"]),
+                ("VOZ_AGUA_2", ["cuanto cuesta perforar","que cuesta un pozo",
+                    "cuanto vale hacer un pozo","cual es el precio","en cuanto sale",
+                    "cuanto cobran","cuanto cuesta hacer un hoyo",
+                    "cuanto cuesta el pozo","cuanto cuesta sacar agua",
+                    "cual es el costo","que precio tiene","que vale",
+                    "cuanto cuesta encontrar agua","cuanto vale una perforacion",
+                    "cobran por pie","cuanto cuesta por metro",
+                    "cuanto cuesta por pie","como cobran"]),
+                ("VOZ_AGUA_6", ["donde estan ubicados","donde estan",
+                    "donde queda la oficina","tienen oficina","en que ciudad estan",
+                    "donde los encuentro","donde puedo visitarlos",
+                    "puedo pasar por la oficina","donde trabajan",
+                    "en que provincia estan","donde operan","cual es su direccion"]),
+                ("VOZ_AGUA_7", ["como se paga","cuando se paga","se paga antes",
+                    "se paga despues","cuanto hay que adelantar","hay deposito",
+                    "aceptan transferencia","aceptan efectivo","aceptan tarjeta",
+                    "como funcionan los pagos","cuales son las condiciones",
+                    "cual es la forma de pago","que metodos aceptan",
+                    "se paga completo","hay financiamiento",
+                    "puedo pagar en dos partes"]),
+                ("VOZ_AGUA_8", ["puedo llamarlo","lo puedo llamar",
+                    "quiero hablar con usted","quiero hablar con un asesor",
+                    "tiene un numero","me puede llamar","llameme",
+                    "quiero hacerle unas preguntas","prefiero hablar",
+                    "podemos hablar","esta disponible","podemos conversar",
+                    "puede atenderme","tiene unos minutos",
+                    "necesito hablar con alguien","quiero comunicarme directamente",
+                    "le puedo hacer una llamada"]),
+            ]
+            for _vk, _kws in _VOZ_KW:
+                if any(kw in _tna for kw in _kws):
+                    if not state.voice_already_sent(talk_id, _vk):
+                        _bid = _voz_triggers.get(_vk)
+                        if _bid:
+                            try:
+                                await k.run_bot(int(_bid), entity_id, _entity_type(msg))
+                                state.mark_voice_sent(talk_id, _vk)
+                                _voz_fired = _vk
+                                log.info("talk=%s launched %s bot %s",
+                                         talk_id, _vk, _bid)
+                            except KommoError as e:
+                                log.error("talk=%s %s failed: %s", talk_id, _vk, e)
+                    break  # one voice note per turn
+
+        # --- VOZ_IMHOFF_2-4: séptico keyword-triggered, no-repeat per convo -------
+        # VOZ_IMHOFF_4 fires a 3-step sequence: voice → Instagram text → Wellington image.
+        if entity_id and _imhoff_triggers and not is_first and _is_waba:
+            _tna_i = _deaccent(text)
+            # history not yet loaded at this point — use empty string as fallback;
+            # current message text is sufficient for keyword detection
+            _hist_text_i = ""
+            _in_septico = any(w in _tna_i for w in (
+                "septic", "imhoff", "planta de trat", "modulo", "bano"))
+            _IMHOFF_KW = [
+                ("[[VOZ_IMHOFF_3]]", [
+                    "esta muy cara","muy costosa","es mucho dinero",
+                    "pense que costaba menos","fuera de mi presupuesto",
+                    "muy elevado","no tengo ese presupuesto","hacen descuento",
+                    "ese es el mejor precio","no pueden bajar el precio",
+                    "hay alguna oferta","esta fuerte ese precio",
+                    "la competencia la tiene mas barata","vi otra mas economica",
+                    "por que cuesta tanto","que tiene de diferente",
+                    "vale la pena","lo voy a pensar","esta dificil",
+                    "no puedo pagar eso ahora",
+                ]),
+                ("[[VOZ_IMHOFF_2]]", [
+                    "quiero comprar","como la compro","como funciona",
+                    "que debo hacer","cual es el proceso","como procedo",
+                    "quiero adquirir una","que necesito","como hacemos",
+                    "quiero ordenar","quiero hacer el pedido","estoy listo",
+                    "que sigue","cual es el siguiente paso","como hago el pago",
+                    "como se entrega","cuanto tarda","como llega",
+                    "hacen envios","la instalan","que incluye",
+                    "que tengo que enviar","quiero reservar una",
+                ]),
+                ("[[VOZ_IMHOFF_4]]", [
+                    "donde estan ubicados","donde estan","tienen oficina",
+                    "donde puedo visitarlos","cual es la direccion",
+                    "puedo pasar","donde queda","en que ciudad estan",
+                    "donde los encuentro","quiero ir personalmente",
+                    "quiero pasar a verlos","no me gusta pagar por internet",
+                    "no confio en transferir","quiero ver el producto primero",
+                    "quiero conocerlos antes","son una empresa real",
+                    "tienen oficina fisica","donde puedo ver las plantas",
+                    "quiero asegurarme antes de pagar","como se que son confiables",
+                    "tienen referencias","tienen redes sociales",
+                    "donde puedo ver sus trabajos","quienes son ustedes",
+                    "desde hace cuanto trabajan","quien es el ingeniero",
+                    "quien es wellington","quiero hablar con alguien",
+                    "puedo ir a conocerlos",
+                ]),
+            ]
+            if _in_septico:
+                for _vk_i, _kws_i in _IMHOFF_KW:
+                    if any(kw in _tna_i for kw in _kws_i):
+                        if not state.voice_already_sent(talk_id, _vk_i):
+                            _bid_i = _imhoff_triggers.get(_vk_i)
+                            if _bid_i:
+                                try:
+                                    await k.run_bot(int(_bid_i), entity_id,
+                                                    _entity_type(msg))
+                                    state.mark_voice_sent(talk_id, _vk_i)
+                                    _voz_fired = _vk_i
+                                    log.info("talk=%s launched %s bot %s",
+                                             talk_id, _vk_i, _bid_i)
+                                    if _vk_i == "[[VOZ_IMHOFF_4]]":
+                                        await asyncio.sleep(2)
+                                        _ig_text = (
+                                            "📍 También puedes conocer más sobre nuestra "
+                                            "empresa, nuestros proyectos y el trabajo que "
+                                            "realizamos visitando nuestro Instagram oficial. "
+                                            "Allí encontrarás fotografías, videos de "
+                                            "instalaciones reales, testimonios de clientes "
+                                            "y mucho más.\n\n"
+                                            "👉 Instagram: @aguasprofundas_rd\n\n"
+                                            "Será un gusto recibirte y ayudarte con "
+                                            "cualquier duda."
+                                        )
+                                        await k.send_message(talk_id, _ig_text)
+                                        log.info("talk=%s sent Instagram text "
+                                                 "(VOZ_IMHOFF_4)", talk_id)
+                                        await asyncio.sleep(1)
+                                        _wbot = int(_imhoff_triggers.get(
+                                            "wellington_lider_foto_bot_id", 0) or 0)
+                                        if _wbot:
+                                            try:
+                                                await k.run_bot(_wbot, entity_id,
+                                                                _entity_type(msg))
+                                                log.info("talk=%s launched Wellington "
+                                                         "image bot %s", talk_id, _wbot)
+                                            except KommoError as e:
+                                                log.error("talk=%s Wellington bot "
+                                                          "failed: %s", talk_id, e)
+                                except KommoError as e:
+                                    log.error("talk=%s %s failed: %s",
+                                              talk_id, _vk_i, e)
+                        break  # one voice note per turn
 
         # --- RAG + LLM ---
         kb = await rag.retrieve(text)
@@ -426,6 +651,55 @@ async def handle_message(msg: dict) -> None:
                     extra = "DESCUENTO_5: NO disponible. No menciones ningún descuento."
         except Exception as e:
             log.warning("talk=%s discount-window calc failed: %s", talk_id, e)
+        # Inject voice-note follow-up into extra so the LLM knows exactly
+        # what one-liner to send after the audio — no repetition, no prices.
+        _VOZ_FOLLOWUPS = {
+            # Audio already covers study process, 80-90% success, RD$45-50K pricing,
+            # exploratory vs conventional. Closes asking for location. Text echoes that.
+            "VOZ_AGUA_1": "Para comenzar, por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
+            # Audio: can't price drilling without study — we work with data not guessing.
+            # Text nudges back to study as the logical next step.
+            "VOZ_AGUA_2": "¿Le gustaría comenzar con el estudio para poder darle toda la información que necesita? 🙏",
+            # Audio: send location, I'll send satellite photo, mark boundaries with WhatsApp pencil.
+            # Text prompts them to send location now.
+            "VOZ_AGUA_3": "Por favor mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
+            # Audio: RD$5K deposit starts topographic study, 2-3 days, visit land,
+            # 3-4 more days, pay remainder, get report, send voucher.
+            # Text moves toward sending bank details.
+            "VOZ_AGUA_4": "¿Tiene alguna pregunta sobre el proceso o está listo para que le envíe los datos de depósito? 🙏",
+            # Audio: 3-part study vs competitors' 1-part, 80-90% vs 25% success, quality justification.
+            # Text soft-closes toward committing.
+            "VOZ_AGUA_5": "¿Le gustaría proceder con el estudio o tiene alguna otra consulta antes de decidir? 🙏",
+            # Audio: located in Arabacoa, serve all country, need their location to quote.
+            # Text asks for location to move forward.
+            "VOZ_AGUA_6": "¿En qué pueblo o sector desea realizar el estudio? Con eso le cotizo de inmediato. 🙏",
+            # Audio: RD$5K deposit, visit land, 24-48h study, contact for remainder, deliver report.
+            # Text asks if ready to start.
+            "VOZ_AGUA_7": "¿Está listo para dar el primer paso o tiene alguna consulta adicional antes de comenzar? 🙏",
+            # Audio: yes to call but need to schedule — asks for a good time.
+            # Text asks for their available time.
+            "VOZ_AGUA_8": "¿Qué hora le queda bien para coordinar la llamada? 🙏",
+            # Audio: full product intro — plastic vs cement, 2 modules (RD$70K/8 baths,
+            # RD$105K/16 baths), modular system. Closes: "si le gustaría comprar no deja saber."
+            # Text qualifies which module they need.
+            "[[VOZ_IMHOFF_1]]": "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏",
+            # Audio: RD$10K deposit, 1 week delivery, pay remainder on delivery.
+            # Text asks if ready to place deposit.
+            "[[VOZ_IMHOFF_2]]": "¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta adicional? 🙏",
+            # Audio: plastic vs cement comparison, more durable, won't crack or poison soil/water.
+            # Text soft-closes toward decision.
+            "[[VOZ_IMHOFF_3]]": "¿Le gustaría proceder con su planta o tiene alguna otra consulta antes de decidir? 🙏",
+            # Audio: trust/location — sells from factory, can send registro mercantil, always available.
+            # Followed by Instagram text + Wellington image — no extra text override needed.
+            "[[VOZ_IMHOFF_4]]": "",
+        }
+        if _voz_fired and _voz_fired in _VOZ_FOLLOWUPS:
+            _followup = _VOZ_FOLLOWUPS[_voz_fired]
+            if _followup:
+                extra = ("AUDIO_ENVIADO: Ya se envió una nota de voz con la información completa. "
+                         "Tu ÚNICO texto de respuesta es exactamente este (sin agregar nada más): "
+                         + repr(_followup))
+            # VOZ_AGUA_1 / VOZ_IMHOFF_1 / VOZ_IMHOFF_4: no override, normal flow
         reply = await agent.generate(text, kb, history, extra)
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)

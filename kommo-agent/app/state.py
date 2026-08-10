@@ -52,6 +52,9 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS discount_offered ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS voice_sent ("
+                  "talk_id TEXT, bot_key TEXT, at REAL, "
+                  "PRIMARY KEY (talk_id, bot_key))")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -293,3 +296,20 @@ def discount_offered(talk_id: str) -> bool:
     with _conn() as c:
         return c.execute("SELECT 1 FROM discount_offered WHERE talk_id=?",
                          (str(talk_id),)).fetchone() is not None
+
+
+def voice_already_sent(talk_id: str, bot_key: str) -> bool:
+    """True if this voice note was already fired in this conversation."""
+    with _conn() as c:
+        return c.execute(
+            "SELECT 1 FROM voice_sent WHERE talk_id=? AND bot_key=?",
+            (str(talk_id), bot_key)).fetchone() is not None
+
+
+def mark_voice_sent(talk_id: str, bot_key: str) -> None:
+    """Record that a voice note fired so it is never repeated in the same talk."""
+    import time as _t
+    with _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO voice_sent (talk_id, bot_key, at) VALUES (?, ?, ?)",
+            (str(talk_id), bot_key, _t.time()))

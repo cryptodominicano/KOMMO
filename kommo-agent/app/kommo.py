@@ -89,6 +89,18 @@ class KommoClient:
                     break
         return {"name": c.get("name") or lead_name, "phone": phone, "lead_name": lead_name}
 
+    async def get_contact_leads(self, contact_id: int) -> list[int]:
+        """Return lead IDs linked to a contact, most-recently-updated first.
+        Used when entity_id is null (contact messaged without an open lead).
+        Best practice: never auto-create a lead; just resolve the existing one."""
+        data = await self._req(
+            "GET",
+            f"/contacts/{contact_id}?with=leads"
+        ) or {}
+        leads = data.get("_embedded", {}).get("leads", []) or []
+        # Sort by id descending (higher id = more recent)
+        return [l["id"] for l in sorted(leads, key=lambda x: x.get("id", 0), reverse=True)]
+
     async def get_lead_tags(self, lead_id: int | str) -> list[str]:
         """Lowercased tag names on a lead. Used for NO_REACTIVAR (a human
         can permanently silence the agent by tagging the lead)."""

@@ -1542,3 +1542,102 @@ Four platforms in six days. Recording why each failed so we don't relitigate.
 **The #3441061 saga (566-7542).** Meta blocked coexistence onboarding with "Your phone number is already linked to Automatic Events. Turn off Auto labels in Business Tools > Labels." The client's WhatsApp Business app has **no Labels menu** — because WhatsApp is retiring/replacing Labels with "Lists" (per WhatsApp Business's own announcement). So the in-app control Meta points to no longer exists, and only Meta can clear the binding server-side. Never resolved. Directly caused the pivot to a second number (3119).
 
 **Client assets carried across every platform unchanged:** four KB files (estudio de agua, perforación, séptico IMHOFF, contacto/precios) containing Wellington's real sales copy and objection handling, plus the persona, the verbatim ubicación message, the séptico intro, and the RD$5,000 deposit flow. These have survived four platforms and are the actual product. The platform is just plumbing.
+
+---
+
+## Session 2026-08-10 — Audio-first workflow, subdomain fix, channel gating
+
+### Critical fixes
+
+**Wrong Kommo subdomain.** `KOMMO_SUBDOMAIN=infoswecinvestmentscom` in the
+container env, host `.env`, and `master.env` caused all CRM API calls to return
+401. Correct value is `aguasprofundas`. Fixed in `master.env`, host `.env`, and
+`client.toml`. Container re-upped via `docker compose up -d` (not `docker
+restart` — restart does not reload env_file values).
+
+**Salesbot trigger spam.** VOZ_AGUA_2 through VOZ_AGUA_8, all four VOZ_IMHOFF
+bots, and Wellington_Lider_Foto had "Any new conversation" set as their Kommo
+trigger. All bots fired simultaneously on every new lead, flooding customers.
+Fix: all triggers deleted from Kommo UI. Rule: every bot must have an empty
+Triggers panel — Kommo defaults new bots to "Any new conversation", always
+delete it immediately after creating a bot.
+
+**voz_agua_triggers missing from TOML.** Section absent from running container
+after a `docker compose up -d` rebuild. TOML bare keys cannot contain brackets
+— fixed by using plain bare keys (`VOZ_AGUA_1` through `VOZ_AGUA_8`). IMHOFF
+keys use quoted strings (`"[[VOZ_IMHOFF_N]]"`) which parse correctly.
+
+**entity_id null on contactless talks.** Kommo sends `entity_id=null` when a
+contact messages without an open lead, causing all `run_bot()` calls to fail
+silently. Fixed: added `get_contact_leads(contact_id)` to `kommo.py` —
+resolves most recent lead via `GET /contacts/{id}?with=leads`.
+
+**Audio contradicting text.** VOZ_AGUA_2 audio says no drilling prices without
+study. LLM text was giving exact prices from KB. Fixed: system prompt prohibits
+drilling prices in text; `_voz_fired` tracking added to worker.py; `AUDIO_ENVIADO`
+injected into `extra_system` with exact follow-up one-liner before LLM call.
+
+### New features
+
+**Audio-first conversation flow.** Engine detects keywords and fires matching
+voice note bot before LLM generates text. One audio per turn, never repeats in
+same conversation (`voice_sent` SQLite table, `voice_already_sent()` / `mark_voice_sent()`).
+
+**12 voice note bots (8 agua + 4 IMHOFF).** Full mapping in `docs/AUDIO_WORKFLOW.md`.
+
+**Channel gating (`_is_waba`).** Voice bots only fire on WhatsApp (`origin=waba`).
+Instagram and Facebook get full KB text answers, no audio (Meta API restriction).
+
+**Length-based reply delay.** Scales with inbound message length: ~3s short, ~9s
+long (200+ chars), ±0.5s jitter.
+
+**VOZ_IMHOFF_4 three-step sequence.** Voice note → 2s → Instagram text → 1s →
+Wellington_Lider_Foto image (85808).
+
+**`_voz_fired` + `AUDIO_ENVIADO` injection.** After any voice bot fires, engine
+injects exact follow-up one-liner into `extra_system`. LLM outputs only that
+line — no repetition of audio content.
+
+### Verified live Kommo facts (corrected)
+
+| Fact | Value |
+|---|---|
+| Subdomain | `aguasprofundas` (NOT `infoswecinvestmentscom`) |
+| API base | `https://aguasprofundas.kommo.com/api/v4` |
+| Pipeline ID | `14130431` |
+| Handoff stage status_id | `109168423` |
+| Active webhook ID | `47409015` |
+
+### Salesbot IDs added this session
+
+| ID | Name | Trigger |
+|---|---|---|
+| 85776 | VOZ_AGUA_1 | First water contact |
+| 85778 | VOZ_AGUA_2 | Drilling price keywords |
+| 85780 | VOZ_AGUA_3 | Start process keywords |
+| 85782 | VOZ_AGUA_4 | Payment/deposit keywords |
+| 85784 | VOZ_AGUA_5 | Price objection keywords |
+| 85786 | VOZ_AGUA_7 | Payment conditions keywords |
+| 85788 | VOZ_AGUA_6 | Office location keywords |
+| 85790 | VOZ_AGUA_8 | Call request keywords |
+| 85800 | VOZ_IMHOFF_1 | First séptico contact |
+| 85802 | VOZ_IMHOFF_2 | Purchase process keywords |
+| 85804 | VOZ_IMHOFF_3 | Séptico price objection |
+| 85806 | VOZ_IMHOFF_4 | Location/trust keywords |
+| 85808 | Wellington_Lider_Foto | After VOZ_IMHOFF_4 sequence |
+
+### Infrastructure learnings
+
+- `docker restart` does not reload `env_file` — use `docker compose up -d`
+- `docker commit kommo-agent kommo-agent:latest` required before restart to
+  persist in-container file edits
+- infra-mcp drops under load — `docker restart infra-mcp` resolves immediately
+- Never push to Vercel manually — push to GitHub and let git integration handle it
+
+### Open items
+
+- Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+- septico-fotos (55306): legacy — audit before use
+- Daily conversation-review automation: not built
+- Legacy number +1 829-566-7542: wind-down pending
+- KOMMO repo README: still says "Claude LLM, not deployed" — fix when convenient

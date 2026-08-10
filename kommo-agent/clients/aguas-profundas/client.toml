@@ -8,7 +8,7 @@ language      = "es-DO"
 qdrant_collection = "aguas_profundas_kb"
 
 [kommo]
-subdomain = "infoswecinvestmentscom"
+subdomain = "aguasprofundas"
 # VERIFIED live 2026-07-17: WhatsApp Business API origin is "waba".
 # Kommo's docs only ever show "telegram". The wrong value silently drops every message.
 origin    = "waba"
@@ -131,6 +131,32 @@ payment_audio_bot_id = 59058   # "Payment-Audio": 1 voice-note step.
 "[[SEPTICO_VENTAJAS]]"       = 76646  # why-ours-is-better - during price / objection moments.
 "[[FOTO_AGUA]]"     = 55348  # "agua-foto": the 5-step water process infographic.
 # Retired: "[[FOTOS_SEPTICO]]" = 55306 (bundled 3-in-1). Delete bot 55306 after cutover.
+
+
+
+[salesbot.voz_agua_triggers]
+# Voice note bots for agua/perforación flow. Fired in code, never by the model.
+# VOZ_AGUA_1: first contact (water flow). VOZ_AGUA_2-8: keyword match, no-repeat per convo.
+# Keys use single quotes because TOML bare keys cannot contain brackets.
+VOZ_AGUA_1 = 85776   # welcome / intro agua
+VOZ_AGUA_2 = 85778   # precio de perforación
+VOZ_AGUA_3 = 85780   # cómo hacer el estudio
+VOZ_AGUA_4 = 85782   # pago del depósito
+VOZ_AGUA_5 = 85784   # objeción de precio
+VOZ_AGUA_6 = 85788   # ubicación de empresa
+VOZ_AGUA_7 = 85786   # condiciones de pago
+VOZ_AGUA_8 = 85790   # solicitud de llamada
+
+[salesbot.voz_imhoff_triggers]
+# Voice note bots for IMHOFF/séptico flow. Fired in code, never by the model.
+# VOZ_IMHOFF_1: first contact when séptico/IMHOFF/planta keywords present.
+# VOZ_IMHOFF_2-4: keyword match, no-repeat per conversation.
+# VOZ_IMHOFF_4 is special: voice + Instagram text + Wellington image (sequence in worker.py).
+"[[VOZ_IMHOFF_1]]" = 85800   # welcome / intro séptico
+"[[VOZ_IMHOFF_2]]" = 85802   # cómo comprar / proceso
+"[[VOZ_IMHOFF_3]]" = 85804   # objeción de precio
+"[[VOZ_IMHOFF_4]]" = 85806   # ubicación / confianza
+wellington_lider_foto_bot_id = 85808  # fires after VOZ_IMHOFF_4
 
 [linderos]
 # Where the finished, marked parcel is delivered.

@@ -9,7 +9,7 @@ Según los resultados del estudio, le ofrecemos:
 - Perforación convencional: cuando el estudio confirma buena probabilidad de agua.
 - Perforación de exploración: para terrenos con mayor riesgo de no encontrar agua; somos de las pocas empresas que la ofrecen.
 
-La perforación exploratoria comienza desde RD$850 el pie (cercana al 75% de una convencional) y la convencional va de RD$1,300 a RD$1,500 el pie. El precio final depende de la profundidad, el terreno, el acceso y la compañía aliada, y se define después de revisar el estudio. El precio incluye los tubos de PVC de 6 pulgadas que se instalan durante la perforación.
+El precio exacto de la perforación se define DESPUÉS del estudio, según la profundidad, el tipo de terreno y el acceso. Sin el estudio no es posible dar un precio exacto — el estudio es lo que nos permite cotizar correctamente y proteger la inversión del cliente.
 
 ## El proceso incluye
 - Evaluación del terreno (estudio de agua primero).
@@ -18,11 +18,10 @@ La perforación exploratoria comienza desde RD$850 el pie (cercana al 75% de una
 - Prueba de caudal (aforo).
 
 ## ¿Cuánto cuesta un pozo?
-El precio depende de la ubicación y el tipo de terreno, la profundidad necesaria para encontrar agua, y el diámetro y materiales requeridos. La perforación exploratoria va desde RD$850 el pie y la convencional de RD$1,300 a RD$1,500 el pie. Para un precio exacto, primero se evalúa el terreno con el estudio y se prepara una cotización personalizada. El precio incluye los tubos de PVC de 6 pulgadas que se instalan durante la perforación.
+El precio depende de la ubicación, el tipo de terreno, la profundidad necesaria y el acceso. Sin el estudio previo es imposible dar un precio exacto — la profundidad y la saturación del terreno son desconocidas hasta que se hace el estudio. Primero hacemos el estudio y con esos datos preparamos una cotización personalizada. El precio incluye los tubos de PVC de 6 pulgadas.
 
 ## ¿Cuánto cuesta la perforación? ¿El precio incluye los tubos / la tubería?
-El precio de la perforación oscila entre RD$1,300 y RD$1,500 por pie lineal, dependiendo de las condiciones del terreno y del proyecto. Este precio incluye los tubos de PVC de 6 pulgadas que se instalan durante la perforación.
-Para poder ofrecerle una cotización más precisa, primero recomendamos realizar el estudio correspondiente, ya que este nos permitirá determinar el punto óptimo de perforación y estimar la profundidad aproximada necesaria.
+El precio de la perforación se determina DESPUÉS del estudio de agua. La profundidad requerida y la saturación del terreno varían por zona — sin esa información estaríamos adivinando, y la empresa trabaja con datos, no con estimaciones. El precio sí incluye los tubos de PVC de 6 pulgadas. Para una cotización exacta, el primer paso es el estudio.
 
 ## ¿Cuánto tarda la perforación?
 Depende de la profundidad: pozos poco profundos 1 a 3 días; medianos 3 a 7 días; profundos pueden tomar más. Incluye perforación e instalación básica.

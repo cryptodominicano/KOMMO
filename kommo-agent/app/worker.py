@@ -114,7 +114,21 @@ async def _signal_handoff(k: KommoClient, msg: dict, talk_id: str, reason: str) 
             due_seconds=int(float(client_pack.behavior("handoff_task_due_hours")) * 3600),
             responsible_user_id=int(client_pack.behavior("handoff_task_user_id")),
         )
-        log.info("talk=%s handoff signalled (stage+task), reason=%s", talk_id, reason)
+        # Internal note on the lead card — human sees context without reading full chat.
+        _origin = (msg.get("origin") or "?").upper()
+        _contact_id = msg.get("contact_id", "?")
+        _note_text = (
+            f"\U0001f916 Isla \u2192 Handoff\n"
+            f"Canal: {_origin}\n"
+            f"Motivo: {reason}\n"
+            f"Talk: {talk_id} | Contacto ID: {_contact_id}\n"
+            "Acci\u00f3n: revisar historial y dar seguimiento al cliente."
+        )
+        try:
+            await k.add_lead_note(int(entity_id), _note_text)
+        except Exception as _ne:
+            log.warning("talk=%s handoff note failed (non-critical): %s", talk_id, _ne)
+        log.info("talk=%s handoff signalled (stage+task+note), reason=%s", talk_id, reason)
     except KommoError as e:
         log.error("talk=%s handoff signal failed: %s", talk_id, e)
 
@@ -651,6 +665,19 @@ async def handle_message(msg: dict) -> None:
                     extra = "DESCUENTO_5: NO disponible. No menciones ningún descuento."
         except Exception as e:
             log.warning("talk=%s discount-window calc failed: %s", talk_id, e)
+        # If VOZ_AGUA_1 was sent in a PREVIOUS turn (not this one), inject
+        # a signal so the LLM skips the study explanation and greeting blocks.
+        # This prevents the full study pitch repeating when the client sends a
+        # second 'Hola' or when the location is captured after the welcome audio.
+        if not _voz_fired and state.voice_already_sent(talk_id, 'VOZ_AGUA_1'):
+            extra = (extra + ' ' if extra else '') + (
+                'AUDIO_ENVIADO_PREVIO: La nota de voz VOZ_AGUA_1 ya fue enviada '
+                'anteriormente en esta conversación. NO repitas el saludo de bienvenida '
+                'ni la explicación del estudio. NO des precios. '
+                'Responde naturalmente a lo que el cliente acaba de decir, '
+                'en 1-2 líneas máximo, y avanza el proceso.'
+            )
+
         # Inject voice-note follow-up into extra so the LLM knows exactly
         # what one-liner to send after the audio — no repetition, no prices.
         _VOZ_FOLLOWUPS = {
@@ -693,14 +720,23 @@ async def handle_message(msg: dict) -> None:
             # Followed by Instagram text + Wellington image — no extra text override needed.
             "[[VOZ_IMHOFF_4]]": "",
         }
+        # If a voice bot fired AND has a prescribed follow-up line, skip the LLM
+        # entirely and send the hardcoded line. This is the only reliable way to
+        # prevent the LLM from contradicting the audio content — extra_system
+        # injections are too low-priority and the KB context overrides them.
+        _direct_reply = None
         if _voz_fired and _voz_fired in _VOZ_FOLLOWUPS:
             _followup = _VOZ_FOLLOWUPS[_voz_fired]
             if _followup:
-                extra = ("AUDIO_ENVIADO: Ya se envió una nota de voz con la información completa. "
-                         "Tu ÚNICO texto de respuesta es exactamente este (sin agregar nada más): "
-                         + repr(_followup))
-            # VOZ_AGUA_1 / VOZ_IMHOFF_1 / VOZ_IMHOFF_4: no override, normal flow
-        reply = await agent.generate(text, kb, history, extra)
+                # Hard bypass: send the followup directly, no LLM involved.
+                _direct_reply = _followup
+                log.info("talk=%s AUDIO_BYPASS: skipping LLM, sending direct followup "
+                         "for %s", talk_id, _voz_fired)
+            # VOZ_AGUA_1 / VOZ_IMHOFF_1 / VOZ_IMHOFF_4: no hardcoded line, normal LLM flow
+        if _direct_reply:
+            reply = _direct_reply
+        else:
+            reply = await agent.generate(text, kb, history, extra)
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)
             return
@@ -844,6 +880,18 @@ async def handle_message(msg: dict) -> None:
                     _tags.append("Provincia: " + _prov)
                 if len(_parts) > 1:
                     _tags.append("Pueblo: " + _town)
+            # Update the lead name to include location so the pipeline
+            # board is self-describing without opening the chat.
+            if _tags and entity_id:
+                _town_label = (_parts[1] if len(_parts) > 1 else _parts[0]) if _parts else ""
+                _prov_label = _prov if _prov else ""
+                if _town_label:
+                    _lead_name = f"WhatsApp - {_town_label}, {_prov_label}".strip(", ")
+                    try:
+                        await k.update_lead(int(entity_id), name=_lead_name)
+                        log.info("talk=%s lead name updated: %s", talk_id, _lead_name)
+                    except Exception as _ln_e:
+                        log.warning("talk=%s lead name update failed: %s", talk_id, _ln_e)
             for _tg in _tags:
                 try:
                     await k.tag_lead_contact(entity_id, _tg)

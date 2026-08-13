@@ -401,7 +401,7 @@ async def handle_message(msg: dict) -> None:
             ]
             _tna_first = _deaccent(text)
             _is_septico_first_msg = any(w in _tna_first for w in _SEPTICO_FIRST_WORDS)
-            _detected_flow = "septico" if (_septico_first or _is_septico_first_msg) else "agua"
+            _detected_flow = "septico" if _is_septico_first_msg else "agua"
             state.set_flow(talk_id, _detected_flow)
             _locked_flow = _detected_flow
             log.info("talk=%s flow locked: %s (keyword_first=%s)",

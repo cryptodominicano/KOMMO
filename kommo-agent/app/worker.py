@@ -239,6 +239,30 @@ async def handle_message(msg: dict) -> None:
         log.info("talk=%s msg=%s scope-rejected (religious/spam)", talk_id, msg_id)
         return
 
+    # --- BLOCK CHECK: NO_REACTIVAR / BLOQUEADO ----------------------------
+    # Checked before ANY processing. Works even when the lead is not handed off.
+    # Tag the lead OR the contact with NO_REACTIVAR or BLOQUEADO in Kommo UI
+    # to permanently silence the agent for that number.
+    _block_entity = msg.get("entity_id") or msg.get("element_id")
+    _block_contact = msg.get("contact_id")
+    if _block_entity or _block_contact:
+        try:
+            _block_tags = set()
+            _bk = KommoClient()
+            if _block_entity:
+                _lt = await _bk.get_lead_tags(int(_block_entity))
+                _block_tags.update(t.lower() for t in _lt)
+            if _block_contact:
+                _ct = await _bk.get_contact_tags(int(_block_contact))
+                _block_tags.update(t.lower() for t in _ct)
+            if "no_reactivar" in _block_tags or "bloqueado" in _block_tags:
+                log.info("talk=%s BLOCKED (no_reactivar/bloqueado tag) - silent",
+                         talk_id)
+                return
+        except Exception as _be:
+            log.warning("talk=%s block-check failed (non-critical): %s",
+                        talk_id, _be)
+
     # Customer just messaged -> they are active; disarm any pending inactivity
     # follow-up. It is re-armed after we reply if we end up waiting on them.
     state.clear_followup(talk_id)

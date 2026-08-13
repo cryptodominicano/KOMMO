@@ -101,6 +101,13 @@ class KommoClient:
         # Sort by id descending (higher id = more recent)
         return [l["id"] for l in sorted(leads, key=lambda x: x.get("id", 0), reverse=True)]
 
+    async def get_contact_tags(self, contact_id: int) -> list[str]:
+        """Lowercased tag names on a contact. Used for BLOQUEADO/NO_REACTIVAR
+        so a block persists across future leads from the same number."""
+        data = await self._req("GET", f"/contacts/{contact_id}") or {}
+        tags = data.get("_embedded", {}).get("tags", []) or []
+        return [t["name"].lower() for t in tags if t.get("name")]
+
     async def get_lead_tags(self, lead_id: int | str) -> list[str]:
         """Lowercased tag names on a lead. Used for NO_REACTIVAR (a human
         can permanently silence the agent by tagging the lead)."""

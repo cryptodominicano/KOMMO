@@ -44,7 +44,7 @@ audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría
 media_received = "¡Recibido! Gracias 🙏 Un miembro de nuestro equipo verifica su comprobante y un representante le contactará en un día laborable para coordinar los siguientes pasos."
 media_received_generic = "¡Recibido! Gracias 🙏 Un técnico de Aguas Profundas revisará lo que nos envió y le responderá en breve."
 # Sent ONCE, ~15 min after Isla asks something and the customer goes quiet.
-followup_nudge = "¿Sigue por ahí? 🙂 Quedo atenta por si le puedo ayudar con alguna otra pregunta o si desea avanzar. Cuando usted guste, retomamos."
+followup_nudge = "Fue un placer hablar con usted hoy. 😊 Si tiene alguna pregunta o necesita más información sobre nuestros servicios, con mucho gusto le ayudamos. Aquí estamos siempre a la orden."
 handoff_task_text = "Un cliente espera atención humana en WhatsApp. Por favor continúe la conversación."
 linderos_fallback = "¡Gracias! 🙏 Recibimos su ubicación. Un técnico de Aguas Profundas le atenderá en breve para marcar los linderos de su terreno y continuar con su caso."
 linderos_invite = """¡Gracias! 🙏 Recibimos su ubicación.
@@ -88,7 +88,7 @@ ad_direct_entry_text = "Hola! Quiero Agua en Mi Tierra."
 # One-time inactivity follow-up: if Isla asks something and the customer goes
 # silent this many minutes, send a single "still there?" nudge (see [messages]).
 # Skipped on handoff and right after the deposit message. Set 0 to disable.
-followup_delay_minutes = 15
+followup_delay_minutes = 120
 
 [salesbot]
 # THE IMAGE WORKAROUND.

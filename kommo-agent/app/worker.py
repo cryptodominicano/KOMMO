@@ -225,19 +225,75 @@ async def handle_message(msg: dict) -> None:
         return
 
     # Scope guard: reject messages that are clearly off-topic before any
-    # processing. Best practice: fail fast, do not waste LLM tokens on spam.
-    # Checked after talk_id validation but before any state writes.
-    _raw_text_check = (msg.get("text") or "").strip().lower()
+    # SCOPE GUARD — two-layer filter. Fail fast before any state writes.
+    # Best practice: pattern layer catches known spam categories;
+    # intent layer catches first-contact messages with zero business signal.
+    _raw_text = (msg.get("text") or "").strip()
+    _rtl = _raw_text.lower()
+
+    # Layer 1: Known broadcast/spam content patterns
     _SPAM_PATTERNS = [
-        "mateo ", "juan ", "lucas ", "marcos ", "genesis ", "salmo",
-        "apocalipsis", "proverbio", "corintio", "romanos ", "efesio",
-        "filipense", "galata", "hebreo", "timoteo", "tito ", "pedro ",
-        "santiago ", "judas ", "deuteronomio", "levitico", "numeros ",
-        "exodo ", "isaias ", "jeremias", "ezequiel",
+        # Biblical books (with and without space after — catches "mateo24" and "mateo ")
+        "mateo", "marcos", "lucas", "juan", "hechos", "romanos",
+        "corintios", "galatas", "efesios", "filipenses", "colosenses",
+        "tesalonicenses", "timoteo", "tito", "filemon", "hebreos",
+        "santiago", "pedro", "judas", "apocalipsis", "genesis",
+        "exodo", "levitico", "numeros", "deuteronomio", "josue",
+        "jueces", "samuel", "reyes", "cronicas", "esdras", "nehemias",
+        "esther", "salmos", "salmo", "proverbios", "eclesiastes",
+        "isaias", "jeremias", "ezequiel", "daniel", "oseas", "joel",
+        "amos", "abdias", "jonas", "miqueas", "nahum", "habacuc",
+        "sofonias", "hageo", "zacarias", "malaquias",
+        # Common broadcast phrases
+        "jesucristo", "dios te bendiga", "bendiciones", "amén", "amen",
+        "el senor", "el señor", "cristo", "jesus regresa", "dios es",
+        "buenos dias que dios", "que dios te", "dios les bendiga",
+        "forward this", "comparte este", "reenvía esto", "reenvia esto",
+        "cadena de oracion", "oración del dia", "oracion del dia",
     ]
-    if any(p in _raw_text_check for p in _SPAM_PATTERNS):
-        log.info("talk=%s msg=%s scope-rejected (religious/spam)", talk_id, msg_id)
+    if any(p in _rtl for p in _SPAM_PATTERNS):
+        log.info("talk=%s msg=%s scope-rejected (layer1: religious/broadcast spam)",
+                 talk_id, msg_id)
         return
+
+    # Layer 2: First-contact intent check.
+    # Only applies to the very first message in a NEW talk (not in state yet).
+    # If the message has ZERO business-intent signals AND looks like broadcast
+    # content (long + no question + no business keyword), drop it silently.
+    # This catches daily devotionals, political forwards, chain messages.
+    # Does NOT apply to mid-conversation messages — those always get through.
+    _is_new_talk = not state.is_handed_off(talk_id)
+    _already_greeted = not state.first_contact.__doc__ or False  # check below
+    try:
+        from .state import _conn as _sc
+        with _sc() as _cc:
+            _already_greeted = _cc.execute(
+                "SELECT 1 FROM greeted WHERE talk_id=?", (str(talk_id),)
+            ).fetchone() is not None
+    except Exception:
+        _already_greeted = False
+
+    if not _already_greeted and _is_new_talk and len(_raw_text) > 60:
+        # Business-intent signals — ANY of these means process normally
+        _BUSINESS_KEYWORDS = [
+            "agua", "pozo", "estudio", "perfor", "septico", "séptico",
+            "imhoff", "planta", "terreno", "finca", "precio", "costo",
+            "cuanto", "cuánto", "informacion", "información", "servicio",
+            "ayuda", "interesa", "quiero", "necesito", "busco",
+            "cotiz", "trabajo", "llegán", "llegan", "provincia",
+            "hola", "buenas", "buen dia", "buenos dias", "buenas tardes",
+            "buenas noches", "info", "quisiera", "pueden", "tienen",
+        ]
+        _has_business_signal = any(k in _rtl for k in _BUSINESS_KEYWORDS)
+        _has_question = "?" in _raw_text
+
+        if not _has_business_signal and not _has_question:
+            log.info(
+                "talk=%s msg=%s scope-rejected (layer2: no business intent, "
+                "len=%d, first contact)",
+                talk_id, msg_id, len(_raw_text)
+            )
+            return
 
     # --- BLOCK CHECK: NO_REACTIVAR / BLOQUEADO ----------------------------
     # Checked before ANY processing. Works even when the lead is not handed off.

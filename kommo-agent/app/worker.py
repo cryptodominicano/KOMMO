@@ -273,7 +273,7 @@ async def handle_message(msg: dict) -> None:
     except Exception:
         _already_greeted = False
 
-    if not _already_greeted and _is_new_talk and len(_raw_text) > 60:
+    if not _already_greeted and _is_new_talk and len(_raw_text) > 30:
         # Business-intent signals — ANY of these means process normally
         _BUSINESS_KEYWORDS = [
             "agua", "pozo", "estudio", "perfor", "septico", "séptico",
@@ -552,8 +552,16 @@ async def handle_message(msg: dict) -> None:
                 return
 
         # --- VOZ_AGUA_2-8: keyword-triggered, audio-first, no-repeat ─────────────
-        if entity_id and _voz_triggers and not is_first and _is_waba:
-            _tna = _deaccent(text)
+        # _in_septico_ctx: True if conversation is in séptico flow.
+        # Used to gate the agua keyword block — agua voice bots must never
+        # fire when the customer is discussing séptico/IMHOFF.
+        _tna = _deaccent(text)
+        _hist_ctx = " ".join(m.get("content", "") for m in (history or [])[-10:])
+        _in_septico_ctx = any(w in _tna or w in _deaccent(_hist_ctx) for w in (
+            "septic", "imhoff", "planta de trat", "modulo", "bano",
+            "modulo 8", "modulo 16", "tanque", "planta septica",
+        ))
+        if entity_id and _voz_triggers and not is_first and _is_waba and not _in_septico_ctx:
             _VOZ_KW = [
                 ("VOZ_AGUA_5", ["esta muy caro","muy costoso","es mucho dinero",
                     "pense que era menos","no tengo ese presupuesto","muy alto",

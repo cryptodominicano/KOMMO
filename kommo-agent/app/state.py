@@ -55,6 +55,8 @@ def init() -> None:
         c.execute("CREATE TABLE IF NOT EXISTS voice_sent ("
                   "talk_id TEXT, bot_key TEXT, at REAL, "
                   "PRIMARY KEY (talk_id, bot_key))")
+        c.execute("CREATE TABLE IF NOT EXISTS flow_state ("
+                  "talk_id TEXT PRIMARY KEY, flow TEXT, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -313,3 +315,25 @@ def mark_voice_sent(talk_id: str, bot_key: str) -> None:
         c.execute(
             "INSERT OR IGNORE INTO voice_sent (talk_id, bot_key, at) VALUES (?, ?, ?)",
             (str(talk_id), bot_key, _t.time()))
+
+
+def get_flow(talk_id: str) -> str | None:
+    """Return the locked flow for this talk ('agua' or 'septico'), or None if not set.
+    Best practice: once a flow is established, all subsequent routing uses it
+    rather than re-detecting from message content (prevents context drift)."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT flow FROM flow_state WHERE talk_id=?",
+            (str(talk_id),)).fetchone()
+        return row[0] if row else None
+
+
+def set_flow(talk_id: str, flow: str) -> None:
+    """Lock the conversation flow ('agua' or 'septico').
+    Called once on first contact. Never overwritten — the flow is permanent
+    for the life of the conversation."""
+    import time as _t
+    with _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO flow_state (talk_id, flow, at) VALUES (?, ?, ?)",
+            (str(talk_id), flow, _t.time()))

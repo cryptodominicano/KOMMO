@@ -383,6 +383,18 @@ async def handle_message(msg: dict) -> None:
             except Exception as _e:
                 log.warning("talk=%s entity_id lookup failed: %s", talk_id, _e)
         is_first = state.first_contact(talk_id)   # marks first contact; reused to exempt the greeting from the typing delay
+
+        # --- FLOW LOCKING -------------------------------------------------------
+        # Best practice: lock the conversation flow on first contact and use it
+        # for all subsequent routing. Re-detecting from message content every turn
+        # causes context drift (e.g. "Bani" in a séptico chat triggering agua).
+        _locked_flow = state.get_flow(talk_id)
+        if _locked_flow is None:
+            _detected_flow = "septico" if _septico_first else "agua"
+            state.set_flow(talk_id, _detected_flow)
+            _locked_flow = _detected_flow
+            log.info("talk=%s flow locked: %s", talk_id, _locked_flow)
+        _is_septico_flow = (_locked_flow == "septico")
         # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
         # straight into the agua flow (no 3-option menu / welcome infographic).
         # The prompt has the matching reply rule; here we suppress the menu image.
@@ -552,16 +564,9 @@ async def handle_message(msg: dict) -> None:
                 return
 
         # --- VOZ_AGUA_2-8: keyword-triggered, audio-first, no-repeat ─────────────
-        # _in_septico_ctx: True if conversation is in séptico flow.
-        # Used to gate the agua keyword block — agua voice bots must never
-        # fire when the customer is discussing séptico/IMHOFF.
+        # Use locked flow state — deterministic, never drifts mid-conversation.
         _tna = _deaccent(text)
-        _hist_ctx = " ".join(m.get("content", "") for m in (history or [])[-10:])
-        _in_septico_ctx = any(w in _tna or w in _deaccent(_hist_ctx) for w in (
-            "septic", "imhoff", "planta de trat", "modulo", "bano",
-            "modulo 8", "modulo 16", "tanque", "planta septica",
-        ))
-        if entity_id and _voz_triggers and not is_first and _is_waba and not _in_septico_ctx:
+        if entity_id and _voz_triggers and not is_first and _is_waba and not _is_septico_flow:
             _VOZ_KW = [
                 ("VOZ_AGUA_5", ["esta muy caro","muy costoso","es mucho dinero",
                     "pense que era menos","no tengo ese presupuesto","muy alto",
@@ -630,11 +635,8 @@ async def handle_message(msg: dict) -> None:
         # VOZ_IMHOFF_4 fires a 3-step sequence: voice → Instagram text → Wellington image.
         if entity_id and _imhoff_triggers and not is_first and _is_waba:
             _tna_i = _deaccent(text)
-            # history not yet loaded at this point — use empty string as fallback;
-            # current message text is sufficient for keyword detection
-            _hist_text_i = ""
-            _in_septico = any(w in _tna_i for w in (
-                "septic", "imhoff", "planta de trat", "modulo", "bano"))
+            # Flow is already locked — _is_septico_flow is the authoritative signal.
+            # No need to re-scan message content; that causes context drift.
             _IMHOFF_KW = [
                 ("[[VOZ_IMHOFF_3]]", [
                     "esta muy cara","muy costosa","es mucho dinero",
@@ -674,7 +676,7 @@ async def handle_message(msg: dict) -> None:
                     "puedo ir a conocerlos",
                 ]),
             ]
-            if _in_septico:
+            if _is_septico_flow:
                 for _vk_i, _kws_i in _IMHOFF_KW:
                     if any(kw in _tna_i for kw in _kws_i):
                         if not state.voice_already_sent(talk_id, _vk_i):

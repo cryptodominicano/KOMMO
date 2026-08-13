@@ -57,6 +57,8 @@ def init() -> None:
                   "PRIMARY KEY (talk_id, bot_key))")
         c.execute("CREATE TABLE IF NOT EXISTS flow_state ("
                   "talk_id TEXT PRIMARY KEY, flow TEXT, at REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS flow_confirmed ("
+                  "talk_id TEXT PRIMARY KEY, at REAL)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -337,3 +339,22 @@ def set_flow(talk_id: str, flow: str) -> None:
         c.execute(
             "INSERT OR IGNORE INTO flow_state (talk_id, flow, at) VALUES (?, ?, ?)",
             (str(talk_id), flow, _t.time()))
+
+
+def is_flow_confirmed(talk_id: str) -> bool:
+    """True if the customer has explicitly stated their service interest.
+    Generic greetings (Hola, Buenas) leave the flow unconfirmed until the
+    customer replies to the service selection menu."""
+    with _conn() as c:
+        return c.execute(
+            "SELECT 1 FROM flow_confirmed WHERE talk_id=?",
+            (str(talk_id),)).fetchone() is not None
+
+
+def mark_flow_confirmed(talk_id: str) -> None:
+    """Mark that the customer has confirmed their flow via explicit keyword."""
+    import time as _t
+    with _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO flow_confirmed (talk_id, at) VALUES (?, ?)",
+            (str(talk_id), _t.time()))

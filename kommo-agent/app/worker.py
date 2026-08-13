@@ -424,6 +424,25 @@ async def handle_message(msg: dict) -> None:
             "septic", "séptic", "imhoff", "planta de trat"))
         if _septico_first:
             log.info("talk=%s septico first-contact detected - welcome image will fire", talk_id)
+
+        # Detect generic greeting: no agua, no séptico, no water-ad keywords.
+        # Best practice (Infobip design guidelines): show a service selection
+        # menu so the customer picks their path. Audio fires only after they
+        # explicitly choose a service (flow confirmed on second message).
+        _AGUA_KEYWORDS = [
+            "agua", "pozo", "perfor", "estudio", "terreno", "finca",
+            "vena", "hidrolog", "topograf", "radiestesia",
+        ]
+        _tna_first_check = _deaccent(text)
+        _has_agua_kw = any(w in _tna_first_check for w in _AGUA_KEYWORDS)
+        _has_septico_kw = _septico_first or _is_septico_flow
+        _is_generic_greeting = (
+            is_first and not from_water_ad
+            and not _has_agua_kw and not _has_septico_kw
+        )
+        if _is_generic_greeting:
+            log.info("talk=%s generic greeting — service selection menu will show",
+                     talk_id)
         if welcome_bot and entity_id and is_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
@@ -438,7 +457,13 @@ async def handle_message(msg: dict) -> None:
         _sb = client_pack.pack().get("salesbot", {})
         _voz_triggers = _sb.get("voz_agua_triggers", {})
         _imhoff_triggers = _sb.get("voz_imhoff_triggers", {})
-        if (is_first and not _septico_first and not from_water_ad
+        # VOZ_AGUA_1: only fire when agua flow is explicitly confirmed.
+        # Generic greeting (no keywords) → hold audio, show menu instead.
+        _agua_flow_confirmed = (
+            is_first and not _septico_first and not from_water_ad
+            and (_has_agua_kw or state.is_flow_confirmed(talk_id))
+        )
+        if (_agua_flow_confirmed
                 and entity_id and _is_waba
                 and _voz_triggers.get("VOZ_AGUA_1")):
             _vk1 = "VOZ_AGUA_1"
@@ -453,7 +478,8 @@ async def handle_message(msg: dict) -> None:
                     log.error("talk=%s VOZ_AGUA_1 failed: %s", talk_id, e)
 
         # --- VOZ_IMHOFF_1: welcome voice note, first contact, séptico flow only ---
-        if (is_first and _septico_first
+        # VOZ_IMHOFF_1: only fire when séptico is explicitly in first message.
+        if (is_first and _has_septico_kw and _septico_first
                 and entity_id and _is_waba
                 and _imhoff_triggers.get("[[VOZ_IMHOFF_1]]")):
             _vk_i1 = "[[VOZ_IMHOFF_1]]"
@@ -578,6 +604,65 @@ async def handle_message(msg: dict) -> None:
         # --- VOZ_AGUA_2-8: keyword-triggered, audio-first, no-repeat ─────────────
         # Use locked flow state — deterministic, never drifts mid-conversation.
         _tna = _deaccent(text)
+        # --- SECOND MESSAGE AFTER GENERIC GREETING: service confirmation --------
+        # If first contact was a generic greeting (flow unconfirmed), the
+        # second message is the customer picking their service. Detect it,
+        # mark flow confirmed, and fire the correct welcome audio.
+        # No image fires — the welcome image already went out on first contact.
+        _SEPTICO_CONFIRM_WORDS = [
+            "septic", "imhoff", "planta", "modulo", "bano", "fosa", "tanque",
+            "aguas negra", "aguas residual", "aguas gris",
+        ]
+        _AGUA_CONFIRM_WORDS = [
+            "agua", "pozo", "perfor", "estudio", "terreno", "finca",
+            "vena", "hoyo", "pozo", "cisterna",
+        ]
+        _flow_was_generic = (not state.is_flow_confirmed(talk_id)
+                             and not is_first
+                             and _locked_flow == "agua")
+        if _flow_was_generic and entity_id and _is_waba:
+            _tna_confirm = _deaccent(text)
+            _confirms_septico = any(w in _tna_confirm for w in _SEPTICO_CONFIRM_WORDS)
+            _confirms_agua = any(w in _tna_confirm for w in _AGUA_CONFIRM_WORDS)
+            if _confirms_septico:
+                # Customer chose séptico — re-lock flow and fire IMHOFF_1 audio
+                state.set_flow(talk_id + "_override", "septico")  # note for log
+                state.mark_flow_confirmed(talk_id)
+                _is_septico_flow = True
+                _vk_confirm = "[[VOZ_IMHOFF_1]]"
+                if not state.voice_already_sent(talk_id, _vk_confirm):
+                    _bid_confirm = _imhoff_triggers.get(_vk_confirm)
+                    if _bid_confirm:
+                        try:
+                            await asyncio.sleep(1)
+                            await k.run_bot(int(_bid_confirm), entity_id,
+                                           _entity_type(msg))
+                            state.mark_voice_sent(talk_id, _vk_confirm)
+                            _voz_fired = _vk_confirm
+                            log.info("talk=%s confirmed SEPTICO — fired VOZ_IMHOFF_1",
+                                     talk_id)
+                        except KommoError as e:
+                            log.error("talk=%s VOZ_IMHOFF_1 confirm failed: %s",
+                                      talk_id, e)
+            elif _confirms_agua:
+                # Customer chose agua — confirm flow and fire AGUA_1 audio
+                state.mark_flow_confirmed(talk_id)
+                _vk_confirm_a = "VOZ_AGUA_1"
+                if not state.voice_already_sent(talk_id, _vk_confirm_a):
+                    _bid_confirm_a = _voz_triggers.get(_vk_confirm_a)
+                    if _bid_confirm_a:
+                        try:
+                            await asyncio.sleep(1)
+                            await k.run_bot(int(_bid_confirm_a), entity_id,
+                                           _entity_type(msg))
+                            state.mark_voice_sent(talk_id, _vk_confirm_a)
+                            _voz_fired = _vk_confirm_a
+                            log.info("talk=%s confirmed AGUA — fired VOZ_AGUA_1",
+                                     talk_id)
+                        except KommoError as e:
+                            log.error("talk=%s VOZ_AGUA_1 confirm failed: %s",
+                                      talk_id, e)
+
         if entity_id and _voz_triggers and not is_first and _is_waba and not _is_septico_flow:
             _VOZ_KW = [
                 ("VOZ_AGUA_5", ["esta muy caro","muy costoso","es mucho dinero",

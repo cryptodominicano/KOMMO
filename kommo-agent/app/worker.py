@@ -390,10 +390,15 @@ async def handle_message(msg: dict) -> None:
         # causes context drift (e.g. "Bani" in a séptico chat triggering agua).
         _locked_flow = state.get_flow(talk_id)
         if _locked_flow is None:
-            _detected_flow = "septico" if _septico_first else "agua"
+            # Check if this is a séptico ad entry — override detection
+            # so even a generic greeting from the IMHOFF ad locks correctly.
+            _ad_septico_text = (client_pack.behavior("ad_septico_entry_text") or "").strip().lower()
+            _from_septico_ad = bool(_ad_septico_text) and is_first and text.lower() == _ad_septico_text
+            _detected_flow = "septico" if (_septico_first or _from_septico_ad) else "agua"
             state.set_flow(talk_id, _detected_flow)
             _locked_flow = _detected_flow
-            log.info("talk=%s flow locked: %s", talk_id, _locked_flow)
+            log.info("talk=%s flow locked: %s (septico_first=%s, septico_ad=%s)",
+                     talk_id, _locked_flow, _septico_first, _from_septico_ad)
         _is_septico_flow = (_locked_flow == "septico")
         # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
         # straight into the agua flow (no 3-option menu / welcome infographic).

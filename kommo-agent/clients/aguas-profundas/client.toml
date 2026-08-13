@@ -85,6 +85,7 @@ reply_delay_max_seconds = 9
 # into the agua flow, skipping the 3-option welcome menu + infographic. The
 # prompt holds the matching reply rule; the worker suppresses the menu image.
 ad_direct_entry_text = "Hola! Quiero Agua en Mi Tierra."
+ad_septico_entry_text = "Hola! Quiero mas informacion sobre las Plantas IMHOFF"
 # One-time inactivity follow-up: if Isla asks something and the customer goes
 # silent this many minutes, send a single "still there?" nudge (see [messages]).
 # Skipped on handoff and right after the deposit message. Set 0 to disable.

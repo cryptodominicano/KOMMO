@@ -1050,16 +1050,41 @@ async def handle_message(msg: dict) -> None:
                 except KommoError as e:
                     log.error("talk=%s contact tag failed: %s", talk_id, e)
 
-        for bot_id in fire:
+        # Sequential multi-intent delivery: if multiple bots queued, fire each
+        # with a human-like pause between them (3-5s). This addresses the case
+        # where a customer asks two things at once (e.g. "mándeme el brochure y
+        # dónde están ubicados") — both get answered in order, not skipped.
+        # Best practice: independent intents delivered sequentially with pauses.
+        #
+        # If a voice bot already fired this turn (_voz_fired is set) AND there
+        # are also image/sentinel bots queued, add an inter-system pause so the
+        # voice note lands before the image arrives.
+        if fire and _voz_fired:
+            _vs_delay = random.uniform(3.0, 4.0)
+            log.info("talk=%s voice+image multi-intent: %.1fs pause before "
+                     "sentinel bots", talk_id, _vs_delay)
+            await asyncio.sleep(_vs_delay)
+        for _fire_idx, bot_id in enumerate(fire):
             if not entity_id:
-                log.warning("talk=%s cannot launch bot %s: no entity_id", talk_id, bot_id)
+                log.warning("talk=%s cannot launch bot %s: no entity_id",
+                            talk_id, bot_id)
                 continue
+            # Add a pause between bots so each message lands before the next.
+            # First bot fires immediately (text reply already sent above);
+            # subsequent bots wait 3-5s so the customer reads/hears each one.
+            if _fire_idx > 0:
+                _inter_delay = random.uniform(3.0, 5.0)
+                log.info("talk=%s multi-intent pause %.1fs before bot %s "
+                         "(%d of %d)", talk_id, _inter_delay, bot_id,
+                         _fire_idx + 1, len(fire))
+                await asyncio.sleep(_inter_delay)
             try:
-                await k.run_bot(bot_id, entity_id, _entity_type(msg))   # one bot per entity
-                log.info("talk=%s launched salesbot %s for entity %s",
-                         talk_id, bot_id, entity_id)
+                await k.run_bot(bot_id, entity_id, _entity_type(msg))
+                log.info("talk=%s launched salesbot %s (%d of %d)",
+                         talk_id, bot_id, _fire_idx + 1, len(fire))
             except KommoError as e:
-                log.error("talk=%s salesbot %s launch failed: %s", talk_id, bot_id, e)
+                log.error("talk=%s salesbot %s launch failed: %s",
+                          talk_id, bot_id, e)
 
         if handoff:
             state.mark_handoff(talk_id, "agent_requested")

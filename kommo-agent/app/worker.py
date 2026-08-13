@@ -224,6 +224,21 @@ async def handle_message(msg: dict) -> None:
         log.warning("no talk_id, skipping msg=%s", msg_id)
         return
 
+    # Scope guard: reject messages that are clearly off-topic before any
+    # processing. Best practice: fail fast, do not waste LLM tokens on spam.
+    # Checked after talk_id validation but before any state writes.
+    _raw_text_check = (msg.get("text") or "").strip().lower()
+    _SPAM_PATTERNS = [
+        "mateo ", "juan ", "lucas ", "marcos ", "genesis ", "salmo",
+        "apocalipsis", "proverbio", "corintio", "romanos ", "efesio",
+        "filipense", "galata", "hebreo", "timoteo", "tito ", "pedro ",
+        "santiago ", "judas ", "deuteronomio", "levitico", "numeros ",
+        "exodo ", "isaias ", "jeremias", "ezequiel",
+    ]
+    if any(p in _raw_text_check for p in _SPAM_PATTERNS):
+        log.info("talk=%s msg=%s scope-rejected (religious/spam)", talk_id, msg_id)
+        return
+
     # Customer just messaged -> they are active; disarm any pending inactivity
     # follow-up. It is re-armed after we reply if we end up waiting on them.
     state.clear_followup(talk_id)
@@ -665,18 +680,59 @@ async def handle_message(msg: dict) -> None:
                     extra = "DESCUENTO_5: NO disponible. No menciones ningún descuento."
         except Exception as e:
             log.warning("talk=%s discount-window calc failed: %s", talk_id, e)
+        # Channel-aware price guard for non-WhatsApp channels.
+        # On Instagram/Facebook no audio fires so the LLM must still answer,
+        # but it should frame prices correctly: study-first, then quote.
+        # Best practice: never volunteer drilling prices without study context.
+        if not _is_waba:
+            extra = (extra + " " if extra else "") + (
+                "CANAL_NO_WABA: Esta conversación viene de Instagram o Facebook. "
+                "No se envían notas de voz en este canal. "
+                "Para preguntas sobre precio de perforación, explica que el precio "
+                "exacto se define DESPUÉS del estudio — nunca des precios exactos de "
+                "perforación en texto. Para precio del estudio sí puedes dar el rango "
+                "RD$45,000-50,000. Mantén respuestas breves, máximo 3 líneas."
+            )
+
         # If VOZ_AGUA_1 was sent in a PREVIOUS turn (not this one), inject
         # a signal so the LLM skips the study explanation and greeting blocks.
         # This prevents the full study pitch repeating when the client sends a
         # second 'Hola' or when the location is captured after the welcome audio.
         if not _voz_fired and state.voice_already_sent(talk_id, 'VOZ_AGUA_1'):
-            extra = (extra + ' ' if extra else '') + (
-                'AUDIO_ENVIADO_PREVIO: La nota de voz VOZ_AGUA_1 ya fue enviada '
-                'anteriormente en esta conversación. NO repitas el saludo de bienvenida '
-                'ni la explicación del estudio. NO des precios. '
-                'Responde naturalmente a lo que el cliente acaba de decir, '
-                'en 1-2 líneas máximo, y avanza el proceso.'
+            _tna_previo = _deaccent(text)
+            # Short/closed responses after VOZ_AGUA_1: bypass LLM entirely.
+            # These are messages where the LLM would otherwise repeat the study.
+            _CLOSED_RESPONSES = [
+                "no", "asi no", "de saber", "gracia", "esta bien", "ok",
+                "okay", "bueno", "entendido", "claro", "perfecto", "bien",
+                "no gracias", "no me interesa", "lo voy a pensar", "despues"
+            ]
+            _is_short_closed = (
+                len(text) < 30 or
+                any(r in _tna_previo for r in _CLOSED_RESPONSES)
             )
+            if _is_short_closed:
+                # Determine appropriate short reply based on sentiment
+                _neg_signals = ["no", "asi no", "no me interesa", "no gracias",
+                                "no quiero", "lo voy a pensar", "despues"]
+                if any(s in _tna_previo for s in _neg_signals):
+                    _direct_reply = ("Entiendo, no hay problema. 😊 "
+                                     "Si en algún momento desea más información o "
+                                     "avanzar, aquí estamos para ayudarle.")
+                else:
+                    _direct_reply = ("¡De nada! 😊 Cuando guste, por favor mándeme "
+                                     "la ubicación de su terreno para comenzar. 📍")
+                log.info("talk=%s PREVIO_BYPASS: short/closed response, skipping LLM",
+                         talk_id)
+            else:
+                # Longer new question — call LLM but with tight constraint
+                extra = (extra + ' ' if extra else '') + (
+                    'AUDIO_ENVIADO_PREVIO: VOZ_AGUA_1 ya fue enviada. '
+                    'NO repitas el saludo ni la explicación del estudio. '
+                    'NO des precios de perforación. '
+                    'Responde SOLO la pregunta específica del cliente en máximo 2 líneas '
+                    'y cierra con una pregunta que avance el proceso.'
+                )
 
         # Inject voice-note follow-up into extra so the LLM knows exactly
         # what one-liner to send after the audio — no repetition, no prices.
@@ -836,6 +892,13 @@ async def handle_message(msg: dict) -> None:
                 state.mark_discount_offered(talk_id)
                 log.info("talk=%s septico 5%% offer appended (hesitation) + locked", talk_id)
 
+        # Final supersession check before sending — catches cases where
+        # the customer sent another message AFTER the debounce sleep completed
+        # but BEFORE the LLM finished generating. Best practice: check at
+        # every major boundary, not just after sleep.
+        if msg_id and not state.is_latest_inbound(talk_id, msg_id):
+            log.info("talk=%s superseded before send — reply discarded", talk_id)
+            return
         if reply:
             await k.send_message(talk_id, reply)
 

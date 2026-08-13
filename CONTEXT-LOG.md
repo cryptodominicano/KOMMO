@@ -1641,3 +1641,145 @@ line — no repetition of audio content.
 - Daily conversation-review automation: not built
 - Legacy number +1 829-566-7542: wind-down pending
 - KOMMO repo README: still says "Claude LLM, not deployed" — fix when convenient
+
+---
+
+## Session 2026-08-13 — Conversation quality fixes, spam blocking, inbox management
+
+### Issues found from live conversation review (9 talks pulled via API)
+
+Reviewed all conversations from the morning of 2026-08-13 after owner paused ads.
+Found and fixed 7 distinct issues across talks 563, 565, 566, 567, 569, 570.
+
+### Fix 1 — LLM bypass after voice bots (audio/text contradiction)
+
+**Root cause:** AUDIO_ENVIADO injection into `extra_system` was too low priority.
+The KB content and main system prompt overrode it. LLM gave drilling prices in
+text even after VOZ_AGUA_2 audio said prices require the study first.
+
+**Fix:** When VOZ_AGUA_2-8 or VOZ_IMHOFF_2-3 fires, `agent.generate()` is now
+completely skipped. The hardcoded follow-up line from `_VOZ_FOLLOWUPS` is sent
+directly. Logged as `AUDIO_BYPASS: skipping LLM`. Zero chance of contradiction.
+
+**Also:** Drilling prices (RD$850, RD$1,300-1,500/pie) removed from
+`02-perforacion-pozos.md`. KB now consistently redirects to study-first.
+Re-ingested to Qdrant (48 points).
+
+### Fix 2 — Pre-send supersession check (triple replies on rapid messages)
+
+**Root cause:** Debounce only checked `is_latest_inbound` after the sleep.
+If a new message arrived while the LLM was generating, the reply still went out.
+
+**Fix:** Added a second `is_latest_inbound` check right before `send_message`.
+Rapid back-to-back messages now produce only one reply regardless of timing.
+Best practice: check for supersession at every major boundary.
+
+### Fix 3 — Spam/scope guard (Bible verse triggering full welcome flow)
+
+**Root cause:** Biblical pattern matching used "Mateo " with a trailing space,
+missing "Mateo 24:35" without space. Pattern-based approach is inherently fragile
+for content that changes daily.
+
+**Fix (partial):** Added broader pattern list to scope guard in worker.py.
+**Real fix:** Contact-level `BLOQUEADO` tag (see Fix 7). Pattern matching is
+the backup; the tag is the primary defense.
+
+### Fix 4 — Channel price guard for Instagram/Facebook
+
+**Root cause:** No audio fires on Instagram/Facebook (Meta API restriction).
+LLM filled the gap by volunteering drilling prices from the KB on those channels.
+
+**Fix:** Inject `CANAL_NO_WABA` directive into `extra_system` for all non-WhatsApp
+conversations. Instructs LLM: never give exact drilling prices, frame as
+study-first, max 3 lines.
+
+### Fix 5 — PREVIO_BYPASS: short responses after VOZ_AGUA_1
+
+**Root cause:** After VOZ_AGUA_1 fired, subsequent short messages ("No", "Gracia",
+"Asi no") triggered the full study explanation block including RD$45,000 price.
+The AUDIO_ENVIADO_PREVIO injection was too soft.
+
+**Fix:** Smart bypass on short/closed responses after VOZ_AGUA_1. Messages under
+30 chars or matching closed-response patterns get a hardcoded direct reply
+(no LLM). Negative signals → "Entiendo, no hay problema 😊..."; neutral/positive
+→ "¡De nada! 😊 Cuando guste mándeme la ubicación...". Logged as `PREVIO_BYPASS`.
+
+### Fix 6 — Brevity and repeated-question rules in system prompt
+
+**Added to system.md:**
+- REGLA DE BREVEDAD: 1-2 lines when audio covered topic, max 3 lines for new
+  questions. Never more than 3 lines regardless of complexity.
+- REGLA DE NO REPETIR SALUDO: if conversation history shows greeting was sent,
+  skip the welcome block on subsequent "Hola" messages.
+- REGLA DE PREGUNTA REPETIDA DESPUÉS DE AUDIO: reference the audio, offer to
+  clarify, redirect forward. Examples for each audio context.
+- EXCEPCIÓN: study explanation block skipped if AUDIO_ENVIADO in context.
+
+### Fix 7 — Contact/lead block system (BLOQUEADO tag)
+
+**Problem:** Spam contact +1 829-804-7618 sends daily Bible verses. No Meta-level
+block list exists for WhatsApp Cloud API (confirmed via Meta docs). Previous
+NO_REACTIVAR check only ran when `is_handed_off` was True.
+
+**Fix:** Block check moved to the very top of `handle_message`, before ANY
+processing. Checks both lead tags AND contact tags on every message.
+Two tags supported:
+- `NO_REACTIVAR` — existing tag, silence after human closes conversation
+- `BLOQUEADO` — new tag, outright ban. Apply to contact for permanent block
+  across all future leads from same phone number.
+
+Added `get_contact_tags()` to `kommo.py` — `GET /contacts/{id}` for contact-level
+tag lookup.
+
+**Spam contact blocked:** Contact #41676244 "Spam User" (+1 829-804-7618) tagged
+BLOQUEADO on both lead #18999878 (closed-lost) and the contact. Lead renamed
+"Spam User", company set to "Spam User" for identification.
+
+**Workflow for future spam contacts:**
+1. Open lead → `#ADD TAGS` → type `BLOQUEADO` → auto-saves
+2. Open contact → `#ADD TAGS` → type `BLOQUEADO` → auto-saves
+3. Rename contact "Spam User" for identification
+4. Move lead to Closed-lost: "Product does not fit need"
+
+### Fix 8 — Handoff summary note + lead name update
+
+**Handoff note:** Engine now posts an internal note on the lead card when
+`[[HANDOFF]]` fires: "🤖 Isla → Handoff / Canal: WABA / Motivo: [reason] /
+Talk: [id] / Contacto: [id] / Acción: revisar historial y dar seguimiento."
+Human sees context without reading full chat.
+
+**Lead name update:** When `[[SECTOR:Provincia|Pueblo]]` is captured, lead name
+automatically updates to "WhatsApp - [Pueblo], [Provincia]". Pipeline board
+is now self-describing without opening the card.
+
+### Meta/Kommo finding: no block list at WhatsApp API level
+
+WhatsApp Business Cloud API does NOT expose a business-side block list for
+inbound contacts. The deprecated On-Premises API had this; Cloud API does not.
+Meta Business Manager "Block Lists" are for ad placements only, not messaging.
+Block must be handled at the application layer (our BLOQUEADO tag).
+
+### Kommo pipeline board workflow established
+
+Team trained to use Pipeline board view (not inbox) for status visibility:
+- "Atención humana" column = needs human now
+- Lead name shows location ("WhatsApp - La Caleta, SD")
+- Handoff note on card = full context without reading chat
+- Sentiment labels: Settings → Kommo AI → enable (Kommo native, no code needed)
+
+### Infrastructure notes
+
+- infra-mcp drops under sustained load — `docker restart infra-mcp` resolves
+- All patches written to /app/data/*.py and run via `docker exec -i kommo-agent python3 < /app/data/file.py`
+- Always `docker commit kommo-agent kommo-agent:latest` before restart
+- Always sync to /tmp/K/ and push to GitHub after session
+
+### Open items updated
+
+- Wellington_Lider_Foto (85808): still needs image verified in Kommo UI
+- septico-fotos (55306): legacy — still needs audit
+- Daily conversation-review automation: still not built
+- Legacy number +1 829-566-7542: wind-down still pending
+- KOMMO repo README: still says "Claude LLM, not deployed"
+- VOZ_IMHOFF_1 may fire on generic greeting if séptico keywords present but
+  customer is actually water lead — monitor for false positives

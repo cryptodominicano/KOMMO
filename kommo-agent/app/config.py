@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # provider: "openai" (current) or "anthropic". Prompt is model-agnostic;
     # switching is a one-line change.
     llm_provider: str = "openai"
-    openai_model: str = "gpt-4o"
+    openai_model: str = "gpt-4.1"
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-4-5"
     llm_max_tokens: int = 1024
@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     # in git history and the LLM never sees it (injection cannot extract it).
     # Contains bank/type/number/holder only. The cédula stays image-only.
     bank_details_text: str = ""
+
+    def model_post_init(self, __context):
+        # Force model upgrade regardless of env var
+        if self.openai_model == "gpt-4o":
+            object.__setattr__(self, "openai_model", "gpt-4.1")
 
     @property
     def kommo_base(self) -> str:

@@ -10,6 +10,7 @@ import re
 import unicodedata
 import time
 from . import rag, agent, state, client as client_pack
+from . import haiku as haiku_pre
 from .kommo import KommoClient, KommoError
 from . import dr_geo
 from .transcribe import download_audio, transcribe, TranscriptionRejected
@@ -1043,6 +1044,35 @@ async def handle_message(msg: dict) -> None:
         if _direct_reply:
             reply = _direct_reply
         else:
+            # ── HAIKU PRE-PROCESSOR ──────────────────────────────────────────
+            # R1: extracts all intents, builds multi-intent coverage contract
+            # R2: detects adjacent_out_of_scope, injects redirect instruction
+            _flow_label = "septico" if _is_septico_flow else "agua"
+            _intents = await haiku_pre.classify(text, flow=_flow_label)
+            log.info("talk=%s haiku intents: %s", talk_id,
+                     [{"scope": i["scope"], "text": i["text"][:40]}
+                      for i in _intents])
+
+            # Multi-intent: build coverage contract for GPT-4.1
+            _multi_prompt = haiku_pre.build_multi_intent_prompt(_intents)
+            if _multi_prompt:
+                extra = (_multi_prompt + "\n\n" + extra).strip()
+                log.info("talk=%s multi-intent coverage injected", talk_id)
+
+            # Adjacent out-of-scope: inject one-turn redirect
+            if haiku_pre.has_adjacent_out_of_scope(_intents):
+                _adj = "; ".join(i["text"] for i in _intents
+                                 if i["scope"] == "adjacent_out_of_scope")
+                extra = (
+                    f"REDIRECT REQUERIDO: El cliente mencionó un tema adyacente "
+                    f"({_adj[:80]}) que NO es el servicio actual ({_flow_label}). "
+                    f"Reconoce en UNA línea y vuelve al flujo activo. "
+                    f"NO des información sobre el servicio adyacente."
+                    + ("\n\n" + extra if extra else "")
+                ).strip()
+                log.info("talk=%s adjacent redirect injected: %s",
+                         talk_id, _adj[:60])
+
             reply = await agent.generate(text, kb, history, extra)
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)

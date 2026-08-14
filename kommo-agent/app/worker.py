@@ -220,6 +220,20 @@ async def handle_message(msg: dict) -> None:
     _origin = (msg.get("origin") or "").lower()
     _is_waba = (_origin == "waba")
 
+    # Instagram COMMENT detection: comments start with @mention or the text
+    # contains a public post reply pattern. Kommo cannot send DMs in response
+    # to public comments — the send_message call returns 202 but Instagram
+    # rejects delivery. Best practice: skip all replies to comments.
+    _raw_first = (msg.get("text") or "").strip()
+    _is_instagram_comment = (
+        _origin == "instagram_business"
+        and _raw_first.startswith("@")
+    )
+    if _is_instagram_comment:
+        log.info("talk=%s msg=%s instagram comment — skipping reply "
+                 "(cannot DM in response to public comments)", talk_id, msg_id)
+        return
+
     if not talk_id:
         log.warning("no talk_id, skipping msg=%s", msg_id)
         return

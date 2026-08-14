@@ -1100,6 +1100,22 @@ async def handle_message(msg: dict) -> None:
                 state.mark_discount_offered(talk_id)
                 log.info("talk=%s septico 5%% offer appended (hesitation) + locked", talk_id)
 
+        # Post-generation phone number filter (belt-and-suspenders).
+        # Best practice 2026 (Meta AI incident, Infobip guidelines): AI agents
+        # must never share phone numbers in chat. Strip any pattern that looks
+        # like a phone number from the outgoing reply before sending.
+        # Covers Dominican (829/849/809), US (+1), and generic international.
+        if reply:
+            import re as _re
+            _phone_pattern = _re.compile(
+                r'(?:\+?1[-\s.]?)?(?:\(?\d{3}\)?[-\s.]?)?\d{3}[-\s.]?\d{4}\b'
+            )
+            _cleaned = _phone_pattern.sub("[número no disponible]", reply)
+            if _cleaned != reply:
+                log.warning("talk=%s PHONE_NUMBER_STRIPPED from reply — "
+                            "LLM attempted to share contact info", talk_id)
+                reply = _cleaned
+
         # Final supersession check before sending — catches cases where
         # the customer sent another message AFTER the debounce sleep completed
         # but BEFORE the LLM finished generating. Best practice: check at

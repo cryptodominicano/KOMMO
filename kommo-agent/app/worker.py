@@ -581,9 +581,23 @@ async def handle_message(msg: dict) -> None:
                 key = "media_received" if is_receipt else "media_received_generic"
                 log.info("talk=%s inbound media (%s) receipt=%s - ack + handoff",
                          talk_id, mtype, is_receipt)
+                # Media cooldown: when a customer sends multiple images
+                # simultaneously, each triggers a separate webhook. Without a
+                # cooldown the same ack message fires once per image.
+                # Best practice: one acknowledgment per burst, 30s cooldown.
+                if state.media_ack_on_cooldown(talk_id, cooldown_seconds=30):
+                    log.info("talk=%s media ack cooldown (30s) — skipping "
+                             "duplicate ack for %s", talk_id, mtype)
+                    return
+                # Record ack time for cooldown, then clear after 30s so
+                # future image bursts in the same conversation still get acked.
+                state.mark_voice_sent(talk_id, "media_ack")
                 await k.send_message(talk_id, client_pack.msg(key))
                 state.mark_handoff(talk_id, f"media_received:{mtype}")
                 await _signal_handoff(k, msg, talk_id, f"media_received:{mtype}")
+                # Schedule clear of media_ack cooldown after 30s
+                asyncio.get_event_loop().call_later(
+                    30, state.clear_media_ack, talk_id)
                 return
 
         if not text:

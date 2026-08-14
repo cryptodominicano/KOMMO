@@ -302,6 +302,30 @@ def discount_offered(talk_id: str) -> bool:
                          (str(talk_id),)).fetchone() is not None
 
 
+def media_ack_on_cooldown(talk_id: str, cooldown_seconds: int = 30) -> bool:
+    """True if a media acknowledgment was sent within cooldown_seconds.
+    Prevents duplicate acks when customer sends multiple images simultaneously.
+    Unlike voice_sent, this is time-based and expires after cooldown_seconds."""
+    import time as _t
+    with _conn() as c:
+        row = c.execute(
+            "SELECT at FROM voice_sent WHERE talk_id=? AND bot_key=?",
+            (str(talk_id), "media_ack")
+        ).fetchone()
+        if not row:
+            return False
+        return (_t.time() - row[0]) < cooldown_seconds
+
+
+def clear_media_ack(talk_id: str) -> None:
+    """Clear the media ack cooldown so subsequent image bursts can be acked."""
+    with _conn() as c:
+        c.execute(
+            "DELETE FROM voice_sent WHERE talk_id=? AND bot_key=?",
+            (str(talk_id), "media_ack")
+        )
+
+
 def voice_already_sent(talk_id: str, bot_key: str) -> bool:
     """True if this voice note was already fired in this conversation."""
     with _conn() as c:

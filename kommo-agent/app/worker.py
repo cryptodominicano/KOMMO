@@ -433,6 +433,7 @@ async def handle_message(msg: dict) -> None:
             _locked_flow = _detected_flow
             log.info("talk=%s flow locked: %s (keyword_first=%s)",
                      talk_id, _locked_flow, _is_septico_first_msg)
+            state.advance_stage(talk_id, "greeting")
         _is_septico_flow = (_locked_flow == "septico")
         # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
         # straight into the agua flow (no 3-option menu / welcome infographic).
@@ -1048,6 +1049,12 @@ async def handle_message(msg: dict) -> None:
             # R1: extracts all intents, builds multi-intent coverage contract
             # R2: detects adjacent_out_of_scope, injects redirect instruction
             _flow_label = "septico" if _is_septico_flow else "agua"
+            _current_stage = state.get_stage(talk_id)
+            _stage_inj = (
+                f"ESTADO ACTUAL: flujo={_flow_label}, etapa={_current_stage}. "
+                f"Avanza hacia la siguiente etapa en la conversación."
+            )
+            extra = (_stage_inj + "\n\n" + extra).strip() if extra else _stage_inj
             _intents = await haiku_pre.classify(text, flow=_flow_label)
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
@@ -1278,6 +1285,13 @@ async def handle_message(msg: dict) -> None:
         # If a voice bot already fired this turn (_voz_fired is set) AND there
         # are also image/sentinel bots queued, add an inter-system pause so the
         # voice note lands before the image arrives.
+        # Stage tracking: deposit bot fired = deposit_requested
+        if fire:
+            _dep_bot = int(client_pack.salesbot("deposit_bot_id") or 0)
+            if _dep_bot and _dep_bot in fire:
+                _old_stg = state.get_stage(talk_id)
+                state.advance_stage(talk_id, "deposit_requested")
+                state.log_stage_transition(talk_id, _old_stg, "deposit_requested")
         if fire and _voz_fired:
             _vs_delay = random.uniform(3.0, 4.0)
             log.info("talk=%s voice+image multi-intent: %.1fs pause before "
@@ -1306,9 +1320,13 @@ async def handle_message(msg: dict) -> None:
                           talk_id, bot_id, e)
 
         if handoff:
+            _old_stg3 = state.get_stage(talk_id)
+            state.advance_stage(talk_id, "handoff")
+            state.log_stage_transition(talk_id, _old_stg3, "handoff")
             state.mark_handoff(talk_id, "agent_requested")
             await _signal_handoff(k, msg, talk_id, "agent_requested")
-            log.info("talk=%s handed off by agent", talk_id)
+            log.info("talk=%s handed off by agent (stage: %s → handoff)",
+                     talk_id, _old_stg3)
 
         # One-time "still there?" follow-up: arm only when we answered and are now
         # waiting on the customer. Skip on handoff (a human is handling it), on the

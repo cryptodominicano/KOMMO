@@ -56,7 +56,17 @@ def init() -> None:
                   "talk_id TEXT, bot_key TEXT, at REAL, "
                   "PRIMARY KEY (talk_id, bot_key))")
         c.execute("CREATE TABLE IF NOT EXISTS flow_state ("
-                  "talk_id TEXT PRIMARY KEY, flow TEXT, at REAL)")
+                  "talk_id TEXT PRIMARY KEY, flow TEXT, stage TEXT, "
+                  "stage_at REAL, at REAL)")
+        # Migrate: add stage column if it doesn't exist yet
+        try:
+            c.execute("ALTER TABLE flow_state ADD COLUMN stage TEXT")
+        except Exception:
+            pass  # column already exists
+        try:
+            c.execute("ALTER TABLE flow_state ADD COLUMN stage_at REAL")
+        except Exception:
+            pass
         c.execute("CREATE TABLE IF NOT EXISTS flow_confirmed ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
 
@@ -375,6 +385,59 @@ def set_flow(talk_id: str, flow: str) -> None:
         c.execute(
             "INSERT OR IGNORE INTO flow_state (talk_id, flow, at) VALUES (?, ?, ?)",
             (str(talk_id), flow, _t.time()))
+
+
+# Qualification stages (in order):
+# greeting → need_identified → location_captured →
+# price_presented → deposit_requested → deposit_confirmed → won | handoff
+STAGES = [
+    "greeting",
+    "need_identified",
+    "location_captured",
+    "price_presented",
+    "deposit_requested",
+    "deposit_confirmed",
+    "won",
+    "handoff",
+]
+
+
+def get_stage(talk_id: str) -> str:
+    """Return current qualification stage, default 'greeting'."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT stage FROM flow_state WHERE talk_id=?",
+            (str(talk_id),)).fetchone()
+        return (row[0] or "greeting") if row else "greeting"
+
+
+def advance_stage(talk_id: str, stage: str) -> None:
+    """Advance the qualification stage. Only moves forward, never backward."""
+    import time as _t
+    if stage not in STAGES:
+        return
+    current = get_stage(talk_id)
+    current_idx = STAGES.index(current) if current in STAGES else 0
+    new_idx = STAGES.index(stage)
+    if new_idx <= current_idx:
+        return  # never go backward
+    with _conn() as c:
+        c.execute(
+            "UPDATE flow_state SET stage=?, stage_at=? WHERE talk_id=?",
+            (stage, _t.time(), str(talk_id)))
+        if c.rowcount == 0:
+            # No row yet — insert with stage
+            c.execute(
+                "INSERT OR IGNORE INTO flow_state "
+                "(talk_id, flow, stage, stage_at, at) VALUES (?, ?, ?, ?, ?)",
+                (str(talk_id), "agua", stage, _t.time(), _t.time()))
+
+
+def log_stage_transition(talk_id: str, old_stage: str, new_stage: str) -> None:
+    """Log stage transitions for trajectory monitoring and drift detection."""
+    import logging as _log
+    _log.getLogger("state").info(
+        "talk=%s qualification: %s → %s", talk_id, old_stage, new_stage)
 
 
 def is_flow_confirmed(talk_id: str) -> bool:

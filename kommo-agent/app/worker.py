@@ -916,10 +916,11 @@ async def handle_message(msg: dict) -> None:
         # Check both flows — if either welcome audio was already sent,
         # apply PREVIO_BYPASS. Fixes double menu on séptico conversations
         # where VOZ_IMHOFF_1 fired instead of VOZ_AGUA_1.
-        _welcome_audio_sent = (
-            state.voice_already_sent(talk_id, 'VOZ_AGUA_1') or
-            state.voice_already_sent(talk_id, '[[VOZ_IMHOFF_1]]')
-        )
+        # any_voice_sent: True if ANY voice note fired this conversation.
+        # Broader than checking VOZ_AGUA_1/IMHOFF_1 only — covers cases
+        # where a different audio fired first (VOZ_AGUA_3, VOZ_AGUA_6 etc)
+        # and the study explanation should still be suppressed.
+        _welcome_audio_sent = state.any_voice_sent(talk_id)
         if not _voz_fired and _welcome_audio_sent:
             _tna_previo = _deaccent(text)
             # Short/closed responses after VOZ_AGUA_1: bypass LLM entirely.

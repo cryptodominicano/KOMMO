@@ -326,6 +326,18 @@ def clear_media_ack(talk_id: str) -> None:
         )
 
 
+def any_voice_sent(talk_id: str) -> bool:
+    """True if ANY voice note has been sent in this conversation.
+    Used to suppress the study explanation block when audio already
+    covered the content — regardless of which specific audio fired."""
+    with _conn() as c:
+        return c.execute(
+            "SELECT 1 FROM voice_sent WHERE talk_id=? "
+            "AND bot_key NOT IN (?, ?) LIMIT 1",
+            (str(talk_id), "media_ack", "_placeholder")
+        ).fetchone() is not None
+
+
 def voice_already_sent(talk_id: str, bot_key: str) -> bool:
     """True if this voice note was already fired in this conversation."""
     with _conn() as c:

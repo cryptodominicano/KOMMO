@@ -899,7 +899,14 @@ async def handle_message(msg: dict) -> None:
         # a signal so the LLM skips the study explanation and greeting blocks.
         # This prevents the full study pitch repeating when the client sends a
         # second 'Hola' or when the location is captured after the welcome audio.
-        if not _voz_fired and state.voice_already_sent(talk_id, 'VOZ_AGUA_1'):
+        # Check both flows — if either welcome audio was already sent,
+        # apply PREVIO_BYPASS. Fixes double menu on séptico conversations
+        # where VOZ_IMHOFF_1 fired instead of VOZ_AGUA_1.
+        _welcome_audio_sent = (
+            state.voice_already_sent(talk_id, 'VOZ_AGUA_1') or
+            state.voice_already_sent(talk_id, '[[VOZ_IMHOFF_1]]')
+        )
+        if not _voz_fired and _welcome_audio_sent:
             _tna_previo = _deaccent(text)
             # Short/closed responses after VOZ_AGUA_1: bypass LLM entirely.
             # These are messages where the LLM would otherwise repeat the study.

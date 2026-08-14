@@ -287,6 +287,13 @@ async def handle_message(msg: dict) -> None:
     except Exception:
         _already_greeted = False
 
+    # Exact match for Facebook/Meta system button payloads
+    _META_SYSTEM_MSGS = ["get started", "send message", "send_message"]
+    if _raw_text.lower().strip() in _META_SYSTEM_MSGS:
+        log.info("talk=%s msg=%s scope-rejected (Meta system button: %r)",
+                 talk_id, msg_id, _raw_text)
+        return
+
     if not _already_greeted and _is_new_talk and len(_raw_text) > 30:
         # Business-intent signals — ANY of these means process normally
         _BUSINESS_KEYWORDS = [

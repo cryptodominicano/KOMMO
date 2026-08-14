@@ -954,9 +954,21 @@ async def handle_message(msg: dict) -> None:
                 "okay", "bueno", "entendido", "claro", "perfecto", "bien",
                 "no gracias", "no me interesa", "lo voy a pensar", "despues"
             ]
+            # Best practice 2026 (Botpress, Infobip): never bypass the LLM
+            # for messages containing a question mark — those are genuine
+            # queries that deserve a real answer. Also never bypass for
+            # transcribed voice notes (mtype in audio_types) — the customer
+            # is actively speaking, not giving a closed one-word response.
+            _is_genuine_question = (
+                "?" in text or
+                mtype in audio_types
+            )
             _is_short_closed = (
-                len(text) < 30 or
-                any(r in _tna_previo for r in _CLOSED_RESPONSES)
+                not _is_genuine_question and
+                (
+                    len(text) < 30 or
+                    any(r in _tna_previo for r in _CLOSED_RESPONSES)
+                )
             )
             if _is_short_closed:
                 # Determine appropriate short reply based on sentiment

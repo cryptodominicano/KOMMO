@@ -1139,6 +1139,16 @@ async def handle_message(msg: dict) -> None:
             return
         if reply:
             await k.send_message(talk_id, reply)
+            # Non-WhatsApp delivery warning: Kommo returns 202 Accepted but
+            # Instagram/Facebook may silently fail (expired OAuth token, comment
+            # vs DM mismatch, 24h window). Per Kommo docs: if delivery errors
+            # persist, re-authorize the integration in Settings → Integrations.
+            if not _is_waba and is_first:
+                log.info(
+                    "talk=%s non-WhatsApp first contact (%s) — "
+                    "verify Kommo integration auth if delivery errors appear",
+                    talk_id, _origin
+                )
 
         # We just asked for the terrain location/linderos -> the next inbound
         # image is the customer's marked map, so arm the linderos-map path.

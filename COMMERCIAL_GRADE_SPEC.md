@@ -487,3 +487,51 @@ Lead with core intent in first 3-5 seconds.
 Always pair with text CTA (accessibility + skimmability).
 Any note over 60s must be re-recorded before production.
 Rule for all future client builds: audit ALL voice notes at build time.
+
+---
+
+## 11. v3.0 Implementation Status (Completed August 14, 2026)
+
+All 7 planned upgrades deployed. Commit c6e200f on cryptodominicano/KOMMO main.
+
+### P1 — GPT-4.1 ✅
+config.py model_post_init forces gpt-4.1 regardless of env var.
+Verified live. 20/20 core eval pass.
+
+### P2 — Haiku pre-processor ✅
+app/haiku.py — gpt-4o-mini, temperature 0, XML output.
+DR slang glossary embedded. Multi-intent + adjacent scope wired.
+11/11 classifier tests. Fail-open on error.
+
+### P3 — System prompt GPT-4.1 spec ✅
+144 lines, 8 priority rules, written in Spanish.
+Sandwich structure (rules at top + bottom). One worked example.
+20/20 core eval + 15/15 Spanish multi-intent eval pass.
+
+### P4 — Qualification FSM stages ✅
+greeting → need_identified → location → price → deposit_requested
+→ deposit_confirmed → won | handoff
+Stage injected into every LLM call. Transitions logged.
+
+### P5 — Oct 1 cost model ✅
+$3.89/mo at current volume (278 replies/month).
+Low risk. Re-assess when ads scale to 500+ talks/month.
+DR rate: $0.014/msg (Rest of LatAm, confirmed).
+Kommo: no per-message markup.
+
+### P6 — Voice note audit ✅ (action pending with Wellington)
+API doesn't expose durations. Manual check required in Kommo UI.
+Target: 20-40s. Hard cap: 60s. VOZ_AGUA_1 (2 min) = priority re-record.
+
+### P7 — Spanish multi-intent eval suite ✅
+15/15 pass. File: kommo-agent/scripts/eval_spanish_multi_final.py
+Covers 2Q, 3Q, and DR slang scenarios. Run before every prompt change.
+
+### Eval totals (v3.0)
+Core 20-test: 20/20 | Spanish multi: 15/15 | Haiku classifier: 11/11
+Total: 46/46
+
+### For future client builds
+The v3.0 architecture is the commercial-grade standard:
+GPT-4.1 + Haiku pre-processor + FSM stages + OpenAI GPT-4.1 prompt spec
++ eval suite before every change. See sections 4-7 for implementation rules.

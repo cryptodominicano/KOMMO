@@ -531,6 +531,18 @@ async def handle_message(msg: dict) -> None:
         if mtype in location_types or maps_link:
             log.info("talk=%s location received (%s)", talk_id,
                      "maps-link" if maps_link else "pin")
+            # Linderos flow is agua-only. In séptico conversations a location
+            # pin means delivery address — acknowledge and hand off to the team.
+            if _is_septico_flow:
+                log.info("talk=%s location in séptico flow — ack + handoff",
+                         talk_id)
+                await k.send_message(
+                    talk_id,
+                    "¡Gracias! 🙏 Recibimos tu ubicación. Un representante "
+                    "se comunicará contigo para coordinar la entrega.")
+                state.mark_handoff(talk_id, "location_septico")
+                await _signal_handoff(k, msg, talk_id, "location_septico")
+                return
             entity_id = msg.get("entity_id") or msg.get("element_id")
             first = state.linderos_first(talk_id) if entity_id else False
             if entity_id and settings.public_base_url and first:

@@ -2049,3 +2049,131 @@ P7 — Spanish multi-intent eval suite (MEDIUM)
 - Voice note length audit: check all 12 bot durations
 - Oct 1 cost model: build before September 15
 - GPT-4.1 Spanish compliance data: research before model upgrade
+
+---
+
+## Session 2026-08-14 (Part 3) — Research gap closure, v3.0 complete specification
+
+### Research document 6: 4 research gaps answered
+
+**Gap 1 — GPT-4.1 Spanish instruction-following (CLEARED)**
+Spanish is one of OpenAI's strongest non-English languages. GPT-4o Multi-IF:
+Spanish 0.876 vs English 0.874 at turn 1 — Spanish marginally higher.
+M-IFEval: GPT-4o Spanish 89.8 vs English 88.6 — Spanish +1.2 points.
+Languages that actually collapse: non-Latin scripts (Japanese -18.2 vs English).
+Real risk: multi-turn instruction forgetting (all languages, all models).
+GPT-4.1 scores 10.5% better than GPT-4o on multi-turn benchmarks (MultiChallenge).
+Decision: upgrade to GPT-4.1 is safe to proceed. Write system prompt in Spanish.
+Re-inject critical rules every 6-8 turns on long conversations.
+
+**Gap 2 — Claude Haiku 4.5 Spanish/DR classifier (CLEARED)**
+Haiku 4.5: $1/$5 per million tokens, purpose-built for classification/routing.
+Structure: temperature 0, XML tags (<razonamiento>, <categoria>), prompt caching
+for taxonomy + few-shot examples, stop sequence on closing tag.
+DR vocabulary for cached glossary:
+  "ta to" / "tá to" → greeting/confirmation
+  "¿a cómo?" / "cuánto cuesta" → price question
+  "dímelo" / "¿qué lo que?" → greeting
+  "esa vaina no sirve" → complaint
+  "un chin" → a little
+  "jevi" → cool/OK
+  "dique" → allegedly/supposedly
+  "vaina" → thing/situation (neutral to negative)
+  "por fa" → please
+  "tíguere" → street-smart guy (tone-dependent)
+Escalate only adjacent_out_of_scope and complaints to GPT-4.1.
+Simple greetings and in_scope questions: Haiku handles directly (cost savings).
+
+**Gap 3 — WhatsApp pricing for DR (CLEARED with numbers)**
+DR bills at "Rest of Latin America" rates despite +1 country code.
+Meta confirmed: 809/829/849 explicitly listed under Rest of Latin America.
+Rates: Marketing $0.086/msg, Utility $0.014/msg, Auth $0.014/msg,
+       Service FREE until October 1, 2026.
+Cost model at 1,000 conversations/month, 80% customer-initiated:
+  800 service conversations (customer-initiated) → $0.00
+  150 marketing templates × $0.086 → $12.90
+  50 utility outside window × $0.014 → $0.70
+  Total Meta fees → ~$13.60/month
+Kommo charges NO per-message markup (confirmed from kommo.com/buy/tariff).
+After October 1, 2026: add $0.014 per service reply to above model.
+At 500 avg replies per service conversation × 800 conversations = 400,000
+service replies × $0.014 = $5,600/month post-Oct-1. THIS IS THE REAL RISK.
+Action: implement reply minimization strategy before Oct 1. Every unnecessary
+reply costs money. This reinforces the audio-first, LLM bypass approach.
+
+**Gap 4 — Voice note length (CLEARED)**
+Target: 20-40 seconds per note. Hard cap: 60 seconds.
+Break longer content into 2-3 sequential notes (one idea per note).
+Lead with core intent in first 3-5 seconds.
+Always pair with short text CTA (accessibility + skimmability).
+VOZ_AGUA_1 at 2 minutes MUST be replaced with 2-3 notes of 30-40s each.
+All 12 bots need length audit. Anything over 60s needs re-recording.
+
+### v3.0 Complete Implementation Plan (final, all research incorporated)
+
+**P1 — Model upgrade: gpt-4o → gpt-4.1 (HIGH, proceed now)**
+Evidence: 10.5% better multi-turn, 5x rule budget, linear decay.
+Spanish confirmed safe (marginally better than English on benchmarks).
+Action: change model string in agent.py. Run 20-case eval suite before/after.
+
+**P2 — Haiku 4.5 pre-processor (HIGH)**
+Single call before GPT-4.1 that does:
+  1. Extract intents as JSON array (fixes multi-intent drop)
+  2. Classify each intent: in_scope_agua | in_scope_septico |
+     qualification_answer | adjacent_out_of_scope | fully_off_topic | greeting
+  3. DR vocabulary glossary in cached prompt block
+Output: {"intents": [{"id": 1, "text": "...", "scope": "..."}]}
+GPT-4.1 receives: "Debes responder TODAS estas preguntas: 1. ... 2. ..."
+adjacent_out_of_scope: one-turn acknowledge-and-redirect, FSM unchanged
+Simple greetings: Haiku replies directly, never calls GPT-4.1
+Cost: ~$0.001 per message at Haiku rates (negligible)
+Latency: ~300-700ms added (acceptable for WhatsApp)
+
+**P3 — System prompt restructure for GPT-4.1 (MEDIUM)**
+Write prompt IN SPANISH (not about Spanish — in Spanish).
+Use OpenAI Markdown structure:
+  # Rol y Objetivo
+  # Reglas Prioritarias (numbered, ranked, positive framing)
+  # Pasos (agua flow + séptico flow)
+  # Formato de Salida
+  # Ejemplos (ONE example showing ALL rules)
+  # Recordatorio Final (top 3 non-negotiables repeated verbatim)
+Max 20-40 hard rules. Rules at top AND bottom (sandwich).
+Re-inject scope/tone rules if conversation exceeds 6-8 turns.
+
+**P4 — Qualification FSM stages (MEDIUM)**
+Extend flow_state to full qualification stages:
+  greeting → need_identified → location_captured →
+  price_presented → deposit_requested → deposit_confirmed → won | handoff
+Inject current_stage into every LLM call.
+Log stage transitions for trajectory monitoring.
+
+**P5 — Oct 1 cost model + reply minimization (URGENT)**
+Build spreadsheet with current reply volume × $0.014.
+Strategies to minimize unnecessary replies:
+  - Widen PREVIO_BYPASS threshold
+  - Haiku handles simple greetings directly (no GPT-4.1 call)
+  - Debounce window expansion for rapid messages
+  - Auto-close conversations after confirmed handoff
+Present cost model to Wellington before September 15, 2026.
+
+**P6 — Voice note length audit + re-recording (HIGH)**
+Check all 12 bot durations. Request Wellington re-record anything over 60s.
+VOZ_AGUA_1 (2 min) → 3 notes: intro+success rate | cost | next step
+Each 30-40 seconds, one idea each.
+
+**P7 — Spanish multi-intent eval suite (MEDIUM)**
+15 test cases: 5 with 2 questions, 5 with 3 questions, 5 with DR slang.
+Include adversarial: "ta to" as answer, "¿a cómo?" for price,
+"dímelo" as greeting, repeated scope pushes.
+
+### Open items (final list)
+- Wellington_Lider_Foto (85808): verify image in Kommo UI
+- IMHOFF lifespan: ask Wellington → add to KB → re-ingest
+- Facebook/Instagram OAuth: re-authorize if delivery errors persist
+- Legacy +1 829-566-7542: wind-down pending
+- Voice note audit: check all 12 durations, re-record >60s
+- Oct 1 cost model: build before September 15
+- GPT-4.1 upgrade: next session priority #1
+- Haiku pre-processor: next session priority #2
+- System prompt restructure (Spanish, GPT-4.1 format): after Haiku

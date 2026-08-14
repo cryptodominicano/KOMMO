@@ -443,3 +443,47 @@ exceed 60 seconds. VOZ_AGUA_1 at 2 minutes is the highest priority.
   docker exec -i kommo-agent python3 < /app/data/patch.py
 - All changes commit to cryptodominicano/KOMMO and push to main after session
 - Update CONTEXT-LOG.md with dated session entry at end of every session
+
+---
+
+## 10. Research Gap Closure (Document 6, August 14, 2026)
+
+### Gap 1 — Spanish instruction-following confirmed safe for GPT-4.1
+Spanish is one of OpenAI's strongest non-English languages (Multi-IF, M-IFEval).
+GPT-4o Spanish 89.8 vs English 88.6 on strict instruction-following.
+Languages that collapse: non-Latin scripts only (Japanese -18.2 vs English).
+GPT-4.1 scores 10.5% better than GPT-4o on multi-turn benchmarks.
+Rule: write the system prompt IN Spanish, not in English about Spanish.
+Re-inject critical rules every 6-8 turns on long conversations.
+
+### Gap 2 — Haiku 4.5 classifier: confirmed architecture and DR vocabulary
+Temperature 0, XML tags (<razonamiento>, <categoria>), prompt caching.
+Cache: category taxonomy + 5-10 few-shot examples + DR slang glossary.
+DR slang glossary (required in every DR deployment):
+  "ta to"/"tá to" → greeting/confirmation (NOT complaint)
+  "¿a cómo?"/"en cuánto" → price question
+  "dímelo"/"¿qué lo que?" → greeting
+  "esa vaina no sirve" → complaint
+  "un chin" → a little bit
+  "jevi" → cool/OK
+  "dique" → allegedly/supposedly
+  "por fa" → please
+  "tíguere" → tone-dependent (compliment or insult)
+Simple greetings: Haiku replies directly, skip main model call.
+Adjacent out-of-scope: Haiku flags, main model does one-turn redirect.
+
+### Gap 3 — DR pricing confirmed (Rest of Latin America rates)
+DR bills at Rest of Latin America despite +1 country code.
+Marketing: $0.086/msg | Utility: $0.014/msg | Service: FREE until Oct 1, 2026
+Kommo: NO per-message markup (confirmed from official pricing page).
+Post-Oct-1 cost model: service replies × $0.014 each.
+CRITICAL: high-volume agents can see significant post-Oct-1 cost increases.
+Minimize unnecessary replies BEFORE Oct 1. Haiku direct handling of simple
+messages reduces main model calls and reply volume simultaneously.
+
+### Gap 4 — Voice note length: 20-40s target, 60s hard cap
+Break content into 2-3 sequential notes (one idea per note).
+Lead with core intent in first 3-5 seconds.
+Always pair with text CTA (accessibility + skimmability).
+Any note over 60s must be re-recorded before production.
+Rule for all future client builds: audit ALL voice notes at build time.

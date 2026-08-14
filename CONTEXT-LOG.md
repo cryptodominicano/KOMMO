@@ -1925,3 +1925,127 @@ any_voice_sent(): suppresses study explanation when any audio has played.
 - Daily conversation-review automation: not built yet
 - Away message schedule in Meta Business Suite: currently Available all week,
   needs schedule set or manual status toggle when closing for the day
+
+---
+
+## Session 2026-08-14 (Part 2) — Research synthesis, v3.0 specification, final fixes
+
+### Research documents synthesized (all 5)
+
+**R1 — Multi-Intent Handling (University of Tokyo + production platforms)**
+Intent drop is mathematical: (success rate)^n. At n=2, even 90% rate = 81%.
+Production fix: Haiku extracts intents as JSON array → main model answers ALL.
+Coverage validator: cheap Haiku check after main model, triggers regeneration.
+Spanish degrades faster than English — need Spanish-specific eval suite.
+
+**R2 — Flow Locking & Context Drift (Laban et al., Netflix, Liu et al.)**
+RLHF makes models answer whatever is asked. Water is semantically adjacent
+to séptico — model treats it as in-domain, not a scope violation. Once drift
+starts, 39% avg performance drop, 112% unreliability increase, no recovery.
+Production fix: FSM in FastAPI owns state. Haiku scope-classifier labels each
+intent as qualification_answer / in_scope / adjacent_out_of_scope / fully_off_topic.
+adjacent_out_of_scope does NOT change FSM state — one-turn redirect only.
+
+**R3 — GPT-4o Prompt Compliance (IFScale benchmark, OpenAI GPT-4.1 guide)**
+GPT-4o exponential decay: 94%@10 rules → 83%@50 → 49%@100 → 15%@500.
+GPT-4.1 linear decay: ~5x the safe rule budget. Upgrade from GPT-4o is
+research-backed. Old 222-line prompt was at ~49% compliance. New 169-line
+prompt better but still not per OpenAI spec. What makes rules stick:
+Markdown headers, rules at top AND bottom, numbered/ranked, positive framing,
+one worked example, json_schema for output format.
+
+**R4 — WhatsApp DR/Caribbean 2026 (Meta docs, DataReportal)**
+CRITICAL: October 1, 2026 service messages become billable. Currently free.
+Build cost model before September 15. CTWA 72h free window still applies.
+Quality rating is portfolio-level since Oct 2025 — one client's red rating
+affects all Gold Coast numbers. Meta AI ban: task-specific bots permitted.
+Ice Breakers: max 4, max 80 chars, NO emojis per Meta spec.
+
+**R5 — Audio-First LatAm (Meta CEO, Opinion Box, Nature Scientific Reports)**
+No controlled A/B test proves voice converts better — vendor claims only.
+Voice advantage is psychological: trust/warmth at high-friction moments.
+Human voice correct. AI voice trust collapses when detected as synthetic.
+Sweet spot: 10-30 seconds. VOZ_AGUA_1 at 2 minutes is 4x the maximum.
+Architecture confirmed correct: audio-first, text-forward.
+
+### Additional fixes this session
+
+**Linderos self-hosted app removed.**
+Customer sends GPS pin → agent sends location_received message (team will
+send satellite photo, customer marks with WhatsApp pencil) → [[HANDOFF]].
+Self-hosted app at /linderos endpoint still exists but no longer fires.
+Real-world flow: talk 592 (Alex, Punta Cana) showed GPS pin in séptico
+conversation was routing to linderos flow. Fixed: séptico GPS = delivery
+handoff, agua GPS = WhatsApp-native satellite photo flow.
+
+**PREVIO_BYPASS fix: voice notes and ? messages always go to LLM.**
+Talk 592: Alex sent two voice notes asking "¿cuántos años aguanta?" and
+"¿por qué tiempo duraría?" — PREVIO_BYPASS treated them as short/closed
+responses. Now _is_genuine_question=True for voice notes and messages with
+"?". These always bypass the bypass and go to LLM for real answers.
+
+**Unknown answer rule added to system prompt.**
+When KB has no answer (lifespan, warranty, tech specs): honest admission +
+[[HANDOFF]] so human closes the sale. Per Botpress/Infobip/Meta 2026:
+a chatbot that gives a confident wrong answer loses more trust than one
+that admits it doesn't know.
+
+**System prompt rewritten (222 lines → 169 lines).**
+Audio-first architecture. LLM does two things: answer KB questions, advance
+to next step. All flow detection removed (engine handles). All audio content
+listed as reference (never repeated). Brevity: 2 lines max, always one question.
+20 test cases passing on GPT-4o.
+
+**4 prompt test failures fixed (20/20 now pass).**
+T1 — Generic greeting: SALUDO GENERICO section with exact menu text.
+T5 — GPS in séptico: UBICACION GPS rule, delivery + [[HANDOFF]].
+T10 — Multi-intent: MULTI-INTENT section, answer both, use markers.
+T20 — Flow lock: NO CAMBIES DE FLUJO rule, stay in séptico always.
+
+### Commercial-grade specification documented
+
+Full build spec written to COMMERCIAL_GRADE_SPEC.md and pushed to git.
+Covers: architecture overview, all 5 research findings, what's built in v2.0,
+planned upgrades for v3.0, rules for every future client build, infrastructure
+reference, critical rules. This is the master reference for all future clients.
+
+### Planned upgrades (v3.0, research-backed)
+
+P1 — Model: GPT-4o → GPT-4.1 (HIGH)
+    5x rule budget, linear vs exponential decay. Change model string in agent.py.
+    Prerequisite: confirm GPT-4.1 Spanish instruction-following data.
+
+P2 — Haiku pre-processor (HIGH)
+    Single Haiku call: extract intents as JSON + classify scope.
+    Fixes Test 10 (multi-intent) and Test 20 (context drift) architecturally.
+    Adds ~300-700ms latency — acceptable for WhatsApp rhythm.
+
+P3 — System prompt restructure for GPT-4.1 (MEDIUM)
+    OpenAI spec: Role/Priority Rules/Steps/Output Format/Examples/Final Reminder.
+    Rules at top AND bottom. One worked example. json_schema for output.
+
+P4 — Qualification FSM stages (MEDIUM)
+    Extend flow_state beyond agua/séptico to full qualification stages:
+    greeting → need_discovery → location → price → deposit → won/handoff.
+
+P5 — October 1 cost model (URGENT — 47 days)
+    Service messages become billable Oct 1. Pull Meta/Kommo rate card.
+    Build cost model for Aguas Profundas. Present to Wellington before Oct 1.
+
+P6 — Voice note length audit (LOW)
+    VOZ_AGUA_1 is 2 minutes — 4x the 10-30s recommended maximum.
+    Audit all 12 bots. Ask Wellington for shorter recordings if >60s.
+
+P7 — Spanish multi-intent eval suite (MEDIUM)
+    Add 10-15 Spanish test cases with 2, 3, and 4 simultaneous questions.
+    Run before every prompt or model change.
+
+### Open items (carried forward)
+
+- Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+- IMHOFF plant lifespan: ask Wellington → add to KB → re-ingest
+- Kommo Facebook/Instagram OAuth: re-authorize if delivery errors persist
+- Legacy number +1 829-566-7542: wind-down pending
+- Voice note length audit: check all 12 bot durations
+- Oct 1 cost model: build before September 15
+- GPT-4.1 Spanish compliance data: research before model upgrade

@@ -543,21 +543,13 @@ async def handle_message(msg: dict) -> None:
                 state.mark_handoff(talk_id, "location_septico")
                 await _signal_handoff(k, msg, talk_id, "location_septico")
                 return
-            entity_id = msg.get("entity_id") or msg.get("element_id")
-            first = state.linderos_first(talk_id) if entity_id else False
-            if entity_id and settings.public_base_url and first:
-                # First pin: send the drawing link.
-                link = linderos.build_link(entity_id, talk_id, settings.client_id)
-                await k.send_message(
-                    talk_id, client_pack.msg("linderos_invite") + "\n\n" + link)
-                state.set_awaiting_linderos(talk_id)
-            else:
-                # BACKUP PATH: a second pin (the drawing tool did not work) or no
-                # link possible. Acknowledge the pin and hand off - a técnico marks
-                # the linderos manually and already has the customer's GPS location.
-                await k.send_message(talk_id, client_pack.msg("linderos_fallback"))
-                state.mark_handoff(talk_id, "linderos_fallback")
-                await _signal_handoff(k, msg, talk_id, "linderos_fallback")
+            # WhatsApp-native linderos flow (self-hosted app removed).
+            # Send location_received message: team will send satellite photo,
+            # customer marks boundaries with WhatsApp pencil and sends back.
+            # Handoff so team knows to send the satellite photo.
+            await k.send_message(talk_id, client_pack.msg("location_received"))
+            state.mark_handoff(talk_id, "location_received")
+            await _signal_handoff(k, msg, talk_id, "location_received")
             return
 
         # --- Voice note: download -> transcribe -> treat as text ---

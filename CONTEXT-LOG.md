@@ -1783,3 +1783,145 @@ Team trained to use Pipeline board view (not inbox) for status visibility:
 - KOMMO repo README: still says "Claude LLM, not deployed"
 - VOZ_IMHOFF_1 may fire on generic greeting if séptico keywords present but
   customer is actually water lead — monitor for false positives
+
+---
+
+## Session 2026-08-14 — Conversation audit, 15 fixes, Meta Business Suite setup
+
+### Conversations audited
+19 talks pulled via API from 6AM-6PM. Systematic review of every error,
+long reply, duplicate, wrong flow, and delivery failure.
+
+### Fix 1 — Séptico/agua context collision (root cause of talk 574)
+VOZ_AGUA_2-8 keyword block had no séptico context guard. "¿Dónde están
+ubicados?" in a séptico chat triggered VOZ_AGUA_6 → wrong follow-up text →
+LLM switched to agua study explanation when customer said "Baní".
+Fix: `_in_septico_ctx` guard replaced by `_is_septico_flow` (locked flow state).
+Agua keyword block skips entirely when `_is_septico_flow` is True.
+7/7 simulation tests pass.
+
+### Fix 2 — Flow locking (session-level context persistence)
+Per respond.io/chatmetrics best practice: once a flow is established, lock
+it for the life of the conversation. Re-detecting from message content every
+turn causes context drift. Added `flow_state` SQLite table with `get_flow()`
+and `set_flow()`. `_is_septico_flow` now reads from DB, never re-scans.
+Also added `_is_septico_first_msg` keyword scan for explicit séptico detection
+on first message (handles IMHOFF ad leads).
+
+### Fix 3 — Séptico ad flow detection
+Added keyword scan on first message for séptico words (imhoff, septic, planta,
+modulo, aguas residuales etc). Flow locks to `septico` when any keyword found.
+Replaced brittle `ad_septico_entry_text` exact match approach.
+Ad pre-filled message just needs one séptico keyword — no exact phrase required.
+
+### Fix 4 — Phone number leak prevention (two layers)
+Talk 600: agent gave out phone number 8295667542 when customer asked "Dame tu número".
+Layer 1: system prompt `REGLA ABSOLUTA — NÚMEROS DE TELÉFONO` — never share
+under any circumstances. Instructs to respond "Puede seguir escribiendo por este
+mismo chat."
+Layer 2: post-generation regex strips phone number patterns before send_message.
+10/10 test cases pass. Logs `PHONE_NUMBER_STRIPPED` warning when triggered.
+Per Meta AI 2025 incident and 2026 chatbot best practice guidelines.
+
+### Fix 5 — Quad media reply on simultaneous images
+Talk 590: customer sent 4 images at once, got 4 identical "¡Recibido!" replies.
+Added `media_ack_on_cooldown(talk_id, 30s)` time-based check in state.py.
+First image in burst gets ack, images 2-4 hit cooldown and are skipped.
+Cooldown clears after 30s via `call_later` so future image sends still work.
+Added `clear_media_ack()` to state.py.
+
+### Fix 6 — Long text replies (800-char study explanation repeating)
+Talks 590/595: PREVIO_BYPASS only checked VOZ_AGUA_1 and VOZ_IMHOFF_1.
+When VOZ_AGUA_3 or other audios fired first (generic greeting flow),
+the study explanation still fired after location capture.
+Fix: new `any_voice_sent(talk_id)` function in state.py checks voice_sent
+table for ANY key (except media_ack). `_welcome_audio_sent` now uses this.
+Any audio in conversation history suppresses the study explanation.
+system.md: EXCEPCIÓN IMPORTANTE expanded — "any audio sent in this conversation."
+
+### Fix 7 — Double welcome menu on returning users
+Talk 592 (Alex): got service selection menu twice — 7:35AM and 2:00PM.
+Root cause: PREVIO_BYPASS checked only VOZ_AGUA_1 but VOZ_IMHOFF_1 had fired.
+Fix: `_welcome_audio_sent` now checks both VOZ_AGUA_1 AND VOZ_IMHOFF_1.
+system.md: REGLA DE NO REPETIR SALUDO updated with returning user examples
+per Infobip 2026 guideline: "Hi, welcome back. How can I help you today?"
+
+### Fix 8 — Instagram comment delivery errors
+Talks 593/594/597: engine tried to reply to Instagram public comments.
+Comments start with @username — cannot send DMs in response via Chats API.
+Kommo returns 202 Accepted but Instagram rejects delivery silently.
+Fix: `_is_instagram_comment` detection — if origin=instagram_business and
+text starts with @, exit before any processing. Logged as "instagram comment."
+Also: "Generate leads from Instagram comments" toggled OFF in Kommo Settings
+→ Integrations → Instagram. No new comment leads will be created.
+
+### Fix 9 — Facebook/Instagram delivery errors (OAuth)
+Talks 591/597: text sends erroring with no error_code or error_description.
+Root cause: likely expired OAuth token in Kommo Facebook/Instagram integration.
+Per Kommo docs: re-authorize in Settings → Integrations → Instagram/Facebook.
+Instagram was connected via Facebook's Messenger API (indirect) — confirmed
+the native Instagram widget is installed and aguasprofundas_rd connected.
+Fix: added non-WhatsApp delivery warning log on first contact for monitoring.
+Action: re-authorize Kommo Facebook/Instagram integration if errors persist.
+
+### Fix 10 — Bullet formatting in text replies
+Talk 584: LLM used numbered lists (1. 2. 3.) and bold (**text**) in replies.
+Per WhatsApp chatbot best practice: conversation not document.
+Fix: added `FORMATO: NUNCA uses listas numeradas...` rule to system.md.
+
+### Fix 11 — Get Started Facebook button
+Talk 600: customer clicked Facebook "Get Started" — was silently dropped.
+Fix: exact match guard now routes "Get Started" as a generic "Hola" greeting
+→ welcome image + service selection menu. Customer sees FAQ buttons
+(💧 Estudio de agua / 🪣 Planta séptica IMHOFF) configured in Meta Business
+Suite Automations before clicking Get Started anyway.
+
+### Fix 12 — Scope guard Layer 2 threshold
+Lowered from 60 to 30 chars. Short off-topic messages like "Quiera Dios que
+el gobierno haga algo" (45 chars, no business signal, no question mark) now
+caught by Layer 2 intent check.
+
+### Fix 13 — Followup nudge timing and message
+Changed from 15 minutes to 2 hours. Per DR culture: gives customers time to
+think, discuss with family, check finances without feeling harassed.
+Message updated to: "Fue un placer hablar con usted hoy. 😊 Si tiene alguna
+pregunta o necesita más información sobre nuestros servicios, con mucho gusto
+le ayudamos. Aquí estamos siempre a la orden."
+
+### Fix 14 — Always Spanish regardless of customer language
+Added `IDIOMA: Responde SIEMPRE en español dominicano, sin excepción` to
+system.md. Talk 579 (Ivan, Instagram): agent replied in English because
+customer wrote in English. Manually sent Spanish correction.
+
+### Fix 15 — Multi-intent sequential delivery
+When a customer asks two things at once (e.g. "mándeme el brochure y dónde
+están ubicados"), both get answered in order with 3-5s pauses between each.
+Two pause types:
+- Voice bot + sentinel bots: 3-4s pause between them
+- Multiple sentinel bots: 3-5s pause between each
+
+### Meta Business Suite setup completed
+- Instagram Ice Breakers in Kommo: 💧 Estudio de agua y perforación / 🪣 Planta séptica IMHOFF ✅
+- "Generate leads from Instagram comments" → OFF in Kommo Instagram settings ✅
+- Facebook Messenger FAQ buttons in Meta Business Suite: 💧 / 🪣 — Messenger only ✅
+- Away message: ON, Messenger+Instagram+WhatsApp, hours/message already configured ✅
+- Auto reply (Instant Reply): exists but OFF — optional to turn ON
+
+### State of the agent (end of session)
+Health: `{"ok":true,"subdomain":"aguasprofundas","provider":"openai"}`
+All 23 bots active, all Triggers panels empty.
+Scope guard: Layer 1 (religious/broadcast patterns) + Layer 2 (intent check, 30 char threshold).
+Flow locking: agua/septico locked on first message, persists for conversation lifetime.
+BLOQUEADO system: checks lead AND contact tags before any processing.
+Phone number filter: prompt rule + post-generation regex.
+Media ack cooldown: 30s window prevents duplicate acks.
+any_voice_sent(): suppresses study explanation when any audio has played.
+
+### Open items
+- Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+- septico-fotos (55306): legacy bot — audit before use
+- Facebook/Instagram OAuth: re-authorize in Kommo Settings if delivery errors persist
+- Legacy number +1 829-566-7542: wind-down pending
+- Daily conversation-review automation: not built yet
+- Away message schedule in Meta Business Suite: currently Available all week,
+  needs schedule set or manual status toggle when closing for the day

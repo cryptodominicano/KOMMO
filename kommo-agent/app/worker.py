@@ -11,6 +11,11 @@ import unicodedata
 import time
 from . import rag, agent, state, client as client_pack
 from . import haiku as haiku_pre
+
+# Per-talk reply locks: prevents double-reply race condition when two
+# messages arrive within the debounce window. Only one reply can be
+# in-flight per talk at a time.
+_talk_locks: dict[str, asyncio.Lock] = {}
 from .kommo import KommoClient, KommoError
 from . import dr_geo
 from .transcribe import download_audio, transcribe, TranscriptionRejected
@@ -531,6 +536,15 @@ async def handle_message(msg: dict) -> None:
             "maps.app.goo.gl", "goo.gl/maps", "google.com/maps",
             "maps.google.", "/maps/place", "/maps?"))
         if mtype in location_types or maps_link:
+            # Brief delay before location processing: if a text message
+            # arrived simultaneously (e.g. customer typed location then
+            # sent a pin), let the text message process first via the
+            # per-talk lock, preventing a double-reply.
+            if not is_first:
+                await asyncio.sleep(3.0)
+                if msg_id and not state.is_latest_inbound(talk_id, msg_id):
+                    log.info("talk=%s location superseded — skipping", talk_id)
+                    return
             log.info("talk=%s location received (%s)", talk_id,
                      "maps-link" if maps_link else "pin")
             # Linderos flow is agua-only. In séptico conversations a location
@@ -643,7 +657,7 @@ async def handle_message(msg: dict) -> None:
                 _jitter = random.uniform(-0.5, 0.5)
                 await asyncio.sleep(max(_dl_lo, _scaled + _jitter))
             if msg_id and not state.is_latest_inbound(talk_id, msg_id):
-                log.info("talk=%s superseded by a newer message - skipping reply",
+                log.info("talk=%s superseded by a newer message (lock) - skipping",
                          talk_id)
                 return
 
@@ -1180,21 +1194,24 @@ async def handle_message(msg: dict) -> None:
                 state.mark_discount_offered(talk_id)
                 log.info("talk=%s septico 5%% offer appended (hesitation) + locked", talk_id)
 
-        # Post-generation phone number filter (belt-and-suspenders).
-        # Best practice 2026 (Meta AI incident, Infobip guidelines): AI agents
-        # must never share phone numbers in chat. Strip any pattern that looks
-        # like a phone number from the outgoing reply before sending.
-        # Covers Dominican (829/849/809), US (+1), and generic international.
+        # Post-generation filters (belt-and-suspenders).
         if reply:
             import re as _re
+            # Filter 1: Phone numbers — never share in chat.
             _phone_pattern = _re.compile(
                 r'(?:\+?1[-\s.]?)?(?:\(?\d{3}\)?[-\s.]?)?\d{3}[-\s.]?\d{4}\b'
             )
             _cleaned = _phone_pattern.sub("[número no disponible]", reply)
             if _cleaned != reply:
-                log.warning("talk=%s PHONE_NUMBER_STRIPPED from reply — "
-                            "LLM attempted to share contact info", talk_id)
+                log.warning("talk=%s PHONE_NUMBER_STRIPPED from reply", talk_id)
                 reply = _cleaned
+            # Filter 2: Markdown bold (**text**) — WhatsApp chat is not markdown.
+            # GPT-4.1 occasionally uses bold despite prompt instructions.
+            _md_bold = _re.compile(r'\*\*([^*]+)\*\*')
+            _cleaned2 = _md_bold.sub(r'\1', reply)
+            if _cleaned2 != reply:
+                log.info("talk=%s MARKDOWN_STRIPPED bold from reply", talk_id)
+                reply = _cleaned2
 
         # Final supersession check before sending — catches cases where
         # the customer sent another message AFTER the debounce sleep completed

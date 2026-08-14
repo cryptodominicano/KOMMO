@@ -287,12 +287,17 @@ async def handle_message(msg: dict) -> None:
     except Exception:
         _already_greeted = False
 
-    # Exact match for Facebook/Meta system button payloads
+    # Facebook "Get Started" button: treat as a generic first contact.
+    # The customer clicked the Messenger Get Started button — they want
+    # to start a conversation. Route as a generic greeting so they get
+    # the welcome image + service selection menu. Do NOT drop silently.
     _META_SYSTEM_MSGS = ["get started", "send message", "send_message"]
     if _raw_text.lower().strip() in _META_SYSTEM_MSGS:
-        log.info("talk=%s msg=%s scope-rejected (Meta system button: %r)",
-                 talk_id, msg_id, _raw_text)
-        return
+        log.info("talk=%s msg=%s Meta system button — treating as generic greeting",
+                 talk_id, msg_id)
+        msg = dict(msg)  # make mutable
+        msg["text"] = "Hola"  # treat as generic greeting
+        msg["message_type"] = "text"
 
     if not _already_greeted and _is_new_talk and len(_raw_text) > 30:
         # Business-intent signals — ANY of these means process normally

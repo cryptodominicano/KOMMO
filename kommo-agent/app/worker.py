@@ -970,7 +970,7 @@ async def handle_message(msg: dict) -> None:
             "VOZ_AGUA_5": "¿Le gustaría proceder con el estudio o tiene alguna otra consulta antes de decidir? 🙏",
             # Audio: located in Arabacoa, serve all country, need their location to quote.
             # Follow-up is flow-aware: agua asks for location; séptico asks about modules.
-            "VOZ_AGUA_6": ("¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏"
+            "VOZ_AGUA_6": ("¿Tiene alguna otra consulta antes de avanzar? 🙏"
                            if _is_septico_flow else
                            "¿En qué pueblo o sector desea realizar el estudio? Con eso le cotizo de inmediato. 🙏"),
             # Audio: RD$5K deposit, visit land, 24-48h study, contact for remainder, deliver report.

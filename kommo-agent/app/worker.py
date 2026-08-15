@@ -766,12 +766,21 @@ async def handle_message(msg: dict) -> None:
                     "hacen envios","la instalan","que incluye",
                     "que tengo que enviar","quiero reservar una",
                 ]),
-                ("[[VOZ_IMHOFF_4]]", [
+                # Pure location questions → VOZ_AGUA_6 (Jarabacoa, serve whole country).
+                # Reuses the agua location audio — content is company-level, not product-specific.
+                # No Wellington sequence; this is just a "where are you" answer.
+                ("VOZ_AGUA_6", [
                     "donde estan ubicados","donde estan","tienen oficina",
                     "donde puedo visitarlos","cual es la direccion",
                     "puedo pasar","donde queda","en que ciudad estan",
-                    "donde los encuentro","quiero ir personalmente",
-                    "quiero pasar a verlos","no me gusta pagar por internet",
+                    "donde los encuentro","donde queda la oficina",
+                    "donde trabajan","en que provincia estan",
+                    "donde operan","donde puedo ir",
+                ]),
+                # Trust/credibility questions → VOZ_IMHOFF_4 (registro mercantil,
+                # sells from factory, CEO available) + Wellington photo sequence.
+                ("[[VOZ_IMHOFF_4]]", [
+                    "no me gusta pagar por internet",
                     "no confio en transferir","quiero ver el producto primero",
                     "quiero conocerlos antes","son una empresa real",
                     "tienen oficina fisica","donde puedo ver las plantas",
@@ -779,15 +788,20 @@ async def handle_message(msg: dict) -> None:
                     "tienen referencias","tienen redes sociales",
                     "donde puedo ver sus trabajos","quienes son ustedes",
                     "desde hace cuanto trabajan","quien es el ingeniero",
-                    "quien es wellington","quiero hablar con alguien",
-                    "puedo ir a conocerlos",
+                    "quien es wellington","son confiables",
+                    "como verifico","quiero verificar","registro mercantil",
+                    "puedo ir a conocerlos","quiero pasar a verlos",
+                    "quiero ir personalmente",
                 ]),
             ]
             if _is_septico_flow:
                 for _vk_i, _kws_i in _IMHOFF_KW:
                     if any(kw in _tna_i for kw in _kws_i):
                         if not state.voice_already_sent(talk_id, _vk_i):
-                            _bid_i = _imhoff_triggers.get(_vk_i)
+                            # VOZ_AGUA_6 lives in voz_triggers (agua), not imhoff_triggers
+                            _bid_i = (_voz_triggers.get(_vk_i)
+                                      if _vk_i.startswith("VOZ_AGUA")
+                                      else _imhoff_triggers.get(_vk_i))
                             if _bid_i:
                                 try:
                                     await k.run_bot(int(_bid_i), entity_id,
@@ -929,8 +943,10 @@ async def handle_message(msg: dict) -> None:
             # Text soft-closes toward committing.
             "VOZ_AGUA_5": "¿Le gustaría proceder con el estudio o tiene alguna otra consulta antes de decidir? 🙏",
             # Audio: located in Arabacoa, serve all country, need their location to quote.
-            # Text asks for location to move forward.
-            "VOZ_AGUA_6": "¿En qué pueblo o sector desea realizar el estudio? Con eso le cotizo de inmediato. 🙏",
+            # Follow-up is flow-aware: agua asks for location; séptico asks about modules.
+            "VOZ_AGUA_6": ("¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏"
+                           if _is_septico_flow else
+                           "¿En qué pueblo o sector desea realizar el estudio? Con eso le cotizo de inmediato. 🙏"),
             # Audio: RD$5K deposit, visit land, 24-48h study, contact for remainder, deliver report.
             # Text asks if ready to start.
             "VOZ_AGUA_7": "¿Está listo para dar el primer paso o tiene alguna consulta adicional antes de comenzar? 🙏",

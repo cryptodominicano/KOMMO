@@ -229,7 +229,10 @@ tiene alguna pregunta adicional? 🙏"
 
 ---
 
-### VOZ_IMHOFF_3 — Bot 85804 — Price objection
+### VOZ_IMHOFF_3 — Bot 85806 — Price objection
+
+⚠️ NOTE: Bot IDs were swapped 2026-08-15 after live audio verification.
+85806 contains the price objection audio; 85804 contains the trust/credibility audio.
 
 Keywords (séptico context required): está muy cara, muy costosa, es mucho
 dinero, pensé que costaba menos, fuera de mi presupuesto, muy elevado, no
@@ -238,16 +241,22 @@ bajar el precio, hay alguna oferta, está fuerte ese precio, la competencia la
 tiene más barata, vi otra más económica, por qué cuesta tanto, qué tiene de
 diferente, vale la pena, lo voy a pensar, está difícil, no puedo pagar eso ahora.
 
-Transcript: Compares plastic vs cement/block. Plastic is more efficient, more
-durable, won't crack, won't poison soil or water, easier to install. When
-comparing full lifetime cost the IMHOFF plant is actually more economical.
+Transcript (verified live): Compares plastic vs cement/block. Plastic is more
+efficient, more durable, won't crack, won't poison soil or water, easier to
+install. When comparing full lifetime cost the IMHOFF plant is actually more
+economical.
 
 Follow-up text: "¿Le gustaría proceder con su planta o tiene alguna otra
 consulta antes de decidir? 🙏"
 
+Paired image after 4s: [[SEPTICO_VENTAJAS]] (bot 76646)
+
 ---
 
-### VOZ_IMHOFF_4 — Bot 85806 — Location, trust, credibility
+### VOZ_IMHOFF_4 — Bot 85804 — Location, trust, credibility
+
+⚠️ NOTE: Bot IDs were swapped 2026-08-15 after live audio verification.
+85804 contains the trust/credibility audio; 85806 contains the price objection audio.
 
 Keywords (séptico context required): dónde están ubicados, dónde están, tienen
 oficina, dónde puedo visitarlos, cuál es la dirección, puedo pasar, dónde
@@ -257,9 +266,9 @@ primero, quiero conocerlos antes, son una empresa real, tienen oficina física,
 dónde puedo ver las plantas, cómo sé que son confiables, tienen referencias,
 quién es Wellington, puedo ir a conocerlos.
 
-Transcript: Sells direct from factory — special pricing, includes shipping.
-Understands distrust of online transfers — can send registro mercantil to verify
-the company. CEO always available to call or contact.
+Transcript (verified live): Sells direct from factory — special pricing, includes
+shipping. Understands distrust of online transfers — can send registro mercantil
+to verify the company. CEO always available to call or contact.
 
 3-step sequence:
 1. VOZ_IMHOFF_4 voice note (85806)

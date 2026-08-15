@@ -2,7 +2,7 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-15 — **v3.4 deployed and fully validated end-to-end.**
+Last updated: 2026-08-15 — **v3.5 deployed — Haiku semantic voice-bot routing.**
 
 ---
 
@@ -27,7 +27,7 @@ Health: `GET https://kommo-agent.goldcoastai.pro/health`
 
 ---
 
-## 3. Architecture (v3.4)
+## 3. Architecture (v3.5)
 
 ```
 WhatsApp / Instagram / Facebook
@@ -35,7 +35,7 @@ WhatsApp / Instagram / Facebook
   → worker.py (per-talk asyncio.Lock):
        cancel_nudges(lead_id) ← on every inbound
        MESSAGE TYPE branch (voice/location/picture/text)
-       SÉPTICO FIRST CONTACT sequence (if is_first + _septico_first + _is_waba):
+       SÉPTICO FIRST CONTACT (if is_first + _septico_first + _is_waba):
          1. SEPTICO_COMPARATIVA image (immediately)
          2. 1s → welcome text "¡Bienvenido! 😊 Con gusto le orientamos..."
          3. 1.5s → VOZ_IMHOFF_1 audio
@@ -44,16 +44,22 @@ WhatsApp / Instagram / Facebook
          1. welcome-bot image 55340
          2. VOZ_AGUA_1 audio
          3. AUDIO_BYPASS → "Por favor mándeme la ubicación..."
-       KEYWORD LOOPS (subsequent messages, _is_waba only):
-         Agua: collect ALL matched bots → fire sequentially, 5s between each
-         IMHOFF: collect ALL matched bots → fire sequentially, 5s between each
-         VOZ_IMHOFF_4: voice → 2s → Instagram text → 1s → Wellington photo
-         _voz_fired = last bot fired (drives AUDIO_BYPASS followup text)
+       THREE-TIER VOICE BOT ROUTING (subsequent messages, _is_waba only):
+         TIER 0 — Keywords (unambiguous only): quiero comprar, cuánto cuesta perforar
+           → fire immediately, skip Haiku
+         TIER 1 — Haiku semantic routing (nuanced intents):
+           Haiku outputs <voz_bots> with intent + confidence
+           trust_question, price_objection_*, location_*, call_request,
+           payment_*, how_to_start, drilling_price, purchase_process_septico
+           → fire if confidence ≥ threshold (0.65-0.70 per intent)
+         TIER 2 — Text-only fallback (below threshold): no audio, LLM text only
+         Multi-intent: all matched bots fire sequentially, 5s between each
+         VOZ_IMHOFF_4 always fires: voice → 2s → Instagram text → 1s → Wellington
        VOZ→IMAGE PAIRS (after each voice bot, 4s delay):
-         VOZ_IMHOFF_1 → SEPTICO_COMPARATIVA (fired in welcome sequence, deduped)
-         VOZ_IMHOFF_2 → SEPTICO_FUNCIONAMIENTO
-         VOZ_IMHOFF_3 → SEPTICO_VENTAJAS
-       AUDIO_BYPASS: _VOZ_OPENER + qualifying question (except VOZ_AGUA_1, VOZ_IMHOFF_1)
+         VOZ_IMHOFF_1 → SEPTICO_COMPARATIVA, VOZ_IMHOFF_2 → FUNCIONAMIENTO,
+         VOZ_IMHOFF_3 → VENTAJAS
+       AUDIO_BYPASS: warm rotating closer per bot (no audio reference)
+       STATE BLOCK injection (coverage ledger → LLM context)
        HAIKU PRE-PROCESSOR → GPT-4.1 → BELT-AND-SUSPENDERS sentinel fallback
        POST-GEN FILTERS → send_message → SENTINEL LOOP → schedule_nudge
   → main.py _followup_loop() polls scheduled_nudges every 30s
@@ -191,6 +197,20 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 
 ## 13. Version history
 
+### v3.5 (live, 2026-08-15)
+- Haiku semantic voice-bot routing — replaces keyword lists for all nuanced intents
+- Three-tier hybrid: keywords (unambiguous) → Haiku semantic (nuanced) → text-only fallback
+- 11 voice-bot intent labels: trust_question, price_objection_*, location_*, payment_*,
+  drilling_price, how_to_start, purchase_process_septico, call_request
+- Multi-intent semantic: compound messages fire all matching bots sequentially
+- Coverage ledger writes on Haiku-routed audios (same as keyword-routed)
+- Warm rotating closers per bot (removed "Luego de escuchar la nota de voz" opener)
+- Anti-repetition coverage ledger (covered_topics SQLite + STATE BLOCK injection)
+- Ambiguous "Sí" service selection handled with contextual descriptions
+- Generic greeting improved with emoji service options
+- VOZ_IMHOFF_4 trust keywords expanded
+- API validation: 25/27 test cases correct including DR slang ("ta muy cara esa vaina")
+
 ### v3.4 (live, 2026-08-15)
 - Séptico workflow validated end-to-end: all 7 scenarios passing
 - Bot IDs 85804↔85806 swapped after live audio verification
@@ -225,21 +245,14 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo Salesbot UI
 
 **Next session:**
-2. **[RESEARCH REQUIRED] Intent-to-voice-bot routing: semantic vs keyword.**
-   Current keyword matching is brittle — "Como se que son una empresa verdadera y legitima"
-   missed VOZ_IMHOFF_4 because the exact phrase wasn't in the list. There are unlimited
-   natural-language variations for trust, price objection, and location questions.
-   Research question: keyword lists vs Haiku semantic classification vs hybrid for
-   voice bot selection in Spanish/Dominican informal WhatsApp. What is best practice
-   for reliability, false positive rates, and latency? Should nuanced intents (trust,
-   price objection, location) move to Haiku classification while only high-confidence
-   purchase intents stay as keywords? Run deep research before building.
-3. Agua flow end-to-end test (séptico fully validated; agua not yet)
-4. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics, not just audio
-5. Facebook ad CTWA prefill: configure per campaign in Meta Business Suite
-6. Voice note duration audit: all 12 bots, target 20-40s — VOZ_AGUA_1 at 1:38 is over
-7. IMHOFF lifespan: ask Wellington → KB → re-ingest Qdrant
-8. October 1, 2026 (47 days): service messages become paid — instrument nudge reply rates now
-9. Daily conversation-review automation: not built
-10. Legacy number +1 829-566-7542: wind-down pending
-11. KOMMO repo README: still says "Claude LLM, not deployed"
+2. Agua flow end-to-end test (séptico fully validated; agua not yet)
+3. Live test Haiku semantic routing with real WhatsApp conversations
+4. Weekly threshold tuning: sample 100 conversations, measure false-audio rate
+5. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics
+6. Facebook ad CTWA prefill: configure per campaign in Meta Business Suite
+7. Voice note duration audit: all 12 bots, target 20-40s — VOZ_AGUA_1 at 1:38 is over
+8. IMHOFF lifespan: ask Wellington → KB → re-ingest Qdrant
+9. October 1, 2026 (47 days): service messages become paid — instrument nudge reply rates
+10. Daily conversation-review automation: not built
+11. Legacy number +1 829-566-7542: wind-down pending
+12. Edge case: "puedo ir a verlos personalmente" returns NONE — add to few-shot examples

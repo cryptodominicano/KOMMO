@@ -43,7 +43,13 @@ def init() -> None:
         c.execute("CREATE TABLE IF NOT EXISTS linderos_sent ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS followup ("
-                  "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0)")
+                  "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0, "
+                  "override_message TEXT)")
+        # Add override_message column to existing DBs (idempotent)
+        try:
+            c.execute("ALTER TABLE followup ADD COLUMN override_message TEXT")
+        except Exception:
+            pass  # column already exists
         c.execute("CREATE TABLE IF NOT EXISTS awaiting_linderos ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS last_inbound ("
@@ -207,16 +213,20 @@ def clear_handoff(talk_id: str) -> None:
         c.execute("DELETE FROM notified WHERE talk_id = ?", (str(talk_id),))
 
 
-def arm_followup(talk_id: str, delay_seconds: int) -> None:
+def arm_followup(talk_id: str, delay_seconds: int,
+                 override_message: str | None = None) -> None:
     """Arm a one-time inactivity follow-up at now+delay. No-op if one already
-    fired for this conversation (done=1), so it can never nudge twice."""
+    fired for this conversation (done=1), so it can never nudge twice.
+    override_message: if set, sent instead of the default followup_nudge."""
     now = time.time()
     with _conn() as c:
         c.execute(
-            "INSERT INTO followup (talk_id, due_at, done) VALUES (?, ?, 0) "
-            "ON CONFLICT(talk_id) DO UPDATE SET due_at=excluded.due_at "
+            "INSERT INTO followup (talk_id, due_at, done, override_message) "
+            "VALUES (?, ?, 0, ?) "
+            "ON CONFLICT(talk_id) DO UPDATE SET due_at=excluded.due_at, "
+            "override_message=excluded.override_message "
             "WHERE followup.done=0",
-            (talk_id, now + delay_seconds))
+            (talk_id, now + delay_seconds, override_message))
 
 
 def clear_followup(talk_id: str) -> None:
@@ -234,13 +244,13 @@ def claim_due_followups(now: float | None = None) -> list:
     claimed = []
     with _conn() as c:
         rows = c.execute(
-            "SELECT talk_id, due_at FROM followup "
+            "SELECT talk_id, due_at, override_message FROM followup "
             "WHERE due_at IS NOT NULL AND due_at <= ? AND done=0", (now,)).fetchall()
-        for talk_id, due_at in rows:
+        for talk_id, due_at, override_msg in rows:
             cur = c.execute("UPDATE followup SET done=1, due_at=NULL "
                             "WHERE talk_id=? AND done=0", (talk_id,))
             if cur.rowcount == 1:
-                claimed.append((talk_id, due_at))
+                claimed.append((talk_id, due_at, override_msg))
     return claimed
 
 

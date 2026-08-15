@@ -158,6 +158,23 @@ def _looks_like_closing(text: str) -> bool:
     return len(t) <= 45 and any(word in t for word in _CLOSING_WORDS)
 
 
+# Topic catalog: maps voice bot keys to the sales topics they cover.
+# Written to the coverage ledger (covered_topics) when a Salesbot audio fires.
+_AUDIO_TOPIC_MAP = {
+    "VOZ_AGUA_1":       ["estudio_proceso", "estudio_precio", "perforacion_tipos"],
+    "VOZ_AGUA_2":       ["perforacion_precio"],
+    "VOZ_AGUA_3":       ["estudio_inicio", "ubicacion_como_enviar"],
+    "VOZ_AGUA_4":       ["deposito_agua", "pago_proceso_agua"],
+    "VOZ_AGUA_5":       ["precio_objecion_agua"],
+    "VOZ_AGUA_6":       ["ubicacion_empresa"],
+    "VOZ_AGUA_7":       ["pago_condiciones_agua"],
+    "VOZ_AGUA_8":       ["llamada_coordinacion"],
+    "[[VOZ_IMHOFF_1]]": ["dos_modulos", "precio_septico", "plastico_vs_cemento"],
+    "[[VOZ_IMHOFF_2]]": ["deposito_septico", "entrega_proceso"],
+    "[[VOZ_IMHOFF_3]]": ["precio_objecion_septico", "ventajas_plastico"],
+    "[[VOZ_IMHOFF_4]]": ["confianza_empresa", "registro_mercantil"],
+}
+
 async def handle_message(msg: dict) -> None:
     talk_id = str(msg.get("talk_id") or "")
     msg_id = str(msg.get("id") or "")
@@ -767,6 +784,11 @@ async def handle_message(msg: dict) -> None:
                     _voz_fired = _vk  # last fired = followup text source
                     log.info("talk=%s launched %s bot %s (%d of %d)",
                              talk_id, _vk, _bid, _idx_a + 1, len(_agua_to_fire))
+                    # Coverage ledger: log all topics this audio covers
+                    _cov_lead = str(entity_id) if entity_id else talk_id
+                    for _topic in _AUDIO_TOPIC_MAP.get(_vk, []):
+                        state.mark_topic_covered(_cov_lead, _topic,
+                                                'audio', source=_vk)
                 except KommoError as e:
                     log.error("talk=%s %s failed: %s", talk_id, _vk, e)
 
@@ -848,6 +870,11 @@ async def handle_message(msg: dict) -> None:
                         log.info("talk=%s launched %s bot %s (%d of %d)",
                                  talk_id, _vk_i, _bid_i, _idx_i + 1,
                                  len(_imhoff_to_fire))
+                        # Coverage ledger: log all topics this audio covers
+                        _cov_lead_i = str(entity_id) if entity_id else talk_id
+                        for _topic_i in _AUDIO_TOPIC_MAP.get(_vk_i, []):
+                            state.mark_topic_covered(_cov_lead_i, _topic_i,
+                                                     'audio', source=_vk_i)
                         if _vk_i == "[[VOZ_IMHOFF_4]]":
                             await asyncio.sleep(2)
                             _ig_text = (
@@ -961,6 +988,8 @@ async def handle_message(msg: dict) -> None:
 
         # Inject voice-note follow-up into extra so the LLM knows exactly
         # what one-liner to send after the audio — no repetition, no prices.
+
+
         # Cultural opener: warm Dominican register, acknowledges audio landed.
         # Fires after every voice note as part of the followup text.
         _VOZ_OPENER = "Luego de escuchar la nota de voz, con gusto le atiendo. 😊 "
@@ -1025,6 +1054,13 @@ async def handle_message(msg: dict) -> None:
                 f"Avanza hacia la siguiente etapa en la conversación."
             )
             extra = (_stage_inj + "\n\n" + extra).strip() if extra else _stage_inj
+            # STATE BLOCK: inject coverage ledger so LLM knows what's been covered
+            _cov_lead_id = str(entity_id) if entity_id else talk_id
+            _coverage_block = state.build_coverage_state_block(_cov_lead_id)
+            if _coverage_block:
+                extra = (_coverage_block + "\n\n" + extra).strip()
+                log.debug("talk=%s coverage block injected (%d topics)",
+                          talk_id, len(_coverage_block.splitlines()) - 1)
             _intents = await haiku_pre.classify(text, flow=_flow_label)
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}

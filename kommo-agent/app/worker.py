@@ -1309,6 +1309,28 @@ async def handle_message(msg: dict) -> None:
         _farewell = any(f in reply.lower() for f in (
             "buen día", "buen dia", "buen día!", "hasta luego", "hasta pronto",
             "excelente día", "excelente dia", "igualmente", "que le vaya"))
+        # Bathroom question follow-up: scenario-specific nudge.
+        # If Isla asked how many bathrooms and the customer went quiet,
+        # send a fixed verbatim message 15 minutes later (not the generic
+        # 120-min nudge). Only arms in séptico flow. The generic arm below
+        # is skipped for this turn when the override fires, because the
+        # arm_followup ON CONFLICT will already have set due_at correctly.
+        _BATHROOM_PHRASES = (
+            "cuántos baños", "cuantos banos", "cuantos baños", "cuántos banos",
+        )
+        _reply_lower_fu = reply.lower()
+        _bathroom_asked = (
+            _is_septico_flow
+            and any(p in _reply_lower_fu for p in _BATHROOM_PHRASES)
+        )
+        if _bathroom_asked and not is_first and not handoff and not state.is_handed_off(talk_id):
+            state.arm_followup(
+                talk_id,
+                15 * 60,  # 15 minutes
+                override_message="Quedo atento a tu respuesta para entender sus necesidades. 🙏",
+            )
+            log.info("talk=%s bathroom follow-up armed (15 min)", talk_id)
+
         if (reply and not is_first and not handoff and not send_bank
                 and not _farewell and not _looks_like_closing(text)
                 and not state.is_handed_off(talk_id)):
@@ -1316,7 +1338,7 @@ async def handle_message(msg: dict) -> None:
                 _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
             except Exception:
                 _fu_delay = 0
-            if _fu_delay > 0:
+            if _fu_delay > 0 and not _bathroom_asked:
                 state.arm_followup(talk_id, _fu_delay)
 
     except KommoError as e:

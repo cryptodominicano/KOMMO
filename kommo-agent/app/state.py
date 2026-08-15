@@ -102,6 +102,21 @@ def init() -> None:
             pass
         c.execute("CREATE TABLE IF NOT EXISTS flow_confirmed ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        # Coverage ledger: tracks which sales topics covered per lead
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS covered_topics (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id       TEXT NOT NULL,
+                topic_key     TEXT NOT NULL,
+                channel       TEXT NOT NULL,
+                covered_at    TEXT NOT NULL DEFAULT (datetime('now')),
+                times_covered INTEGER NOT NULL DEFAULT 1,
+                last_source   TEXT,
+                UNIQUE(lead_id, topic_key)
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_covered_lead "
+                  "ON covered_topics(lead_id)")
 
 
 def already_seen(message_id: str, ttl: int = 3600) -> bool:
@@ -371,6 +386,61 @@ def claim_due_followups(now: float | None = None) -> list:
     (talk_id, due_at, override_msg) for the legacy main.py loop."""
     _claimed = claim_due_nudges(now)
     return [(t, 0.0, m) for t, m, s in _claimed]
+
+
+# ── Coverage ledger API ─────────────────────────────────────────────────────
+
+def mark_topic_covered(
+    lead_id: str,
+    topic_key: str,
+    channel: str,
+    source: str | None = None,
+) -> None:
+    """Record a covered topic. Idempotent — increments times_covered."""
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO covered_topics "
+            "(lead_id, topic_key, channel, covered_at, times_covered, last_source) "
+            "VALUES (?, ?, ?, datetime('now'), 1, ?) "
+            "ON CONFLICT(lead_id, topic_key) DO UPDATE SET "
+            "times_covered=times_covered+1, covered_at=datetime('now'), "
+            "channel=excluded.channel, last_source=excluded.last_source",
+            (lead_id, topic_key, channel, source),
+        )
+
+
+def get_covered_topics(lead_id: str) -> list:
+    """Return all covered topics for a lead, most recent first."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT topic_key, channel, covered_at, times_covered "
+            "FROM covered_topics WHERE lead_id=? ORDER BY covered_at DESC",
+            (lead_id,),
+        ).fetchall()
+    return [{"topic": r[0], "channel": r[1], "at": r[2], "times": r[3]}
+            for r in rows]
+
+
+def build_coverage_state_block(lead_id: str) -> str:
+    """Build STATE BLOCK string for the LLM system prompt. Empty if nothing covered."""
+    rows = get_covered_topics(lead_id)
+    if not rows:
+        return ""
+    import datetime as _dt
+    now = _dt.datetime.utcnow()
+    lines = []
+    for r in rows:
+        try:
+            at = _dt.datetime.fromisoformat(r['at'])
+            mins = int((now - at).total_seconds() / 60)
+            ago = f"hace {mins}min" if mins < 60 else f"hace {mins//60}h"
+        except Exception:
+            ago = r['at']
+        ch = "AUDIO" if r['channel'] == 'audio' else "TEXTO"
+        lines.append(f"  - {r['topic']}: {ch} ({ago})")
+    return (
+        "TEMAS YA CUBIERTOS CON ESTE CLIENTE:\n" + "\n".join(lines)
+    )
 
 
 def set_awaiting_linderos(talk_id: str) -> None:

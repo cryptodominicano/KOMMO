@@ -639,6 +639,34 @@ which feed quality rating directly. One follow-up acceptable, never three.
 
 ---
 
+## Section 12.11 — Salesbot Queue Delay Pattern
+
+**Rule:** Kommo's `run_bot()` (Salesbot) goes through an internal queue before delivery.
+`send_message()` is direct and instant. If you fire a Salesbot and then immediately
+call `send_message()`, the text will ALWAYS arrive before the audio.
+
+**Fix pattern:**
+```python
+_haiku_voz_fired = False  # initialize before routing
+
+# After Salesbot fires:
+_haiku_voz_fired = True
+
+# Before send_message:
+if _haiku_voz_fired or _keyword_voz_fired:
+    await asyncio.sleep(2.0)  # let audio clear Kommo's queue
+await k.send_message(talk_id, reply)
+```
+
+**Applies to:** all voice bot firing paths — keyword loops, Haiku semantic routing,
+first-contact sequences. The existing 1.5s/4s pauses in the welcome sequence were
+already handling this correctly. Haiku-fired bots needed the same treatment.
+
+**Do NOT skip this** in future client builds. The symptom (text before audio) looks
+like a content bug but is actually a delivery timing bug.
+
+---
+
 ## Section 12 — August 15, 2026 Build Learnings (Aguas Profundas RD v3.5)
 
 This section documents architectural decisions and aha moments from the full-day build session on the Aguas Profundas agent. These learnings should be applied to all future commercial agent builds.

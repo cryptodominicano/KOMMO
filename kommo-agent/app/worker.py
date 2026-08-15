@@ -1262,7 +1262,7 @@ async def handle_message(msg: dict) -> None:
         # voice note lands before the image arrives.
         # Stage tracking: deposit bot fired = deposit_requested
         if fire:
-            _dep_bot = int(client_pack.salesbot("deposit_bot_id") or 0)
+            _dep_bot = int((client_pack.pack().get("salesbot") or {}).get("deposit_bot_id") or 0)
             if _dep_bot and _dep_bot in fire:
                 _old_stg = state.get_stage(talk_id)
                 state.advance_stage(talk_id, "deposit_requested")

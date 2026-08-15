@@ -225,12 +225,21 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo Salesbot UI
 
 **Next session:**
-2. Agua flow end-to-end test (séptico fully validated; agua not yet)
-3. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics, not just audio
-4. Facebook ad CTWA prefill: configure per campaign in Meta Business Suite
-5. Voice note duration audit: all 12 bots, target 20-40s — VOZ_AGUA_1 at 1:38 is over
-6. IMHOFF lifespan: ask Wellington → KB → re-ingest Qdrant
-7. October 1, 2026 (47 days): service messages become paid — instrument nudge reply rates now
-8. Daily conversation-review automation: not built
-9. Legacy number +1 829-566-7542: wind-down pending
-10. KOMMO repo README: still says "Claude LLM, not deployed"
+2. **[RESEARCH REQUIRED] Intent-to-voice-bot routing: semantic vs keyword.**
+   Current keyword matching is brittle — "Como se que son una empresa verdadera y legitima"
+   missed VOZ_IMHOFF_4 because the exact phrase wasn't in the list. There are unlimited
+   natural-language variations for trust, price objection, and location questions.
+   Research question: keyword lists vs Haiku semantic classification vs hybrid for
+   voice bot selection in Spanish/Dominican informal WhatsApp. What is best practice
+   for reliability, false positive rates, and latency? Should nuanced intents (trust,
+   price objection, location) move to Haiku classification while only high-confidence
+   purchase intents stay as keywords? Run deep research before building.
+3. Agua flow end-to-end test (séptico fully validated; agua not yet)
+4. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics, not just audio
+5. Facebook ad CTWA prefill: configure per campaign in Meta Business Suite
+6. Voice note duration audit: all 12 bots, target 20-40s — VOZ_AGUA_1 at 1:38 is over
+7. IMHOFF lifespan: ask Wellington → KB → re-ingest Qdrant
+8. October 1, 2026 (47 days): service messages become paid — instrument nudge reply rates now
+9. Daily conversation-review automation: not built
+10. Legacy number +1 829-566-7542: wind-down pending
+11. KOMMO repo README: still says "Claude LLM, not deployed"

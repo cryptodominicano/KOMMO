@@ -961,46 +961,24 @@ async def handle_message(msg: dict) -> None:
 
         # Inject voice-note follow-up into extra so the LLM knows exactly
         # what one-liner to send after the audio — no repetition, no prices.
+        # Cultural opener: warm Dominican register, acknowledges audio landed.
+        # Fires after every voice note as part of the followup text.
+        _VOZ_OPENER = "Luego de escuchar la nota de voz, con gusto le atiendo. 😊 "
         _VOZ_FOLLOWUPS = {
-            # Audio already covers study process, 80-90% success, RD$45-50K pricing,
-            # exploratory vs conventional. Closes asking for location. Text echoes that.
-            "VOZ_AGUA_1": "Para comenzar, por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
-            # Audio: can't price drilling without study — we work with data not guessing.
-            # Text nudges back to study as the logical next step.
-            "VOZ_AGUA_2": "¿Le gustaría comenzar con el estudio para poder darle toda la información que necesita? 🙏",
-            # Audio: send location, I'll send satellite photo, mark boundaries with WhatsApp pencil.
-            # Text prompts them to send location now.
-            "VOZ_AGUA_3": "Por favor mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
-            # Audio: RD$5K deposit starts topographic study, 2-3 days, visit land,
-            # 3-4 more days, pay remainder, get report, send voucher.
-            # Text moves toward sending bank details.
-            "VOZ_AGUA_4": "¿Tiene alguna pregunta sobre el proceso o está listo para que le envíe los datos de depósito? 🙏",
-            # Audio: 3-part study vs competitors' 1-part, 80-90% vs 25% success, quality justification.
-            # Text soft-closes toward committing.
-            "VOZ_AGUA_5": "¿Le gustaría proceder con el estudio o tiene alguna otra consulta antes de decidir? 🙏",
-            # Audio: located in Arabacoa, serve all country, need their location to quote.
-            # Follow-up is flow-aware: agua asks for location; séptico asks about modules.
-            "VOZ_AGUA_6": ("¿Tiene alguna otra consulta antes de avanzar? 🙏"
+            "VOZ_AGUA_1": _VOZ_OPENER + "Por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
+            "VOZ_AGUA_2": _VOZ_OPENER + "¿Le gustaría comenzar con el estudio para poder darle toda la información? 🙏",
+            "VOZ_AGUA_3": _VOZ_OPENER + "Por favor mándeme la ubicación de su terreno y seguimos desde ahí. 📍",
+            "VOZ_AGUA_4": _VOZ_OPENER + "¿Tiene alguna pregunta o está listo para que le envíe los datos de depósito? 🙏",
+            "VOZ_AGUA_5": _VOZ_OPENER + "¿Le gustaría proceder con el estudio o tiene alguna consulta antes de decidir? 🙏",
+            "VOZ_AGUA_6": (_VOZ_OPENER + "¿Tiene alguna otra consulta antes de avanzar? 🙏"
                            if _is_septico_flow else
-                           "¿En qué pueblo o sector desea realizar el estudio? Con eso le cotizo de inmediato. 🙏"),
-            # Audio: RD$5K deposit, visit land, 24-48h study, contact for remainder, deliver report.
-            # Text asks if ready to start.
-            "VOZ_AGUA_7": "¿Está listo para dar el primer paso o tiene alguna consulta adicional antes de comenzar? 🙏",
-            # Audio: yes to call but need to schedule — asks for a good time.
-            # Text asks for their available time.
-            "VOZ_AGUA_8": "¿Qué hora le queda bien para coordinar la llamada? 🙏",
-            # Audio: full product intro — plastic vs cement, 2 modules (RD$70K/8 baths,
-            # RD$105K/16 baths), modular system. Closes: "si le gustaría comprar no deja saber."
-            # Text qualifies which module they need.
-            "[[VOZ_IMHOFF_1]]": "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏",
-            # Audio: RD$10K deposit, 1 week delivery, pay remainder on delivery.
-            # Text asks if ready to place deposit.
-            "[[VOZ_IMHOFF_2]]": "¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta adicional? 🙏",
-            # Audio: plastic vs cement comparison, more durable, won't crack or poison soil/water.
-            # Text soft-closes toward decision.
-            "[[VOZ_IMHOFF_3]]": "¿Le gustaría proceder con su planta o tiene alguna otra consulta antes de decidir? 🙏",
-            # Audio: trust/location — sells from factory, can send registro mercantil, always available.
-            # Followed by Instagram text + Wellington image — no extra text override needed.
+                           _VOZ_OPENER + "¿En qué pueblo o sector desea realizar el estudio? 🙏"),
+            "VOZ_AGUA_7": _VOZ_OPENER + "¿Está listo para dar el primer paso o tiene alguna consulta adicional? 🙏",
+            "VOZ_AGUA_8": _VOZ_OPENER + "¿Qué hora le queda bien para coordinar la llamada? 🙏",
+            "[[VOZ_IMHOFF_1]]": _VOZ_OPENER + "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo. 🙏",
+            "[[VOZ_IMHOFF_2]]": _VOZ_OPENER + "¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta? 🙏",
+            "[[VOZ_IMHOFF_3]]": _VOZ_OPENER + "¿Le gustaría proceder con su planta o tiene alguna consulta antes de decidir? 🙏",
+            # VOZ_IMHOFF_4: no text followup — Instagram text + Wellington photo handle the close.
             "[[VOZ_IMHOFF_4]]": "",
         }
         # Voice → image pairs: after a voice note fires, send its paired image bot

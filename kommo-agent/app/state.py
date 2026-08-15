@@ -42,14 +42,41 @@ def init() -> None:
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS linderos_sent ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
+        # Legacy followup table kept so in-flight rows aren't lost on upgrade.
+        # New code writes only to scheduled_nudges.
         c.execute("CREATE TABLE IF NOT EXISTS followup ("
                   "talk_id TEXT PRIMARY KEY, due_at REAL, done INTEGER DEFAULT 0, "
                   "override_message TEXT)")
-        # Add override_message column to existing DBs (idempotent)
         try:
             c.execute("ALTER TABLE followup ADD COLUMN override_message TEXT")
         except Exception:
-            pass  # column already exists
+            pass
+        # scheduled_nudges: proper outbox/queue for scenario-specific nudges.
+        # One-active-nudge invariant enforced by partial unique index on
+        # (lead_id) WHERE status='pending'. Priority: lower = more important.
+        # Scenarios: 'bathrooms' | 'location' | 'deposit' | 'post_info' | ...
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_nudges (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id     TEXT NOT NULL,
+                talk_id     TEXT NOT NULL,
+                scenario    TEXT NOT NULL,
+                priority    INTEGER NOT NULL DEFAULT 5,
+                fire_at     REAL NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'pending',
+                attempt     INTEGER NOT NULL DEFAULT 1,
+                message     TEXT NOT NULL,
+                last_inbound_at REAL,
+                context_json TEXT,
+                created_at  REAL NOT NULL
+            )
+        """)
+        # Partial unique index: only one pending nudge per lead at a time.
+        c.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_nudge_pending_lead
+            ON scheduled_nudges(lead_id)
+            WHERE status='pending'
+        """)
         c.execute("CREATE TABLE IF NOT EXISTS awaiting_linderos ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS last_inbound ("
@@ -213,45 +240,137 @@ def clear_handoff(talk_id: str) -> None:
         c.execute("DELETE FROM notified WHERE talk_id = ?", (str(talk_id),))
 
 
-def arm_followup(talk_id: str, delay_seconds: int,
-                 override_message: str | None = None) -> None:
-    """Arm a one-time inactivity follow-up at now+delay. No-op if one already
-    fired for this conversation (done=1), so it can never nudge twice.
-    override_message: if set, sent instead of the default followup_nudge."""
+# ── Nudge scheduling API ────────────────────────────────────────────────────
+# One active nudge per lead at a time (partial unique index enforces this).
+# If a higher-priority nudge arrives while one is pending, supersede the old
+# one. Priority: lower number = more important (e.g. deposit=1, bathrooms=5).
+
+def schedule_nudge(
+    lead_id: str,
+    talk_id: str,
+    scenario: str,
+    message: str,
+    delay_seconds: int,
+    priority: int = 5,
+    attempt: int = 1,
+    last_inbound_at: float | None = None,
+    context_json: str | None = None,
+) -> None:
+    """Schedule a scenario-specific nudge. If a pending nudge already exists
+    for this lead:
+      - new priority < existing priority → supersede (higher importance wins)
+      - new priority >= existing priority → leave existing in place (no-op)
+    A nudge that has already fired (status != 'pending') never blocks a new one.
+    """
     now = time.time()
+    fire_at = now + delay_seconds
+    last_in = last_inbound_at if last_inbound_at is not None else now
+    with _conn() as c:
+        existing = c.execute(
+            "SELECT id, priority FROM scheduled_nudges "
+            "WHERE lead_id=? AND status='pending'", (lead_id,)
+        ).fetchone()
+        if existing:
+            ex_id, ex_priority = existing
+            if priority < ex_priority:
+                # Higher-importance scenario supersedes the current one
+                c.execute(
+                    "UPDATE scheduled_nudges SET status='superseded' WHERE id=?",
+                    (ex_id,)
+                )
+                # Fall through to insert the new one
+            else:
+                return  # existing is same or higher priority — leave it
+        c.execute(
+            "INSERT INTO scheduled_nudges "
+            "(lead_id, talk_id, scenario, priority, fire_at, status, "
+            " attempt, message, last_inbound_at, context_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
+            (lead_id, talk_id, scenario, priority, fire_at,
+             attempt, message, last_in, context_json, now)
+        )
+
+
+def cancel_nudges(lead_id: str) -> None:
+    """Customer replied or human took over → cancel all pending nudges for
+    this lead. Also cancels legacy followup rows so the old loop stays quiet."""
     with _conn() as c:
         c.execute(
-            "INSERT INTO followup (talk_id, due_at, done, override_message) "
-            "VALUES (?, ?, 0, ?) "
-            "ON CONFLICT(talk_id) DO UPDATE SET due_at=excluded.due_at, "
-            "override_message=excluded.override_message "
-            "WHERE followup.done=0",
-            (talk_id, now + delay_seconds, override_message))
+            "UPDATE scheduled_nudges SET status='cancelled' "
+            "WHERE lead_id=? AND status='pending'", (lead_id,)
+        )
+        # Legacy compatibility: also disarm old followup rows
+        c.execute("UPDATE followup SET due_at=NULL WHERE talk_id=?", (lead_id,))
 
 
-def clear_followup(talk_id: str) -> None:
-    """Customer replied / is active -> disarm the pending follow-up (keep the
-    done flag so a spent follow-up is never re-armed)."""
-    with _conn() as c:
-        c.execute("UPDATE followup SET due_at=NULL WHERE talk_id=?", (talk_id,))
-
-
-def claim_due_followups(now: float | None = None) -> list:
-    """Atomically claim due follow-ups. Flipping done=0->1 in a WHERE-guarded
-    UPDATE means only ONE uvicorn process ever claims (and sends) each one.
-    Returns [(talk_id, due_at), ...] claimed by THIS call."""
+def claim_due_nudges(now: float | None = None) -> list:
+    """Atomically claim all nudges whose fire_at has elapsed.
+    The WHERE-guarded UPDATE means only one process ever claims each row.
+    Also drains any legacy followup rows for backward compatibility.
+    Returns [(talk_id, message, scenario), ...]
+    """
     now = time.time() if now is None else now
     claimed = []
     with _conn() as c:
+        # New table
         rows = c.execute(
-            "SELECT talk_id, due_at, override_message FROM followup "
-            "WHERE due_at IS NOT NULL AND due_at <= ? AND done=0", (now,)).fetchall()
-        for talk_id, due_at, override_msg in rows:
-            cur = c.execute("UPDATE followup SET done=1, due_at=NULL "
-                            "WHERE talk_id=? AND done=0", (talk_id,))
+            "SELECT id, talk_id, message, scenario, last_inbound_at "
+            "FROM scheduled_nudges "
+            "WHERE status='pending' AND fire_at <= ?", (now,)
+        ).fetchall()
+        for row_id, talk_id, message, scenario, last_in in rows:
+            cur = c.execute(
+                "UPDATE scheduled_nudges SET status='sent' "
+                "WHERE id=? AND status='pending'", (row_id,)
+            )
             if cur.rowcount == 1:
-                claimed.append((talk_id, due_at, override_msg))
+                # 24h window guard: last_inbound_at must be within 24h
+                if last_in and (now - last_in) > 86400:
+                    c.execute(
+                        "UPDATE scheduled_nudges SET status='expired' WHERE id=?",
+                        (row_id,)
+                    )
+                    continue
+                claimed.append((talk_id, message, scenario))
+        # Legacy followup table drain (in-flight rows from before the migration)
+        old_rows = c.execute(
+            "SELECT talk_id, due_at, override_message FROM followup "
+            "WHERE due_at IS NOT NULL AND due_at <= ? AND done=0", (now,)
+        ).fetchall()
+        for talk_id, due_at, override_msg in old_rows:
+            cur = c.execute(
+                "UPDATE followup SET done=1, due_at=NULL "
+                "WHERE talk_id=? AND done=0", (talk_id,)
+            )
+            if cur.rowcount == 1:
+                claimed.append((talk_id, override_msg or "", "legacy"))
     return claimed
+
+
+# ── Legacy shims (keep worker.py callers working during transition) ──────────
+def arm_followup(talk_id: str, delay_seconds: int,
+                 override_message: str | None = None) -> None:
+    """Deprecated: use schedule_nudge() for new scenarios.
+    Kept so existing generic followup call sites still work."""
+    from .config import settings as _s
+    _msg = override_message or ""
+    schedule_nudge(
+        lead_id=talk_id, talk_id=talk_id,
+        scenario="generic", message=_msg,
+        delay_seconds=delay_seconds, priority=9,
+    )
+
+
+def clear_followup(talk_id: str) -> None:
+    """Deprecated: use cancel_nudges() for new call sites."""
+    cancel_nudges(talk_id)
+
+
+def claim_due_followups(now: float | None = None) -> list:
+    """Deprecated: use claim_due_nudges(). Returns old tuple shape
+    (talk_id, due_at, override_msg) for the legacy main.py loop."""
+    _claimed = claim_due_nudges(now)
+    return [(t, 0.0, m) for t, m, s in _claimed]
 
 
 def set_awaiting_linderos(talk_id: str) -> None:

@@ -472,7 +472,15 @@ async def handle_message(msg: dict) -> None:
             _vk1 = "VOZ_AGUA_1"
             if not state.voice_already_sent(talk_id, _vk1):
                 try:
-                    await asyncio.sleep(1)
+                    # Welcome text before audio — same pattern as séptico
+                    await asyncio.sleep(1.0)
+                    await k.send_message(
+                        talk_id,
+                        "¡Bienvenido! 😊 Con gusto le orientamos sobre "
+                        "nuestros estudios de agua y perforación de pozos."
+                    )
+                    log.info("talk=%s agua welcome text sent", talk_id)
+                    await asyncio.sleep(1.5)
                     await k.run_bot(int(_voz_triggers[_vk1]), entity_id, _entity_type(msg))
                     state.mark_voice_sent(talk_id, _vk1)
                     _voz_fired = _vk1

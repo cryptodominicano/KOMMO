@@ -992,21 +992,22 @@ async def handle_message(msg: dict) -> None:
 
         # Cultural opener: warm Dominican register, acknowledges audio landed.
         # Fires after every voice note as part of the followup text.
-        _VOZ_OPENER = "Luego de escuchar la nota de voz, con gusto le atiendo. 😊 "
+        # Rotating warm closers — no audio reference, varied so it never reads robotic.
+        # Each bot gets its own closer matched to the conversation moment.
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "Por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
-            "VOZ_AGUA_2": _VOZ_OPENER + "¿Le gustaría comenzar con el estudio para poder darle toda la información? 🙏",
-            "VOZ_AGUA_3": _VOZ_OPENER + "Por favor mándeme la ubicación de su terreno y seguimos desde ahí. 📍",
-            "VOZ_AGUA_4": _VOZ_OPENER + "¿Tiene alguna pregunta o está listo para que le envíe los datos de depósito? 🙏",
-            "VOZ_AGUA_5": _VOZ_OPENER + "¿Le gustaría proceder con el estudio o tiene alguna consulta antes de decidir? 🙏",
-            "VOZ_AGUA_6": (_VOZ_OPENER + "¿Tiene alguna otra consulta antes de avanzar? 🙏"
+            "VOZ_AGUA_2": "Con gusto le ayudamos a tomar la mejor decisión. 😊 ¿Le gustaría comenzar con el estudio para tener toda la información? 🙏",
+            "VOZ_AGUA_3": "Cuando guste, mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
+            "VOZ_AGUA_4": "A la orden para lo que necesite. 🙏 ¿Tiene alguna pregunta o está listo para que le envíe los datos del depósito?",
+            "VOZ_AGUA_5": "Estamos aquí para orientarle. 😊 ¿Le gustaría proceder con el estudio o tiene alguna consulta antes de decidir? 🙏",
+            "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
                            if _is_septico_flow else
-                           _VOZ_OPENER + "¿En qué pueblo o sector desea realizar el estudio? 🙏"),
-            "VOZ_AGUA_7": _VOZ_OPENER + "¿Está listo para dar el primer paso o tiene alguna consulta adicional? 🙏",
-            "VOZ_AGUA_8": _VOZ_OPENER + "¿Qué hora le queda bien para coordinar la llamada? 🙏",
+                           "Con mucho gusto le cotizamos. 😊 ¿En qué pueblo o sector desea realizar el estudio? 🙏"),
+            "VOZ_AGUA_7": "A la orden. 😊 ¿Está listo para dar el primer paso o tiene alguna consulta adicional? 🙏",
+            "VOZ_AGUA_8": "¡Con gusto coordinamos! ¿Qué hora le queda bien para la llamada? 🙏",
             "[[VOZ_IMHOFF_1]]": "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏",
-            "[[VOZ_IMHOFF_2]]": _VOZ_OPENER + "¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta? 🙏",
-            "[[VOZ_IMHOFF_3]]": _VOZ_OPENER + "¿Le gustaría proceder con su planta o tiene alguna consulta antes de decidir? 🙏",
+            "[[VOZ_IMHOFF_2]]": "A la orden para ayudarle. 😊 ¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta? 🙏",
+            "[[VOZ_IMHOFF_3]]": "Estamos aquí para lo que necesite. 🙏 ¿Le gustaría proceder con su planta o tiene alguna consulta antes de decidir?",
             # VOZ_IMHOFF_4: no text followup — Instagram text + Wellington photo handle the close.
             "[[VOZ_IMHOFF_4]]": "",
         }

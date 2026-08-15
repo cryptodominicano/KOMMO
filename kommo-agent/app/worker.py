@@ -1049,6 +1049,7 @@ async def handle_message(msg: dict) -> None:
         if _direct_reply:
             reply = _direct_reply
         else:
+            reply = ""  # will be set by HAIKU_VOZ bypass or agent.generate
             # ── HAIKU PRE-PROCESSOR ──────────────────────────────────────────
             # R1: extracts all intents, builds multi-intent coverage contract
             # R2: detects adjacent_out_of_scope, injects redirect instruction
@@ -1236,8 +1237,9 @@ async def handle_message(msg: dict) -> None:
                          talk_id, _adj[:60])
 
             # Skip LLM if HAIKU_VOZ already set the reply via AUDIO_BYPASS
-            if not reply:
+            if not reply:  # reply may have been set by HAIKU_VOZ AUDIO_BYPASS above
                 reply = await agent.generate(text, kb, history, extra)
+        # reply is set by either _direct_reply, HAIKU_VOZ bypass, or agent.generate
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)
             return

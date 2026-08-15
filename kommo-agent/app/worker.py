@@ -1165,6 +1165,22 @@ async def handle_message(msg: dict) -> None:
                         log.error("talk=%s HAIKU_VOZ bot %s failed: %s",
                                   talk_id, _hv_bid, e)
 
+            # HAIKU_VOZ AUDIO_BYPASS: if Haiku fired a voice bot this turn,
+            # apply the same AUDIO_BYPASS pattern as keyword-fired bots —
+            # use the prescribed followup from _VOZ_FOLLOWUPS instead of LLM.
+            if _voz_fired and _voz_fired in _VOZ_FOLLOWUPS:
+                _hv_followup = _VOZ_FOLLOWUPS[_voz_fired]
+                if _hv_followup:
+                    reply = _hv_followup
+                    log.info("talk=%s HAIKU_VOZ AUDIO_BYPASS: using followup for %s",
+                             talk_id, _voz_fired)
+                    # Skip LLM entirely — jump straight to send
+                    # (multi-intent prompt not needed, audio handled intent)
+                    pass
+                else:
+                    # VOZ_IMHOFF_4 has empty followup — continue to LLM
+                    pass
+
             # Multi-intent: build coverage contract for GPT-4.1
             _multi_prompt = haiku_pre.build_multi_intent_prompt(_intents)
             if _multi_prompt:
@@ -1219,7 +1235,9 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s adjacent redirect injected: %s",
                          talk_id, _adj[:60])
 
-            reply = await agent.generate(text, kb, history, extra)
+            # Skip LLM if HAIKU_VOZ already set the reply via AUDIO_BYPASS
+            if not reply:
+                reply = await agent.generate(text, kb, history, extra)
         if not reply:
             log.warning("talk=%s empty model reply", talk_id)
             return

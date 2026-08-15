@@ -6,6 +6,90 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 18:00 UTC (final wrap)
+
+### Live validation: ambiguous flow + repeat question — both passing.
+
+---
+
+### Test results (verified live, August 15 2026)
+
+**Test 1 — Ambiguous "Sí" after generic greeting.**
+Flow: "Buenas tardes" → agua welcome image → service menu with emoji descriptions
+→ customer: "si" → Isla: "¡Con gusto le ayudamos! 😊 El estudio de agua es para
+saber si hay agua en su terreno y la planta séptica IMHOFF es para tratar aguas
+residuales. ¿Cuál aplica a su caso?" → customer: "imhoff" → full séptico sequence
+fires correctly (VOZ_IMHOFF_1 + SEPTICO_COMPARATIVA + bathroom question).
+Secondary ambiguity: customer said "Si" again at the bathroom question → Isla:
+"Perfecto, ¿me puede decir cuántos baños tiene su propiedad para recomendarle
+el módulo ideal?" — handled gracefully, not a repeat, advances the sale.
+RESULT: PASS.
+
+**Test 2 — Repeat question after audio coverage.**
+Flow: "hola necesito información del séptico IMHOFF" → full séptico welcome
+sequence → customer: "8" → module recommendation → customer: "cuánto cuesta
+el módulo 8" (already covered by VOZ_IMHOFF_1 audio 1 turn earlier).
+Isla: "Con mucho gusto se lo dejo aquí escrito por si el audio no le llegó bien:
+el Módulo 8 cuesta RD$70,000 con envío incluido. ¿Desea avanzar con la orden?"
+No repetition of full explanation. Warm reframe. Advances to close.
+RESULT: PASS.
+
+---
+
+### Aha moments from these tests
+
+**Multi-layer ambiguity.** A single conversation can have multiple ambiguous
+responses at different points (service selection "Sí", then bathroom count "Si").
+The system handled both correctly without any special case code — the generic
+greeting rule catches the first, the bathroom question's AUDIO_BYPASS followup
+catches the second. The architecture is composable.
+
+**"¿Cuál aplica a su caso?" outperforms "¿cuál le interesa?"**
+Research-backed finding validated live: framing the choice around the customer's
+*situation* rather than their *preference* leads to more decisive responses.
+"imhoff" came back immediately — customer could self-identify from the one-line
+descriptions without needing to know what "séptico" or "IMHOFF" means.
+
+**Coverage ledger working on first turn.**
+The STATE BLOCK was injected correctly and the model used it to reframe the
+repeat question without being told explicitly which audio covered it. The
+"por si el audio no le llegó bien" phrase fired naturally — the model followed
+the Dominican template from the prompt rules.
+
+**Generic greeting note: emoji rendering.**
+The 💧 and 🪣 emojis render correctly on WhatsApp Android and WhatsApp Web
+(Kommo UI). No rendering issues observed. Emojis materially help readability
+when presenting two-option menus — customer answered with the product name
+("imhoff") rather than a number or vague affirmative.
+
+---
+
+### Open items (final session state)
+
+**Must fix before production traffic:**
+1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 printed
+   on it. Replace image in Kommo Salesbot UI before price objection scenario
+   hits real customers.
+
+**Next session priorities:**
+2. Agua flow end-to-end test: run same 7-scenario test for agua audios + images.
+   Only séptico flow validated today.
+3. Coverage ledger Stage 2: write `mark_topic_covered` calls for text-delivered
+   topics (price, modules, etc.) so the ledger works for text answers too,
+   not just audio. Currently only audio topics are tracked.
+4. Facebook ad CTWA prefill: configure `ad_direct_entry_text` per campaign in
+   Meta Business Suite so ad-sourced leads auto-detect their flow.
+5. Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s.
+   VOZ_AGUA_1 at 1:38 is over target.
+6. IMHOFF lifespan: ask Wellington → add to KB → re-ingest Qdrant.
+7. October 1, 2026 (47 days): service messages become paid. Instrument nudge
+   reply rates and marginal nudge cost per recovered lead before that date.
+8. Daily conversation-review automation: not built.
+9. Legacy number +1 829-566-7542: wind-down pending.
+10. KOMMO repo README: still says "Claude LLM, not deployed."
+
+---
+
 ## Session: August 15, 2026 — 17:00 UTC (continuation)
 
 ### Anti-repetition coverage ledger + generic greeting improvements.

@@ -155,8 +155,8 @@ VOZ_AGUA_8 = 85790   # solicitud de llamada
 # VOZ_IMHOFF_4 is special: voice + Instagram text + Wellington image (sequence in worker.py).
 "[[VOZ_IMHOFF_1]]" = 85800   # welcome / intro séptico
 "[[VOZ_IMHOFF_2]]" = 85802   # cómo comprar / proceso
-"[[VOZ_IMHOFF_3]]" = 85804   # objeción de precio
-"[[VOZ_IMHOFF_4]]" = 85806   # ubicación / confianza
+"[[VOZ_IMHOFF_3]]" = 85806   # objeción de precio (audio content verified 2026-08-15)
+"[[VOZ_IMHOFF_4]]" = 85804   # ubicación / confianza (audio content verified 2026-08-15)
 wellington_lider_foto_bot_id = 85808  # fires after VOZ_IMHOFF_4
 
 [linderos]

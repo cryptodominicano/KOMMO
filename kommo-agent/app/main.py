@@ -21,36 +21,39 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 log = logging.getLogger("main")
 
 async def _followup_loop():
-    """Send ONE gentle "still there?" nudge to conversations that went quiet after
-    we asked something. Timers are armed in the worker; claimed atomically here so
-    multiple uvicorn processes never double-send. 15 min is inside Meta's 24h
-    service window, so this sends as normal free-form text."""
+    """Poll scheduled_nudges every 30s and send any that are due.
+    Atomic claim (status='pending'→'sent' in a WHERE-guarded UPDATE) means
+    only one uvicorn process ever sends each nudge.
+    Falls back to the legacy followup table for any in-flight rows from
+    before the scheduled_nudges migration.
+    """
+    _default_nudge = (client_pack.pack().get("messages", {}) or {}).get("followup_nudge") or ""
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
             now = time.time()
-            claimed = state.claim_due_followups(now)
+            claimed = state.claim_due_nudges(now)
             if not claimed:
-                continue
-            nudge = (client_pack.pack().get("messages", {}) or {}).get("followup_nudge") or ""
-            if not nudge:
                 continue
             k = KommoClient()
             try:
-                for talk_id, due_at, override_msg in claimed:
+                for talk_id, message, scenario in claimed:
                     if state.is_handed_off(talk_id):
-                        continue                     # human is handling it
-                    if now - due_at > 3600:
-                        continue                     # stale (loop was down) - skip
-                    _msg = override_msg if override_msg else nudge
+                        log.info("talk=%s nudge skipped — human active (scenario=%s)",
+                                 talk_id, scenario)
+                        continue
+                    # For generic/legacy rows, fall back to the config nudge text
+                    _msg = message if message else _default_nudge
                     if not _msg:
+                        log.warning("talk=%s nudge has no message (scenario=%s) — skip",
+                                    talk_id, scenario)
                         continue
                     try:
                         await k.send_message(talk_id, _msg)
-                        log.info("talk=%s follow-up nudge sent (override=%s)",
-                                 talk_id, bool(override_msg))
+                        log.info("talk=%s nudge sent (scenario=%s)", talk_id, scenario)
                     except KommoError as e:
-                        log.error("talk=%s follow-up send failed: %s", talk_id, e)
+                        log.error("talk=%s nudge send failed (scenario=%s): %s",
+                                  talk_id, scenario, e)
             finally:
                 await k.aclose()
         except asyncio.CancelledError:

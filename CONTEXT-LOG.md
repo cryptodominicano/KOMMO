@@ -2272,3 +2272,83 @@ Cost model: $3.89/mo at current volume, low risk
 - Legacy +1 829-566-7542: wind-down pending
 - Voice note audit: check all 12 bot durations manually in Kommo UI
 - Daily conversation-review automation: not built yet
+
+---
+
+## Session 2026-08-14 (Part 5) — End-to-end audit, 6 fixes, R1-R6 research implementation
+
+### End-to-end audit results (11 talks since 6PM)
+34 passed / 8 needs attention / 3 fix required / 6 research suggested.
+Clean talks: 604, 605, 607, 608 (séptico flow perfect, all 4 IMHOFF leads).
+Talk 605: price objection handled correctly.
+Talk 606: scope deflection + audio reference working.
+Nudge timing: all 2-hour nudges firing correctly.
+
+### Fix 1 — Double reply race condition (talk 592, 18:09:35-41)
+Per-talk asyncio.Lock() added at module level (_talk_locks dict).
+Before debounce sleep, acquire talk's lock. Second rapid message waits
+for first to complete before processing. Eliminates race where two tasks
+both pass the supersession check independently.
+
+### Fix 2 — Markdown bold leakage (talk 565, **Módulo 8**)
+Post-gen filter now strips **bold** markdown before send_message.
+Regex: re.compile(r'\*\*([^*]+)\*\*') → strips asterisks, keeps text.
+Logs MARKDOWN_STRIPPED when triggered.
+
+### Fix 3 — Text+location double reply (talk 592, 19:08:35-36)
+3-second delay before location handler processes. Text message processes
+first, location waits 3s then checks is_latest_inbound before proceeding.
+
+### R1-R6 Research implementation (Nacimiento-García et al. MDPI 2024 + OpenAI docs)
+
+**R1 — DR Spanish transcription (transcribe.py)**
+Prompt redesigned with three end-weighted layers (OpenAI cookbook):
+  1. Dialect style sentence: "Conversación en español dominicano, tono informal.
+     Diache, esa vaina ta' to', mi hermano."
+  2. DR slang glossary: tíguere, motoconcho, ta to, diache, colmado, guagua,
+     un chin, jevi, cuartos, concho, dique, por fa
+  3. Domain vocabulary: existing AP terms
+
+**R2 — Hallucination guardrails (transcribe.py)**
+- Repetition loop detection: regex catches fabricated loops
+- Length-vs-duration sanity: warns on short text from long audio
+- Prompt-leakage fragments added to _HALLUCINATIONS set
+- GPT normalization pass: expands DR contractions before Haiku classifies
+  (ta' → está, lo' → los, vamo' → vamos, pa' → para). Fail-open.
+
+**R3 — Message coalescing**
+Implemented via asyncio.Lock() per talk. Redis upgrade deferred —
+at current volume (50 talks/month) the lock is sufficient.
+Research notes Redis-backed 5-8s debounce for 500+ concurrent conversations.
+
+**R4 — Welcome sequence pacing (worker.py)**
+1.5s sleep before VOZ_AGUA_1 on first contact.
+BSP/Meta guidance: avoid stacking image+voice+text in <2s.
+Prevents quality rating issues from rapid outbound message bursts.
+
+**R5 — Markdown leakage (worker.py)**
+Post-gen regex strips **bold** before send. Confirmed GPT-4.1 still
+leaks markdown despite prompt instructions per community-confirmed behavior.
+Research: combine negative instructions + few-shot + regex strip.
+
+**R6 — DR phone regex hardening (worker.py)**
+DR-specific area codes (809/829/849) now required in pattern.
+Parentheses format (829) 566-7542 now caught via \(?area\)?.
+Negative lookbehind: (?<![0-9$]) excludes prices and date digits.
+Negative lookahead: (?![\d/\-]) excludes dates like 08/29/2025.
+13/13 test cases pass.
+
+### Open items (final — carried to next session)
+- Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+- IMHOFF plant lifespan: ask Wellington → add to KB → re-ingest
+- Facebook/Instagram OAuth: re-authorize if delivery errors persist
+- Legacy +1 829-566-7542: wind-down pending
+- Voice note audit: check all 12 durations manually in Kommo UI
+  (API doesn't expose duration — manual check in Salesbot message step)
+  VOZ_AGUA_1 at ~2 min is priority — ask Wellington to re-record 2-3
+  notes of 30-40s each (one idea per note per research R4)
+- Redis debounce upgrade: consider when conversation volume exceeds
+  500 concurrent talks/month
+- Daily conversation-review automation: not built yet
+- Measure actual DR WER: run held-out set of real AP voice notes through
+  gpt-4o-mini-transcribe to get baseline. No public DR-specific WER exists.

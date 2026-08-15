@@ -2,17 +2,14 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-14 — **v3.0 deployed and fully tested.**
+Last updated: 2026-08-14 — **v3.1 deployed and fully tested.**
 
 ---
 
 ## 1. The one thing to know
 
-The live agent runs on **Kommo** transport + **FastAPI** engine (`kommo-agent`).
-Kommo is only the WhatsApp/Instagram/Facebook transport and CRM.
-The AI loop lives entirely in our own code.
-
-Health check: `GET https://kommo-agent.goldcoastai.pro/health`
+FastAPI engine (`kommo-agent`) on VPS. Kommo is only transport + CRM.
+Health: `GET https://kommo-agent.goldcoastai.pro/health`
 → `{"ok":true,"subdomain":"aguasprofundas","provider":"openai"}`
 
 ---
@@ -22,39 +19,42 @@ Health check: `GET https://kommo-agent.goldcoastai.pro/health`
 | What | Where |
 |---|---|
 | Live engine | GitHub `cryptodominicano/KOMMO` (`kommo-agent/`) |
-| Running service | container `kommo-agent` on srv1175204.hstgr.cloud |
 | Build history | `CONTEXT-LOG.md` (repo root) — read first every session |
-| Commercial spec | `COMMERCIAL_GRADE_SPEC.md` (repo root) — future clients |
-| Audio workflow | `kommo-agent/docs/AUDIO_WORKFLOW.md` |
+| Commercial spec | `COMMERCIAL_GRADE_SPEC.md` (repo root) |
 | System prompt | `kommo-agent/clients/aguas-profundas/prompts/system.md` |
 | Client config | `kommo-agent/clients/aguas-profundas/client.toml` |
-| Core eval suite | `/app/data/run_tests3.py` (on VPS, 20/20) |
+| Core eval suite | `/app/data/run_tests3.py` (20/20) |
 | Spanish multi-intent | `kommo-agent/scripts/eval_spanish_multi_final.py` (15/15) |
+| Transcription | `kommo-agent/app/transcribe.py` |
 
 ---
 
-## 3. Architecture (v3.0)
+## 3. Architecture (v3.1)
 
 ```
 WhatsApp / Instagram / Facebook
-  → Kommo webhook → FastAPI main.py (ack 200 in <2s, enqueue)
-  → worker.py background:
-       SCOPE GUARD (L1: patterns, L2: intent 30-char threshold)
-       FLOW LOCK (flow_state SQLite — agua/séptico, locked on first msg)
+  → Kommo webhook → FastAPI main.py (ack 200 in <2s)
+  → worker.py (per-talk asyncio.Lock — serializes all messages):
+       SCOPE GUARD (L1: patterns, L2: 30-char intent check)
+       FLOW LOCK (flow_state SQLite — agua/séptico forever)
        CHANNEL GATE (_is_waba, _is_instagram_comment)
-       BLOQUEADO check (lead + contact tags)
-       MESSAGE TYPE (voice→Whisper, location→flow-aware, picture→cooldown)
+       BLOQUEADO check
+       MESSAGE TYPE:
+         voice → Whisper (DR dialect prompt + VAD + normalization)
+         location → 3s delay → flow-aware (agua=linderos, séptico=delivery)
+         picture → 30s cooldown → media ack + handoff
+         text → continue
        VOICE BOT SELECTION (keyword → fire before LLM)
-       HAIKU PRE-PROCESSOR (gpt-4o-mini: intent extract + scope classify)
-         → multi-intent: "Debes responder TODAS" contract injected
-         → adjacent scope: REDIRECT REQUERIDO injected
+       HAIKU PRE-PROCESSOR (intent extract + scope classify + DR slang)
        FSM STAGE INJECTION (ESTADO ACTUAL: flujo=X, etapa=Y)
-       RAG (Qdrant aguas_profundas_kb, top_k=8)
-       GPT-4.1 (main model — 5x rule budget vs gpt-4o)
-       POST-GEN PHONE NUMBER FILTER (regex strip)
+       RAG (Qdrant, top_k=8)
+       GPT-4.1 (main model)
+       POST-GEN FILTERS:
+         phone number (DR regex 809/829/849 + guards)
+         markdown bold (**text** → text)
        PRE-SEND SUPERSESSION CHECK
-       send_message → Kommo Chats API
-       SENTINEL PROCESSING (bots, handoff, tag, rename, stage advance)
+       send_message → Kommo
+       SENTINEL PROCESSING
 ```
 
 ---
@@ -67,15 +67,14 @@ WhatsApp / Instagram / Facebook
 | Pipeline ID | `14130431` |
 | Handoff stage | `Atención humana` / `109168423` |
 | Isaias user_id | `15588735` |
-| Sheyla user_id | `15589135` (handoff owner, 2h SLA) |
-| Webhook ID | `47409015` (add_message only) |
+| Sheyla user_id | `15589135` |
+| Webhook ID | `47409015` |
 | Qdrant collection | `aguas_profundas_kb` (1536-dim, 48 points) |
-| Main LLM | `gpt-4.1` (forced via model_post_init in config.py) |
+| Main LLM | `gpt-4.1` (forced via model_post_init) |
 | Pre-processor | `gpt-4o-mini` via haiku.py |
-| Transcription | `gpt-4o-mini-transcribe` |
+| Transcription | `gpt-4o-mini-transcribe` + DR dialect prompt |
 | Primary WABA | +1 829-558-3119 |
-| GitHub | `cryptodominicano/KOMMO`, branch `main` |
-| Latest commit | `c6e200f` |
+| Latest commit | `91853ef` |
 
 ---
 
@@ -87,13 +86,10 @@ WhatsApp / Instagram / Facebook
 | 55348 | agua-foto | [[FOTO_AGUA]] |
 | 55956 | banco-foto | [[DEPOSITO]] |
 | 59058 | Payment-Audio | [[AUDIO_PAGO]] |
-| 76624 | septico-ficha | [[SEPTICO_FICHA]] |
-| 76632 | septico-comparativa | [[SEPTICO_COMPARATIVA]] |
-| 76634 | septico-funcionamiento | [[SEPTICO_FUNCIONAMIENTO]] |
-| 76646 | septico-ventajas | [[SEPTICO_VENTAJAS]] |
-| 85776 | VOZ_AGUA_1 | Engine: first water contact |
+| 76624-76646 | septico bots | [[SEPTICO_*]] markers |
+| 85776 | VOZ_AGUA_1 | First water contact (1.5s paced) |
 | 85778-85790 | VOZ_AGUA_2-8 | Keywords — LLM BYPASSED |
-| 85800 | VOZ_IMHOFF_1 | Engine: first séptico contact |
+| 85800 | VOZ_IMHOFF_1 | First séptico contact |
 | 85802-85804 | VOZ_IMHOFF_2-3 | Keywords — LLM BYPASSED |
 | 85806 | VOZ_IMHOFF_4 | Location/trust keywords |
 | 85808 | Wellington_Lider_Foto | After VOZ_IMHOFF_4 |
@@ -102,25 +98,25 @@ WhatsApp / Instagram / Facebook
 
 ## 6. Control markers
 
-[[HANDOFF]] → stage move 109168423 + Sheyla task + internal note
-[[DEPOSITO]] → banco-foto bot + AGUAS_BANK_TEXT
+[[HANDOFF]] → stage move + Sheyla task + note
+[[DEPOSITO]] → banco-foto + bank text
 [[AUDIO_PAGO]] → Payment-Audio (ETAPA 1 agua only)
-[[SECTOR:Provincia|Pueblo]] → tag contact by area
+[[SECTOR:Provincia|Pueblo]] → tag contact
 [[SEPTICO_COMPARATIVA/FUNCIONAMIENTO/FICHA/VENTAJAS]] → image bots
-[[FOTO_AGUA]] → agua-foto bot
-[[LINDEROS_LISTO]] → ETAPA 1 deposit (no handoff)
-[[DESC_OFRECIDO]] → log 5% discount offered
+[[FOTO_AGUA]] → agua-foto
+[[LINDEROS_LISTO]] → ETAPA 1 deposit
+[[DESC_OFRECIDO]] → log 5% discount
 
 ---
 
-## 7. Non-negotiable rules (enforced in code + prompt)
+## 7. Non-negotiable rules
 
-- Never confirm a payment — always ask for comprobante + [[HANDOFF]]
+- Never confirm payment — ask for comprobante + [[HANDOFF]]
 - Never guarantee water 100% — "80-90% con el estudio"
-- Never give drilling prices in text — VOZ_AGUA_2 handles
-- Never repeat audio content in text reply
-- Never share phone numbers — enforced by post-gen regex filter
-- Unknown answers: honest admit + [[HANDOFF]] — never invent
+- Never give drilling prices in text
+- Never repeat audio content in text
+- Never share phone numbers (regex filter enforced in code)
+- Unknown answers: honest admit + [[HANDOFF]]
 - Always Spanish regardless of customer language
 - Max 2 lines per reply, one question, no lists or bold
 
@@ -134,24 +130,28 @@ WhatsApp / Instagram / Facebook
 - Never push to Vercel manually → GitHub only
 - Every Salesbot: empty Triggers panel
 - Patches: write to /app/data/ → `docker exec -i kommo-agent python3 < /app/data/patch.py`
-- End of every session: commit all files + update CONTEXT-LOG.md
+- End of every session: commit all + update CONTEXT-LOG.md
 
 ---
 
 ## 9. Version status
 
-### v3.0 (live, 2026-08-14) — 46/46 tests passing
-- GPT-4.1 (linear decay, 5x rule budget vs GPT-4o)
-- Haiku pre-processor (gpt-4o-mini): intent extract + scope classify
-- System prompt: 144 lines, GPT-4.1 OpenAI spec, written in Spanish
-- Qualification FSM: greeting→need→location→price→deposit→won/handoff
-- Oct 1 cost model: $3.89/mo at current volume (low risk)
-- Eval suites: 20/20 core + 15/15 Spanish multi-intent + 11/11 Haiku
+### v3.1 (live, 2026-08-14) — 46/46 tests passing
+All v3.0 features plus:
+- Per-talk asyncio.Lock: eliminates double-reply race condition
+- Markdown bold post-gen strip: **text** → text before send
+- Text+location 3s delay: prevents simultaneous webhook double-reply
+- DR transcription: dialect prompt + repetition detection + normalization pass
+- Welcome pacing: 1.5s before VOZ_AGUA_1 on first contact
+- DR phone regex: 809/829/849 specific + negative lookaheads
 
-### Open items (v3.1)
+### Open items (v3.2)
 - Wellington_Lider_Foto (85808): verify image in Kommo UI
 - IMHOFF lifespan: ask Wellington → KB → re-ingest
 - Facebook/Instagram OAuth: re-authorize if delivery errors persist
 - Legacy +1 829-566-7542: wind-down pending
-- Voice note audit: check all 12 durations manually (VOZ_AGUA_1 = priority)
+- Voice note audit: check all 12 durations in Kommo UI (Salesbot → message step)
+  VOZ_AGUA_1 (~2 min) is priority. Target: 20-40s, hard cap 60s.
+- DR WER baseline: run held-out AP voice notes through gpt-4o-mini-transcribe
+- Redis debounce: upgrade when volume exceeds 500 concurrent talks/month
 - Daily conversation-review automation: not built yet

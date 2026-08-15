@@ -535,3 +535,51 @@ Total: 46/46
 The v3.0 architecture is the commercial-grade standard:
 GPT-4.1 + Haiku pre-processor + FSM stages + OpenAI GPT-4.1 prompt spec
 + eval suite before every change. See sections 4-7 for implementation rules.
+
+---
+
+## 12. Transcription Standards (Research-Backed, August 2026)
+
+Source: Nacimiento-García, Díaz-Kaas-Nielsen & González-González, Applied Sciences
+2024, 14(11), 4734. Caribbean Spanish (incl. DR) is the worst-recognized accent
+group for Whisper Large-v2 (~4-8pp WER penalty vs best accent on clean speech).
+Conversational WhatsApp voice notes will be worse — no public DR-specific WER exists.
+
+### For every future client in DR/Caribbean:
+
+**Transcription prompt structure (end-weighted per OpenAI cookbook):**
+1. Dialect style sentence first (sets register)
+2. Local slang glossary (lexical biasing for high-miss terms)
+3. Domain vocabulary last (highest attention weight)
+
+**Hallucination guards (all required):**
+- _HALLUCINATIONS set with known silence outputs + prompt-leakage fragments
+- Repetition loop detection (regex)
+- Length-vs-duration sanity check (warn on <10% of expected words)
+- min_audio_bytes guard (reject near-empty clips)
+
+**GPT normalization pass:**
+After transcription, if local contractions detected, run a fast cheap model
+call to expand them before intent classification. Fail-open.
+
+**Model recommendation:**
+gpt-4o-mini-transcribe for accuracy/cost balance. Groq Whisper-large-v3 for
+latency/cost if accuracy ceiling is acceptable. Always measure actual WER on
+a held-out set of real client voice notes — no public dialect-specific benchmarks.
+
+**VAD gating:**
+min_audio_bytes=2000 is a basic guard. Add length-vs-duration ratio check.
+Never route raw transcripts directly to keyword-triggered actions.
+
+### Message pacing (BSP/Meta guidance):
+- Welcome sequence: 1.5-4s between image, voice, and text
+- Never stack 3+ media in under 2 seconds
+- Monitor quality rating weekly — yellow = lengthen gaps immediately
+- WhatsApp per-recipient pair-rate limit: 1 msg / 6s sustained
+
+### Phone number filtering (DR-specific):
+Required pattern: DR area codes (809/829/849) explicitly required.
+Negative lookbehind: exclude prices ($, RD$) and date digits.
+Negative lookahead: exclude date separators (/, -).
+Support parentheses format: \(?area\)?.
+Layer: regex (every message) → optional LLM judge (audit only, never sync).

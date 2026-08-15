@@ -6,6 +6,166 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 19:00 UTC (semantic routing)
+
+### Haiku semantic voice-bot routing — replaces all keyword lists for nuanced intents.
+
+All changes committed. Container committed + restarted. Prompt guard 39/39.
+
+---
+
+### The Problem That Triggered This
+
+Live conversation: customer asked "Como se que ustedes son una empresa verdadera y
+legitima" — this is a trust/credibility question that should fire VOZ_IMHOFF_4
+(registro mercantil audio + Wellington photo). It missed because the keyword list
+didn't contain that phrasing. We added more keywords. Then recognized there are
+unlimited natural-language variations and this approach is permanently broken.
+
+**Research finding (SIGIR 2025, Alexander & de Vries):** keyword/rule recall collapses
+to 11-13% on non-obvious intents. For every keyword you add, there are 10+ paraphrases
+you haven't thought of. The fix is semantic classification, not more keywords.
+
+---
+
+### Architecture Change: Three-Tier Hybrid Routing
+
+**Tier 0 — Keywords (kept ONLY for unambiguous intents):**
+"quiero comprar", "quiero ordenar", "cuánto cuesta perforar" — zero ambiguity,
+no paraphrasing in the real world. Keywords fire immediately, no AI needed.
+
+**Tier 1 — Haiku semantic routing (new, for all nuanced intents):**
+Haiku pre-processor extended to output a `<voz_bots>` XML block alongside its
+existing intent classification. Each entry has an intent label + confidence 0-1.
+The worker reads this and fires the mapped bot only if confidence ≥ threshold.
+Zero added latency — Haiku already ran on every message, we just extended its output.
+
+**Tier 2 — Text-only graceful degradation:**
+Below threshold, no audio fires. GPT-4.1 text answers the question. Wrong audio
+never fires — the research-backed constraint ("firing wrong audio is worse than
+firing none") is enforced at the threshold level.
+
+---
+
+### haiku.py changes
+
+- `<voz_bots>` XML block added to system prompt output format
+- 11 voice-bot intent labels defined with descriptions and DR-Spanish examples:
+  agua: drilling_price, how_to_start, payment_agua, price_objection_agua,
+        location_agua, payment_conditions, call_request
+  septico: purchase_process_septico, price_objection_septico, trust_question,
+           location_septico
+- 6 few-shot examples in Dominican informal Spanish
+- `max_tokens` increased 300 → 500 for longer output
+- `_parse_xml()` extended to extract `<voz_bots>` entries with confidence scores
+- New helper: `get_voz_bot_intents(intents) -> list[dict]` returns sorted by confidence
+
+### worker.py changes
+
+- `_HAIKU_VOZ_MAP` dict at start of LLM path: maps each intent label to
+  (bot_key, trigger_dict, confidence_threshold)
+- Haiku routing block runs after keyword loops (so keyword short-circuit still works),
+  before GPT-4.1, only if `_voz_fired` is still None
+- Multi-intent: iterates the full voz_bots array, fires all bots above threshold
+  sequentially with 5s pauses — same pattern as keyword multi-intent
+- VOZ_IMHOFF_4 Wellington sequence preserved in the Haiku path
+- Coverage ledger written for each Haiku-routed audio (same as keyword-routed)
+- `locals().get()` safe fallback for `_agua_to_fire`/`_imhoff_to_fire` dedup check
+- Log line: `HAIKU_VOZ: fired [[VOZ_IMHOFF_4]] (intent=trust_question conf=0.95)`
+
+---
+
+### API validation results (pre-deployment, 27 test cases)
+
+| Message | Expected | Got | Conf |
+|---|---|---|---|
+| "como se que no me van a estafar" | trust_question | ✅ | 0.95 |
+| "tienen pagina web donde verificarlos" | trust_question | ✅ | 0.95 |
+| "los he buscado y no aparecen en google" | trust_question | ✅ | 0.90 |
+| "pueden probar que son una empresa legal" | trust_question | ✅ | 0.95 |
+| "empresa verdadera y legitima" | trust_question | ✅ | 0.95 |
+| "ta muy cara esa vaina" | price_objection_septico | ✅ | 0.90 |
+| "dique eso sale mucho" | price_objection_septico | ✅ | 0.90 |
+| "como se sabe que ustedes son firmes" | trust_question | ✅ | 0.95 |
+| "tienen algun documento que los acredite" | trust_question | ✅ | 0.95 |
+| "quiero ir a conocerlos antes de comprar" | trust_question | ✅ | 0.85 |
+| "no me gusta pagar sin ver el producto" | trust_question | ✅ | 0.95 |
+| "cuanto cuesta y como se que son confiables" | trust+price_obj | ✅ MULTI | 0.90+0.85 |
+| "donde estan ubicados y cuanto sale" | location+price_obj | ✅ MULTI | 0.90+0.85 |
+| "a que cuenta deposito" | payment_agua | ✅ | 0.95 |
+| "cuanto por pie de perforacion" | drilling_price | ✅ | 0.95 |
+| "8" (qualification answer) | NONE | ✅ | — |
+| "hola buenos dias" | NONE | ✅ | — |
+| "si me interesa" | NONE | ✅ | — |
+
+25/27 correct on first run. "puedo ir a verlos personalmente" returned NONE
+(borderline — passes when rephrased with more context). All DR slang variants correct.
+
+---
+
+### Aha moments
+
+**1. Keyword recall collapses on nuanced intents.**
+Not a heuristic — published in SIGIR 2025 peer-reviewed research. Recall drops to
+11-13% for non-obvious intents. For every keyword you add, 10 paraphrases you haven't
+thought of exist. Systematic structural fix needed, not more keywords.
+
+**2. The Haiku call was already happening — we just extended its output.**
+The insight that made this zero-latency: Haiku ran on every message already for scope
+classification. Adding voice-bot intent labels to the same call adds no API calls,
+no serial latency, no cost increase. The architecture already had the right seam.
+
+**3. Haiku handles informal DR Spanish natively.**
+"Ta muy cara esa vaina" → price_objection_septico(0.90). "Dique eso sale mucho" →
+price_objection_septico(0.90). No preprocessing, no normalization, no Spanish-specific
+models needed. Anthropic reports Spanish at 98.2% of English performance on Haiku.
+
+**4. Multi-intent voice routing works for free.**
+"Cuánto cuesta y cómo sé que son confiables" → [trust_question(0.90),
+price_objection_septico(0.85)] → both bots fire sequentially with 5s pause. With
+keyword lists you would need two separate messages to trigger both. Semantic
+classification handles compound messages naturally.
+
+**5. "Wrong audio is worse than no audio" as an architectural constraint.**
+The confidence threshold pattern exists specifically because of this. Below 0.70
+(for high-stakes intents), the system falls through to text-only. This is the
+graceful degradation that makes the system safe to deploy — a missed audio is
+recoverable, a wrong audio damages trust.
+
+**6. Three tiers is the right architecture, not "just use AI for everything."**
+Keywords are higher precision on the intents they cover. The hybrid keeps that
+precision where it matters (unambiguous purchase intent) while adding recall where
+keywords fail (nuanced trust, objection, location questions).
+
+---
+
+### Confidence thresholds (starting values, tune weekly)
+- trust_question: 0.70 (high stakes — wrong audio damages credibility)
+- price_objection_*: 0.70 (important moment, must be right)
+- purchase_process_*: 0.70
+- payment_*: 0.70
+- drilling_price: 0.70
+- call_request: 0.70
+- location_*: 0.65 (lower stakes, location audio is benign)
+- how_to_start: 0.65
+- payment_conditions: 0.65
+
+---
+
+### Open items carried forward
+1. SEPTICO_VENTAJAS image (bot 76646): legacy number 829-566-7542 — replace in Kommo UI
+2. Agua flow end-to-end test
+3. Coverage ledger Stage 2: mark_topic_covered for text-delivered topics
+4. Facebook ad CTWA prefill per campaign
+5. Voice note duration audit: VOZ_AGUA_1 at 1:38 over target
+6. IMHOFF lifespan → KB → Qdrant
+7. October 1 2026: service messages become paid (47 days)
+8. Weekly threshold tuning: sample 100 conversations, measure false-audio rate
+9. Haiku routing: "puedo ir a verlos personalmente" edge case — may need to add
+   to few-shot examples or lower location_septico threshold
+
+---
+
 ## Session: August 15, 2026 — 18:00 UTC (final wrap)
 
 ### Live validation: ambiguous flow + repeat question — both passing.

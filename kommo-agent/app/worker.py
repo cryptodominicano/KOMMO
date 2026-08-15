@@ -965,7 +965,7 @@ async def handle_message(msg: dict) -> None:
         # Fires after every voice note as part of the followup text.
         _VOZ_OPENER = "Luego de escuchar la nota de voz, con gusto le atiendo. 😊 "
         _VOZ_FOLLOWUPS = {
-            "VOZ_AGUA_1": _VOZ_OPENER + "Por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
+            "VOZ_AGUA_1": "Por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
             "VOZ_AGUA_2": _VOZ_OPENER + "¿Le gustaría comenzar con el estudio para poder darle toda la información? 🙏",
             "VOZ_AGUA_3": _VOZ_OPENER + "Por favor mándeme la ubicación de su terreno y seguimos desde ahí. 📍",
             "VOZ_AGUA_4": _VOZ_OPENER + "¿Tiene alguna pregunta o está listo para que le envíe los datos de depósito? 🙏",
@@ -975,7 +975,7 @@ async def handle_message(msg: dict) -> None:
                            _VOZ_OPENER + "¿En qué pueblo o sector desea realizar el estudio? 🙏"),
             "VOZ_AGUA_7": _VOZ_OPENER + "¿Está listo para dar el primer paso o tiene alguna consulta adicional? 🙏",
             "VOZ_AGUA_8": _VOZ_OPENER + "¿Qué hora le queda bien para coordinar la llamada? 🙏",
-            "[[VOZ_IMHOFF_1]]": _VOZ_OPENER + "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo. 🙏",
+            "[[VOZ_IMHOFF_1]]": "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏",
             "[[VOZ_IMHOFF_2]]": _VOZ_OPENER + "¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta? 🙏",
             "[[VOZ_IMHOFF_3]]": _VOZ_OPENER + "¿Le gustaría proceder con su planta o tiene alguna consulta antes de decidir? 🙏",
             # VOZ_IMHOFF_4: no text followup — Instagram text + Wellington photo handle the close.

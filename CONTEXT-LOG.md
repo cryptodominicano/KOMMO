@@ -6,6 +6,123 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 19:30 UTC (séptico e2e complete)
+
+### Haiku semantic routing bugs fixed. Séptico flow fully validated end-to-end.
+
+---
+
+### Bugs found and fixed during live testing
+
+**Bug 1 — Wrong flow audio for price objection**
+"ta muy cara esa vaina" in séptico context fired VOZ_AGUA_5 (agua price objection,
+1:33) instead of VOZ_IMHOFF_3 (séptico price objection, 0:51). Root cause: Haiku
+classified `price_objection_agua` regardless of active flow. Fix: added SOLO si
+FLUJO ACTIVO rule to both price_objection labels plus explicit REGLA DE FLUJO
+at the top of the voice-bot intent section + flow-aware few-shot examples.
+API validation: all 7 price objection variants route correctly by active flow.
+
+**Bug 2 — UnboundLocalError on "10" response**
+`reply` variable referenced before assignment in the PREVIO_BYPASS → LLM guard
+path. Fix: initialized `reply = ""` at the start of the else branch.
+
+**Bug 3 — Text followup arrived before audio**
+HAIKU_VOZ fires the Salesbot (audio queued by Kommo) then sets reply text, then
+send_message fires immediately. Salesbot queue adds processing delay so text
+arrived before audio. Fix: `_haiku_voz_fired` flag — when set, `send_message`
+waits 2s before sending so audio has time to clear Kommo's queue first.
+
+**Bug 4 — "Como se que son una empresa verdadera" classified as hard_no**
+In an earlier test run, the trust/credibility question was misclassified as
+hard_no causing graceful close instead of VOZ_IMHOFF_4. This was a PREVIO_BYPASS
+interaction — the message was short enough that PREVIO_BYPASS fired before Haiku
+routing had a chance. Haiku semantic classification now runs inside the LLM else
+branch, so it only fires when PREVIO_BYPASS doesn't intercept.
+
+**Bug 5 — HAIKU_VOZ LLM not skipped after bot fires**
+When Haiku fired a bot and set reply via HAIKU_VOZ AUDIO_BYPASS, agent.generate()
+still ran and overwrote reply with LLM text. Fix: `if not reply:` guard around
+agent.generate() so the LLM is skipped when reply is already set.
+
+---
+
+### Aha moments from bug fixes
+
+**"Never guess — read the execution order first."**
+Five attempted fixes in sequence vs one correct fix after mapping the full
+execution path (PREVIO_BYPASS → AUDIO_BYPASS → reply init → Haiku classify →
+HAIKU_VOZ routing → HAIKU_VOZ bypass → LLM guard → agent.generate → send_message).
+The UnboundLocalError and the text-before-audio bug both became obvious once the
+9-step order was written out and verified with position checks.
+
+**Salesbot queue delay is real and must be designed around.**
+`run_bot()` (Salesbot) goes through Kommo's internal queue — slight processing
+delay before audio is delivered. `send_message()` is direct/instant. Any flow
+that fires a Salesbot and then immediately sends text will always deliver text
+first. Solution: 2s pause before send_message when a Salesbot fired this turn.
+This applies to both keyword-fired and Haiku-fired bots in future client builds.
+Document in COMMERCIAL_GRADE_SPEC.md Section 12.
+
+**PREVIO_BYPASS is a silent killer for semantic routing.**
+Short messages ("ta muy cara esa vaina" is <30 chars) trigger PREVIO_BYPASS which
+sets `_direct_reply` before the LLM else branch ever runs. In the PREVIO_BYPASS
+path, Haiku never fires, so semantic routing never happens. The fix was to NOT
+block PREVIO_BYPASS (it serves a purpose) but instead run Haiku classification
+BEFORE the PREVIO_BYPASS check and cache the result — so semantic intent detection
+happens regardless of which reply path fires. NOTE: this is NOT yet implemented.
+Current state: PREVIO_BYPASS still intercepts short messages before Haiku routing.
+For now the keyword loops handle short unambiguous phrases. Future improvement:
+move Haiku classification to run before PREVIO_BYPASS.
+
+---
+
+### Séptico flow end-to-end validation (COMPLETE)
+
+All 7 séptico scenarios validated live on WhatsApp:
+
+| Scenario | Trigger | Audio | Image | Text |
+|---|---|---|---|---|
+| First contact | "hola necesito información del séptico IMHOFF" | VOZ_IMHOFF_1 ✅ | SEPTICO_COMPARATIVA ✅ | Bathroom Q ✅ |
+| Purchase process | "que tengo que hacer para ordenar una" | VOZ_IMHOFF_2 ✅ | SEPTICO_FUNCIONAMIENTO ✅ | Warm closer ✅ |
+| Price objection | "ta muy cara esa vaina" | VOZ_IMHOFF_3 ✅ | SEPTICO_VENTAJAS ✅ | Warm closer ✅ |
+| Location | "en que parte del pais trabajan" | VOZ_AGUA_6 ✅ | None ✅ | Warm closer ✅ |
+| Trust | "tienen algún documento que pruebe que son registrados" | VOZ_IMHOFF_4 ✅ | Wellington ✅ | Instagram text ✅ |
+| Ficha técnica | "necesito la ficha técnica" | None | SEPTICO_FICHA ✅ | Template text ✅ |
+| Repeat question | "cuánto cuesta el módulo 8" (after audio) | None | None | Anti-repeat ✅ |
+
+Semantic routing validated with DR slang: "ta muy cara esa vaina", "dique eso sale mucho",
+"como se que no me van a estafar", "tienen algún documento que los acredite" — all correct.
+
+---
+
+### Open items for next session
+
+**Agua flow end-to-end test (priority 1 — not yet done)**
+Run the same 7-scenario matrix for agua flow: VOZ_AGUA_1 through VOZ_AGUA_8,
+FOTO_AGUA sentinel, linderos flow, deposit flow.
+
+**PREVIO_BYPASS + Haiku routing (future improvement)**
+Short messages currently bypass Haiku semantic routing entirely. Move Haiku
+classification before PREVIO_BYPASS check so semantic intent detection runs
+on all messages regardless of length.
+
+**SEPTICO_VENTAJAS image (bot 76646): legacy number 829-566-7542**
+Still on the image. Replace in Kommo Salesbot UI before this scenario hits
+real customers.
+
+**Weekly threshold tuning**
+Sample 100 conversations, measure false-audio rate vs missed-audio rate per intent.
+Tune confidence thresholds (currently 0.65-0.70) based on real DR traffic.
+
+**Coverage ledger Stage 2**
+Add mark_topic_covered calls for text-delivered topics (price, modules, etc.)
+Currently only audio topics are tracked.
+
+**October 1, 2026 (47 days)**
+Service messages become paid. Instrument nudge reply rates before that date.
+
+---
+
 ## Session: August 15, 2026 — 19:00 UTC (semantic routing)
 
 ### Haiku semantic voice-bot routing — replaces all keyword lists for nuanced intents.

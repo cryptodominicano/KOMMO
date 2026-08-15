@@ -421,6 +421,17 @@ def get_covered_topics(lead_id: str) -> list:
             for r in rows]
 
 
+def get_topic_coverage_count(lead_id: str, topic_key: str) -> int:
+    """Return how many times a topic has been covered for this lead. 0 if never."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT times_covered FROM covered_topics "
+            "WHERE lead_id=? AND topic_key=?",
+            (lead_id, topic_key),
+        ).fetchone()
+    return row[0] if row else 0
+
+
 def build_coverage_state_block(lead_id: str) -> str:
     """Build STATE BLOCK string for the LLM system prompt. Empty if nothing covered."""
     rows = get_covered_topics(lead_id)

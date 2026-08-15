@@ -37,14 +37,18 @@ async def _followup_loop():
                 continue
             k = KommoClient()
             try:
-                for talk_id, due_at in claimed:
+                for talk_id, due_at, override_msg in claimed:
                     if state.is_handed_off(talk_id):
                         continue                     # human is handling it
                     if now - due_at > 3600:
                         continue                     # stale (loop was down) - skip
+                    _msg = override_msg if override_msg else nudge
+                    if not _msg:
+                        continue
                     try:
-                        await k.send_message(talk_id, nudge)
-                        log.info("talk=%s follow-up nudge sent", talk_id)
+                        await k.send_message(talk_id, _msg)
+                        log.info("talk=%s follow-up nudge sent (override=%s)",
+                                 talk_id, bool(override_msg))
                     except KommoError as e:
                         log.error("talk=%s follow-up send failed: %s", talk_id, e)
             finally:

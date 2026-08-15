@@ -101,19 +101,22 @@ Reglas:
 
 ## Intenciones de nota de voz (voice_bot_intent)
 Solo para mensajes subsiguientes (no primer contacto). Detecta si aplica:
+REGLA DE FLUJO: Para intenciones con variantes _agua/_septico, usa SIEMPRE
+el FLUJO ACTIVO. FLUJO ACTIVO=SEPTICO → septico; FLUJO ACTIVO=AGUA → agua.
+NUNCA uses variante del flujo contrario.
 
 AGUA/PERFORACIÓN:
 - drilling_price: pregunta por costo de perforar, precio del pozo, cuánto cuesta por pie/metro
 - how_to_start: quiere iniciar el proceso, qué pasos seguir, cómo hacer el estudio
 - payment_agua: quiere pagar, dónde depositar, datos bancarios, listo para reservar
-- price_objection_agua: dice que está caro, fuera de presupuesto, competencia más barata (agua)
+- price_objection_agua: dice que está caro, fuera de presupuesto, competencia más barata. SOLO si FLUJO ACTIVO = AGUA.
 - location_agua: dónde están ubicados, tienen oficina, en qué ciudad/provincia (agua)
 - payment_conditions: cómo se paga, cuándo se paga, formas de pago, financiamiento
 - call_request: quiere llamar, hablar con alguien, que lo llamen, prefiere hablar
 
 SÉPTICO IMHOFF:
 - purchase_process_septico: cómo comprar, proceso de pedido, cómo proceder, cuánto tarda entrega
-- price_objection_septico: está cara, competencia más barata, fuera de presupuesto (séptico)
+- price_objection_septico: está cara, competencia más barata, fuera de presupuesto. SOLO si FLUJO ACTIVO = SEPTICO.
 - trust_question: cómo saber si son legítimos, empresa verdadera/real/legal, confianza,
   registro mercantil, cómo verificar, quién es Wellington, pueden confiar en ellos,
   no quiere pagar por internet, quiere ver el producto primero, empresa registrada
@@ -134,8 +137,11 @@ Ejemplos de voz_bots:
 Mensaje: "Como se que ustedes son una empresa verdadera y legitima"
 <voz_bots><voz_bot intent="trust_question" confidence="0.95"/></voz_bots>
 
-Mensaje: "ta muy caro eso, la competencia la tiene mas barata"
+Mensaje (FLUJO ACTIVO: SEPTICO): "ta muy caro eso, la competencia la tiene mas barata"
 <voz_bots><voz_bot intent="price_objection_septico" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "ta muy cara esa vaina"
+<voz_bots><voz_bot intent="price_objection_agua" confidence="0.90"/></voz_bots>
 
 Mensaje: "cuanto cuesta perforar y donde estan ubicados"
 <voz_bots><voz_bot intent="drilling_price" confidence="0.95"/><voz_bot intent="location_agua" confidence="0.85"/></voz_bots>

@@ -32,62 +32,6 @@ def _deaccent(x: str) -> str:
     return "".join(c for c in x if unicodedata.category(c) != "Mn")
 
 
-# Deferral / "I'll think about it and get back to you" stalls, plus price stalls.
-# Sales best practice: a timing/soft-no stall is the moment to add urgency, which
-# here is the 23-hour 5% recovery discount. Accent-insensitive, lowercased.
-# Kept to multi-word phrases to avoid firing on engaged, still-qualifying buyers.
-_HES_PHRASES = (
-    # think about it
-    "lo voy a pensar", "voy a pensar", "voy a pensarlo", "pensarlo", "lo pienso",
-    "me lo pienso", "tengo que pensar", "dejame pensar", "hay que pensar",
-    "lo pienso y", "pensarlo bien", "pensarlo mejor",
-    # let me see / check with calm
-    "dejame ver", "voy a ver", "vamos a ver", "dejame verlo", "lo veo con calma",
-    "con calma lo veo", "tengo que verlo", "dejame chequear", "lo chequeo",
-    "voy a chequear", "dejame revisar", "lo reviso",
-    # consult / talk to someone
-    "dejame consultar", "lo consulto", "tengo que consultar", "voy a consultar",
-    "consultarlo", "lo hablo con", "hablar con mi", "hablarlo con", "tengo que hablar",
-    "hablarlo", "consultarlo con",
-    # i'll let you know / get back to you
-    "le aviso", "yo aviso", "te aviso", "ya le aviso", "cualquier cosa le aviso",
-    "cualquier cosa aviso", "le avisamos",
-    "le escribo luego", "despues le escribo", "le escribo mas tarde", "luego le escribo",
-    "cualquier cosa le escribo", "despues te escribo", "le escribo despues",
-    "le confirmo", "le confirmo luego", "despues le confirmo", "luego le confirmo",
-    "ya le confirmo", "le digo luego", "despues le digo", "ahi le digo", "luego le digo",
-    "le digo algo", "despues te digo", "me comunico luego", "despues me comunico",
-    "luego me comunico", "cualquier cosa le digo",
-    # analyze / evaluate / quote-compare
-    "dejame analizar", "lo analizo", "analizarlo", "dejame evaluar", "evaluarlo",
-    "lo evaluo", "lo voy a considerar", "dejame considerar", "considerarlo",
-    "lo considero", "voy a cotizar", "dejame cotizar", "estoy cotizando",
-    "voy a comparar", "dejame comparar", "comparando", "cotizar primero",
-    # not now / later / not a priority
-    "mas adelante", "mas alante", "mas pa lante", "mas pa'lante", "en otro momento",
-    "por ahora no", "ahora no", "ahorita no", "no es prioridad", "para despues",
-    "lo dejo para", "lo dejamos para", "cuando pueda", "cuando decida",
-    "cuando este listo", "apenas pueda", "todavia no",
-    # not sure yet
-    "todavia no estoy seguro", "no estoy seguro", "no estoy segura", "no se todavia",
-    "aun no se", "aun no estoy",
-    # price stall / competing quote
-    "esta caro", "muy caro", "carito", "esta carito", "esta fuerte el precio",
-    "me cotizaron", "cotizaron", "mas barato", "mas economico", "mas economica",
-    "consegui mas barato", "otro me da", "me sale mas barato", "mas barata",
-    # english
-    "think about it", "let me think", "get back to you", "i'll let you know",
-    "ill let you know", "i will let you know", "i'll check", "not right now",
-    "maybe later", "talk to my wife", "talk to my husband", "i'll consider",
-)
-
-_ASK_PHRASES = (
-    "descuento", "descuentito", "rebaja", "rebajita", "oferta", "promocion",
-    "promo", "mejor precio", "precio especial", "me rebaja", "me deja en",
-    "algo de descuento", "un descuento", "discount",
-)
-
-
 def _entity_type(msg: dict) -> str:
     """Webhook says "lead" (singular); POST /bots/{id}/run wants "leads" (plural)."""
     t = str(msg.get("entity_type") or "lead").lower()
@@ -888,49 +832,7 @@ async def handle_message(msg: dict) -> None:
         history = await _history(k, talk_id)
         if history and history[-1]["role"] == "user":
             history = history[:-1]               # current message passed separately
-        # Septico 5% recovery discount window (24h from first contact, once).
-        # The engine owns the HARD gates (route + window + not-yet-offered) and
-        # tells the model DISPONIBLE / NO_DISPONIBLE; the model owns the JUDGEMENT
-        # (only on real hesitation). Sheyla requires an agent to authorize the
-        # actual discount, so the model only OFFERS - acceptance hands off.
         extra = ""
-        offer_discount = False
-        offer_is_ask = False
-        try:
-            state.note_first_seen(talk_id)
-            _tl = text.lower()
-            _hb = " ".join(m.get("content", "") for m in history[-8:]).lower()
-            _sep = any(w in _tl or w in _hb for w in (
-                "septic", "séptic", "imhoff", "planta de trat", "modulo",
-                "módulo", "bano", "baño"))
-            if _sep:
-                _hrs = state.hours_since_first(talk_id)
-                _avail = (_hrs is not None and _hrs < 24.0) and not state.discount_offered(talk_id)
-                # Deciding WHEN to offer is too flaky for the model (it once fired
-                # the lock marker without an offer, burning the discount silently).
-                # So the ENGINE detects the hesitation/deferral or a direct discount
-                # ask in the customer's message and tells the model to offer NOW.
-                _tl_na = _deaccent(_tl)
-                _hes = any(p in _tl_na for p in _HES_PHRASES)
-                _ask = any(p in _tl_na for p in _ASK_PHRASES)
-                if _avail and (_hes or _ask):
-                    # The model is unreliable at obeying an "offer now" directive on
-                    # soft goodbyes ("yo le aviso"), so the ENGINE appends the offer
-                    # deterministically after the reply. Tell the model to stay out of it.
-                    offer_discount = True
-                    offer_is_ask = _ask
-                    # Say NOTHING to the model about the discount: any instruction that
-                    # references it gets parroted to the customer or causes a double-offer.
-                    # The KB has no discount content, so the model won't volunteer one;
-                    # the engine appends the fixed 5% offer below, deterministically.
-                    extra = ""
-                elif _avail:
-                    extra = ("DESCUENTO_5: disponible, pero NO lo menciones salvo que el cliente "
-                             "pregunte directamente por un descuento.")
-                else:
-                    extra = "DESCUENTO_5: NO disponible. No menciones ningún descuento."
-        except Exception as e:
-            log.warning("talk=%s discount-window calc failed: %s", talk_id, e)
         # Channel-aware price guard for non-WhatsApp channels.
         # On Instagram/Facebook no audio fires so the LLM must still answer,
         # but it should frame prices correctly: study-first, then quote.
@@ -1141,13 +1043,6 @@ async def handle_message(msg: dict) -> None:
         handoff = marker in reply
         reply = reply.replace(marker, "").strip()
 
-        # Septico 5% discount was presented -> record it so it is never offered
-        # again in this conversation. Strip the hidden marker before sending.
-        if "[[DESC_OFRECIDO]]" in reply:
-            reply = reply.replace("[[DESC_OFRECIDO]]", "").strip()
-            state.mark_discount_offered(talk_id)
-            log.info("talk=%s septico 5%% discount offered - locked", talk_id)
-
         # IMAGE WORKAROUND: send_message is text-only, but a Salesbot can attach
         # images. The model emits a sentinel; we strip it and launch the bot.
         sb = client_pack.pack().get("salesbot", {})
@@ -1246,29 +1141,6 @@ async def handle_message(msg: dict) -> None:
                     fire.append(int(bot_id))
                 else:
                     log.warning("sentinel %s has no bot_id configured", sentinel)
-
-        # Deterministic 5% recovery offer, engine-owned (the model is too flaky on
-        # soft goodbyes and, on a direct "hay descuento?", tends to invent a wrong
-        # "no discount" answer). Fired once per conversation.
-        _OFFER_ASK = ("¡Claro! Como usted nos escribió por nuestra campaña, si reserva y hace el "
-                      "depósito dentro de las próximas 23 horas le puedo aplicar un 5% de descuento "
-                      "sobre el precio del módulo. Después de ese tiempo vuelve a su precio normal. "
-                      "Si prefiere, también podemos coordinar una llamada. 🙂")
-        _OFFER_TAIL = ("\n\nUna cosa: como usted nos escribió por nuestra campaña, si reserva y "
-                       "hace el depósito dentro de las próximas 23 horas le puedo aplicar un 5% de "
-                       "descuento sobre el precio del módulo. Después de ese tiempo vuelve a su "
-                       "precio normal. Si prefiere, también podemos coordinar una llamada. 🙂")
-        if offer_discount and not state.discount_offered(talk_id):
-            if offer_is_ask:
-                # Direct discount question -> answer it cleanly, ignore the model's take.
-                reply = _OFFER_ASK
-                state.mark_discount_offered(talk_id)
-                log.info("talk=%s septico 5%% offer sent (direct ask) + locked", talk_id)
-            elif reply and not handoff and "descuento" not in reply.lower():
-                # Hesitation / soft goodbye -> keep the model's natural line, add the offer.
-                reply = reply.rstrip() + _OFFER_TAIL
-                state.mark_discount_offered(talk_id)
-                log.info("talk=%s septico 5%% offer appended (hesitation) + locked", talk_id)
 
         # Post-generation filters (belt-and-suspenders).
         if reply:

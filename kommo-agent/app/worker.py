@@ -584,6 +584,24 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s transcription rejected (%s)", talk_id, e)
                 await k.send_message(talk_id, client_pack.msg("audio_unclear"))
                 return
+            # Re-evaluate flow lock for audio first-contact messages.
+            # Flow was locked before transcription using empty text — now
+            # that we have the transcript, re-lock if séptico keywords found.
+            if is_first and _locked_flow == "agua":
+                _SEPTICO_FIRST_WORDS_AUDIO = [
+                    "septic", "séptic", "imhoff", "planta de trat",
+                    "planta septic", "modulo", "módulo", "tanque septic",
+                    "tratamiento de agua", "aguas residual", "aguas negra",
+                    "aguas gris",
+                ]
+                _tna_audio = _deaccent(text)
+                if any(w in _tna_audio for w in _SEPTICO_FIRST_WORDS_AUDIO):
+                    state.set_flow(talk_id, "septico")
+                    _locked_flow = "septico"
+                    _is_septico_flow = True
+                    _septico_first = True
+                    log.info("talk=%s audio first-contact: re-locked to septico",
+                             talk_id)
 
         # --- Inbound media (usually a deposit receipt): acknowledge + hand off ---
         # A photo arrives with EMPTY text, so without this branch it falls

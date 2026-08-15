@@ -1201,6 +1201,44 @@ async def handle_message(msg: dict) -> None:
                 state.clear_awaiting_linderos(talk_id)
                 log.info("talk=%s deposit message sent - firing bank text + photo %s",
                          talk_id, deposit_bot)
+        # BELT-AND-SUSPENDERS: séptico image marker injection.
+        # Sentinel firing measured ~80-90% (context log, 2026-07-17 and proven again
+        # 2026-08-15 with the ficha técnica miss). When the model describes sending an
+        # image in text WITHOUT emitting the marker, the customer gets a broken promise.
+        # Defence: if the reply contains a phrase that IMPLIES a séptico image was meant
+        # to accompany it but the marker is absent, inject it deterministically.
+        # Only applies when we are in the séptico flow — prevents false positives on
+        # agua conversations that happen to mention these words.
+        if _is_septico_flow:
+            _SEPTICO_FALLBACKS = [
+                # (phrase_in_reply, marker_to_inject)
+                # Ficha técnica — installation guide
+                ("ficha técnica", "[[SEPTICO_FICHA]]"),
+                ("ficha tecnica", "[[SEPTICO_FICHA]]"),
+                # Funcionamiento — how-it-works brochure
+                ("funcionamiento", "[[SEPTICO_FUNCIONAMIENTO]]"),
+                ("cómo funciona la planta", "[[SEPTICO_FUNCIONAMIENTO]]"),
+                ("como funciona la planta", "[[SEPTICO_FUNCIONAMIENTO]]"),
+                # Ventajas — price objection / comparison image
+                ("ventajas", "[[SEPTICO_VENTAJAS]]"),
+                ("más durable", "[[SEPTICO_VENTAJAS]]"),
+                ("mas durable", "[[SEPTICO_VENTAJAS]]"),
+                ("no se cuartea", "[[SEPTICO_VENTAJAS]]"),
+                ("no contamina", "[[SEPTICO_VENTAJAS]]"),
+            ]
+            _reply_lower = reply.lower()
+            for _phrase, _marker in _SEPTICO_FALLBACKS:
+                if _phrase in _reply_lower and _marker not in reply:
+                    # Check that the corresponding bot is actually configured
+                    if _marker in bots and bots[_marker]:
+                        reply = reply.rstrip() + " " + _marker
+                        log.warning(
+                            "talk=%s SENTINEL_FALLBACK: injected %s (phrase=%r was "
+                            "in reply without marker)",
+                            talk_id, _marker, _phrase
+                        )
+                        break  # one injection per turn maximum
+
         for sentinel, bot_id in bots.items():
             if sentinel in reply:
                 reply = reply.replace(sentinel, "").strip()

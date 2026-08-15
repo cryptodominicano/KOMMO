@@ -1071,6 +1071,100 @@ async def handle_message(msg: dict) -> None:
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])
 
+            # ── HAIKU VOICE-BOT ROUTING (Tier 1 — semantic routing) ──────
+            # Research Aug 2026: keyword recall collapses to 11-13% on nuanced
+            # intents. Haiku's voz_bot_intents replace keyword lists for all
+            # non-unambiguous intents. Fires if confidence >= threshold.
+            # Runs AFTER keyword loop — only fires if keyword didn't already
+            # fire a bot this turn (_voz_fired is still None here).
+            _HAIKU_VOZ_MAP = {
+                # agua bots
+                "drilling_price":          ("VOZ_AGUA_2", _voz_triggers, 0.70),
+                "how_to_start":            ("VOZ_AGUA_3", _voz_triggers, 0.65),
+                "payment_agua":            ("VOZ_AGUA_4", _voz_triggers, 0.70),
+                "price_objection_agua":    ("VOZ_AGUA_5", _voz_triggers, 0.70),
+                "location_agua":           ("VOZ_AGUA_6", _voz_triggers, 0.65),
+                "payment_conditions":      ("VOZ_AGUA_7", _voz_triggers, 0.65),
+                "call_request":            ("VOZ_AGUA_8", _voz_triggers, 0.70),
+                # septico bots
+                "purchase_process_septico": ("[[VOZ_IMHOFF_2]]", _imhoff_triggers, 0.70),
+                "price_objection_septico":  ("[[VOZ_IMHOFF_3]]", _imhoff_triggers, 0.70),
+                "trust_question":           ("[[VOZ_IMHOFF_4]]", _imhoff_triggers, 0.70),
+                "location_septico":         ("VOZ_AGUA_6",       _voz_triggers,    0.65),
+            }
+            if not is_first and _is_waba and entity_id and not _voz_fired:
+                _haiku_voz = haiku_pre.get_voz_bot_intents(_intents)
+                if _haiku_voz:
+                    log.info("talk=%s haiku voz_bot_intents: %s", talk_id, _haiku_voz)
+                _haiku_fired = []
+                for _hv in _haiku_voz:
+                    _hv_intent = _hv["intent"]
+                    _hv_conf = _hv["confidence"]
+                    if _hv_intent not in _HAIKU_VOZ_MAP:
+                        continue
+                    _hv_key, _hv_triggers, _hv_threshold = _HAIKU_VOZ_MAP[_hv_intent]
+                    if _hv_conf < _hv_threshold:
+                        log.info("talk=%s haiku voz SKIP %s conf=%.2f < %.2f",
+                                 talk_id, _hv_intent, _hv_conf, _hv_threshold)
+                        continue
+                    if state.voice_already_sent(talk_id, _hv_key):
+                        continue
+                    _hv_bid = _hv_triggers.get(_hv_key)
+                    if not _hv_bid:
+                        continue
+                    # Check not already queued by keyword loop
+                    # Safe: these lists may not exist if keyword block condition was False
+                    _kw_fired_keys = [k for k, _ in
+                                      (locals().get('_agua_to_fire', []) if not _is_septico_flow
+                                       else locals().get('_imhoff_to_fire', []))]
+                    if _hv_key in _kw_fired_keys:
+                        continue
+                    _haiku_fired.append((_hv_key, int(_hv_bid), _hv_intent, _hv_conf))
+                # Fire all matched bots sequentially with 5s pauses
+                for _hi, (_hv_key, _hv_bid, _hv_intent, _hv_conf) in enumerate(_haiku_fired):
+                    if _hi > 0:
+                        await asyncio.sleep(5.0)
+                    try:
+                        await k.run_bot(_hv_bid, entity_id, _entity_type(msg))
+                        state.mark_voice_sent(talk_id, _hv_key)
+                        _voz_fired = _hv_key
+                        log.info("talk=%s HAIKU_VOZ: fired %s (intent=%s conf=%.2f)",
+                                 talk_id, _hv_key, _hv_intent, _hv_conf)
+                        # Coverage ledger
+                        _cov_lead_h = str(entity_id) if entity_id else talk_id
+                        for _topic_h in _AUDIO_TOPIC_MAP.get(_hv_key, []):
+                            state.mark_topic_covered(_cov_lead_h, _topic_h,
+                                                    'audio', source=_hv_key)
+                        # VOZ_IMHOFF_4 Wellington sequence
+                        if _hv_key == "[[VOZ_IMHOFF_4]]":
+                            await asyncio.sleep(2)
+                            _ig_text = (
+                                "📍 También puedes conocer más sobre nuestra "
+                                "empresa, nuestros proyectos y el trabajo que "
+                                "realizamos visitando nuestro Instagram oficial. "
+                                "Allí encontrarás fotografías, videos de "
+                                "instalaciones reales, testimonios de clientes "
+                                "y mucho más.\n\n"
+                                "👉 Instagram: @aguasprofundas_rd\n\n"
+                                "Será un gusto recibirte y ayudarte con "
+                                "cualquier duda."
+                            )
+                            await k.send_message(talk_id, _ig_text)
+                            await asyncio.sleep(1)
+                            _wbot = int(_imhoff_triggers.get(
+                                "wellington_lider_foto_bot_id", 0) or 0)
+                            if _wbot:
+                                try:
+                                    await k.run_bot(_wbot, entity_id, _entity_type(msg))
+                                    log.info("talk=%s HAIKU_VOZ Wellington bot %s",
+                                             talk_id, _wbot)
+                                except KommoError as e:
+                                    log.error("talk=%s Wellington bot failed: %s",
+                                              talk_id, e)
+                    except KommoError as e:
+                        log.error("talk=%s HAIKU_VOZ bot %s failed: %s",
+                                  talk_id, _hv_bid, e)
+
             # Multi-intent: build coverage contract for GPT-4.1
             _multi_prompt = haiku_pre.build_multi_intent_prompt(_intents)
             if _multi_prompt:

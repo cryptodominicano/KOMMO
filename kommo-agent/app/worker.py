@@ -1017,7 +1017,7 @@ async def handle_message(msg: dict) -> None:
         # Rotating warm closers — no audio reference, varied so it never reads robotic.
         # Each bot gets its own closer matched to the conversation moment.
         _VOZ_FOLLOWUPS = {
-            "VOZ_AGUA_1": "Por favor mándeme la ubicación de donde desea realizar el estudio. 📍",
+            "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "Con gusto le ayudamos a tomar la mejor decisión. 😊 ¿Le gustaría comenzar con el estudio para tener toda la información? 🙏",
             "VOZ_AGUA_3": "Cuando guste, mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
             "VOZ_AGUA_4": "A la orden para lo que necesite. 🙏 ¿Tiene alguna pregunta o está listo para que le envíe los datos del depósito?",

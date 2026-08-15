@@ -1028,12 +1028,12 @@ async def handle_message(msg: dict) -> None:
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
             "VOZ_AGUA_3": "Cuando guste, mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
-            "VOZ_AGUA_4": "A la orden para lo que necesite. 🙏 ¿Tiene alguna pregunta o está listo para que le envíe los datos del depósito?",
-            "VOZ_AGUA_5": "Estamos aquí para orientarle. 😊 ¿Le gustaría proceder con el estudio o tiene alguna consulta antes de decidir? 🙏",
+            "VOZ_AGUA_4": "Con mucho gusto le envío los datos del depósito cuando esté listo. 😊 ¿Tiene alguna pregunta sobre el proceso? 🙏",
+            "VOZ_AGUA_5": "Entendemos perfectamente. 😊 Cualquier duda adicional, aquí estamos para orientarle. 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
                            if _is_septico_flow else
                            "Con mucho gusto le cotizamos. 😊 ¿En qué pueblo o sector desea realizar el estudio? 🙏"),
-            "VOZ_AGUA_7": "A la orden. 😊 ¿Está listo para dar el primer paso o tiene alguna consulta adicional? 🙏",
+            "VOZ_AGUA_7": "Con gusto le acompañamos en el proceso. 😊 ¿Tiene alguna pregunta antes de avanzar? 🙏",
             "VOZ_AGUA_8": "¡Con gusto coordinamos! ¿Qué hora le queda bien para la llamada? 🙏",
             "[[VOZ_IMHOFF_1]]": "¿Cuántos baños tiene su propiedad? Con eso le indico el módulo que necesita. 🙏",
             "[[VOZ_IMHOFF_2]]": "A la orden para ayudarle. 😊 ¿Está listo para proceder con el depósito de RD$10,000 o tiene alguna pregunta? 🙏",

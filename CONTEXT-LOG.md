@@ -6,6 +6,113 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 17:00 UTC (continuation)
+
+### Anti-repetition coverage ledger + generic greeting improvements.
+
+---
+
+### Anti-repetition coverage ledger (state.py + worker.py + system.md)
+
+**Problem.** When a customer asks something already covered (especially in a voice note),
+Isla repeated the full answer from the KB instead of acknowledging prior coverage.
+Root causes: (1) audio content is never in the LLM text context, (2) old answers
+scroll out of the 20-message history window, (3) the existing fix was a single prompt
+line that only caught the immediate next turn after an audio.
+
+**Research findings.** Deep research (8 sources) confirmed: the fix is architectural,
+not prompt-only. Move coverage tracking to SQLite, inject a STATE BLOCK every turn.
+In Dominican culture "ya te lo dije" is damaging — always reframe as helpfulness
+("por si el audio no le llegó bien, se lo dejo aquí escrito"). GPT-4.1 is highly
+literal so explicit STATE BLOCK + rules are obeyed far more reliably than hints.
+
+**`covered_topics` table added to state.py:**
+```sql
+covered_topics(id, lead_id, topic_key, channel TEXT, covered_at, times_covered, last_source,
+               UNIQUE(lead_id, topic_key))
+```
+Three new functions: `mark_topic_covered()`, `get_covered_topics()`,
+`build_coverage_state_block()` — builds the STATE BLOCK string with "hace Xmin/Xh".
+
+**`_AUDIO_TOPIC_MAP` at module level in worker.py:** maps every voice bot key to
+the sales topics it covers (e.g. VOZ_IMHOFF_1 → dos_modulos, precio_septico,
+plastico_vs_cemento). When any audio fires in either keyword loop, all its topics
+are written to the ledger as `channel='audio'`.
+
+**STATE BLOCK injected before every LLM call** (into `extra` alongside ESTADO ACTUAL):
+```
+TEMAS YA CUBIERTOS CON ESTE CLIENTE:
+  - dos_modulos: AUDIO (hace 45min)
+  - precio_septico: AUDIO (hace 45min)
+  - instalacion: TEXTO (hace 5min)
+```
+
+**system.md REGLA ANTI-REPETICIÓN** replaces the single-line rule:
+- Audio-covered topic: reconfirm briefly in text, frame as helpfulness, never scold.
+  "Con mucho gusto se lo dejo aquí escrito por si el audio no le llegó bien: [respuesta breve]"
+- Text-covered topic: short summary, advance with next step.
+- FRASES PROHIBIDAS: "ya te lo dije", "como te expliqué", "¿no escuchaste el audio?",
+  "pero si ya te expliqué que", "ok. saludos", "listo. saludos"
+- FRASES PERMITIDAS: "por si el audio no le llegó bien", "se lo dejo por escrito",
+  "a veces los audios se pasan por alto"
+
+Commits: state.py ad3511a2d75c, worker.py b290166a3d36, system.md 1a48684300ed.
+
+---
+
+### Generic greeting + ambiguous "Sí" response (system.md)
+
+**Problem.** When a customer says "Buenas tarde" (generic, no service keyword),
+Isla correctly showed the welcome image and asked which service. But when they
+replied with "Sí" (ambiguous), the agent repeated the same question verbatim —
+exactly what a human sales rep would NOT do.
+
+**Research.** 2026 best practice: "clarification before progression" — resolve
+ambiguity by briefly describing each option so the customer can self-identify.
+Repeating the exact same question is insufficient; adding one-line descriptions
+lets people recognize their own situation without feeling interrogated.
+
+**Two fixes in system.md:**
+
+Generic greeting rewritten with emoji service options and one-line descriptions:
+"💧 Estudios de agua y perforación de pozos — para encontrar agua en su terreno.
+ 🪣 Plantas sépticas IMHOFF — para el tratamiento de aguas residuales.
+ ¿Cuál de los dos le interesa?"
+
+New RESPUESTA AMBIGUA rule for "Sí"/"Claro"/"OK"/"Me interesa" after service
+selection — presents both options with real-world context:
+"💧 ideal si tiene una finca o propiedad donde quiere hacer un pozo.
+ 🪣 trata las aguas negras de su hogar o proyecto de construcción.
+ ¿Cuál aplica a su situación?"
+
+Ends with "¿Cuál aplica a su situación?" (warmer than "¿cuál le interesa?").
+
+Commit: system.md 924a6fec0568. Prompt guard 39/39.
+
+---
+
+### VPS health check + Docker cleanup
+
+- Disk: 39% used, 120GB free. No concern.
+- Memory: 15GB total, 10GB available. Swap at 3/4GB (yellow flag from session load).
+- Docker cleanup freed 723MB: removed 42 dangling kommo-agent commit images,
+  5 stopped containers, 605MB build cache. Images: 73 → 31.
+
+### Open items carried forward
+1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo UI
+2. Agua flow end-to-end audio+image test (only séptico validated today)
+3. Voice note duration audit: all 12 bots, target 20-40s
+4. IMHOFF lifespan: ask Wellington → KB → re-ingest
+5. October 1, 2026: service messages become paid — instrument nudge reply rates now
+6. Coverage ledger: text topics not yet written (only audio topics tracked so far —
+   add `mark_topic_covered` calls when LLM answers key topics like price, modules, etc.)
+7. Facebook ad CTWA prefill: "Buenas tarde" came from FB ad but didn't match
+   `ad_direct_entry_text` — configure Meta Business Suite CTWA prefill per ad campaign
+8. Daily conversation-review automation: not built
+9. Legacy number +1 829-566-7542: wind-down pending
+
+---
+
 ## Session: August 15, 2026 — 13:00–17:30 UTC
 
 ### Full séptico audio+image workflow validated end to end. 20+ fixes deployed.

@@ -221,11 +221,16 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 
 ## 14. Open items
 
-1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo UI before this scenario hits real traffic
-2. Agua flow end-to-end test: run same 7-scenario test for agua audios and images
-3. Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s
-4. IMHOFF lifespan: ask Wellington → add to KB → re-ingest Qdrant
-5. October 1, 2026: service messages become paid — instrument nudge reply rates now
-6. Daily conversation-review automation: not built
-7. Legacy number +1 829-566-7542: wind-down pending
-8. KOMMO repo README: still says "Claude LLM, not deployed"
+**Must fix before production traffic:**
+1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo Salesbot UI
+
+**Next session:**
+2. Agua flow end-to-end test (séptico fully validated; agua not yet)
+3. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics, not just audio
+4. Facebook ad CTWA prefill: configure per campaign in Meta Business Suite
+5. Voice note duration audit: all 12 bots, target 20-40s — VOZ_AGUA_1 at 1:38 is over
+6. IMHOFF lifespan: ask Wellington → KB → re-ingest Qdrant
+7. October 1, 2026 (47 days): service messages become paid — instrument nudge reply rates now
+8. Daily conversation-review automation: not built
+9. Legacy number +1 829-566-7542: wind-down pending
+10. KOMMO repo README: still says "Claude LLM, not deployed"

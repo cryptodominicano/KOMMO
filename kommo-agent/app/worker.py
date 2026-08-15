@@ -463,22 +463,46 @@ async def handle_message(msg: dict) -> None:
                 except KommoError as e:
                     log.error("talk=%s VOZ_AGUA_1 failed: %s", talk_id, e)
 
-        # --- VOZ_IMHOFF_1: welcome voice note, first contact, séptico flow only ---
-        # VOZ_IMHOFF_1: only fire when séptico is explicitly in first message.
+        # --- Séptico first contact: image → welcome text → audio ---
+        # Correct sequence per client approval (2026-08-15):
+        #   1. SEPTICO_COMPARATIVA image (fires immediately)
+        #   2. Isla welcome text (1s later)
+        #   3. VOZ_IMHOFF_1 audio (1.5s after text)
+        # The image pair in _VOZ_IMAGE_PAIRS for VOZ_IMHOFF_1 is skipped
+        # (comparativa already sent; guard key marked to prevent repeat).
         if (is_first and _has_septico_kw and _septico_first
                 and entity_id and _is_waba
                 and _imhoff_triggers.get("[[VOZ_IMHOFF_1]]")):
             _vk_i1 = "[[VOZ_IMHOFF_1]]"
             if not state.voice_already_sent(talk_id, _vk_i1):
                 try:
-                    await asyncio.sleep(1)
+                    # Step 1: SEPTICO_COMPARATIVA image first
+                    # _sb is already defined above; bots dict not yet built at this point
+                    _comp_bot = int((_sb.get("triggers") or {}).get("[[SEPTICO_COMPARATIVA]]") or 0)
+                    if _comp_bot:
+                        await k.run_bot(_comp_bot, entity_id, _entity_type(msg))
+                        # Mark the image pair guard so VOZ_IMAGE_PAIR doesn't re-fire it
+                        state.mark_voice_sent(talk_id, _vk_i1 + "_img")
+                        log.info("talk=%s septico welcome: fired SEPTICO_COMPARATIVA %s",
+                                 talk_id, _comp_bot)
+                    # Step 2: Isla welcome text
+                    await asyncio.sleep(1.0)
+                    await k.send_message(
+                        talk_id,
+                        "¡Bienvenido! 😊 Soy Isla, la asistente del señor Wellington "
+                        "Valenzuela y el equipo de Aguas Profundas. Con gusto le "
+                        "orientamos sobre nuestras plantas sépticas IMHOFF."
+                    )
+                    log.info("talk=%s septico welcome text sent", talk_id)
+                    # Step 3: VOZ_IMHOFF_1 audio
+                    await asyncio.sleep(1.5)
                     await k.run_bot(int(_imhoff_triggers[_vk_i1]), entity_id, _entity_type(msg))
                     state.mark_voice_sent(talk_id, _vk_i1)
                     _voz_fired = _vk_i1
                     log.info("talk=%s launched VOZ_IMHOFF_1 %s",
                              talk_id, _imhoff_triggers[_vk_i1])
                 except KommoError as e:
-                    log.error("talk=%s VOZ_IMHOFF_1 failed: %s", talk_id, e)
+                    log.error("talk=%s VOZ_IMHOFF_1 sequence failed: %s", talk_id, e)
 
         # --- GPS pin OR a pasted Google Maps link: treat both as a location share ---
         # message_type == "location" is a first-class Kommo enum. Customers also

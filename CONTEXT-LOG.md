@@ -2352,3 +2352,46 @@ Negative lookahead: (?![\d/\-]) excludes dates like 08/29/2025.
 - Daily conversation-review automation: not built yet
 - Measure actual DR WER: run held-out set of real AP voice notes through
   gpt-4o-mini-transcribe to get baseline. No public DR-specific WER exists.
+
+---
+
+## Session 2026-08-14 (Part 6) — Talk 611 farewell fix + prompt integrity guard
+
+### Talk 611 — joserojas797027 — two bugs found from live conversation
+
+**Bug 1: Agent too pushy after customer farewell.**
+Sequence: customer said "Muchas gracias por su información" → agent asked
+to advance. Customer said "Yo le aviso" → agent offered to send a photo.
+Customer said "Ok" → agent sent the photo promise then asked another question.
+Customer said "No gracias" → agent STILL asked another question.
+Root cause: no farewell/closing recognition in the prompt at all.
+
+Fix: Added CIERRE DE CONVERSACIÓN section to Situaciones Especiales.
+Trigger phrases: "Yo le aviso", "No gracias", "Gracias igual", "Ok gracias",
+"Lo voy a pensar", "Hasta luego", "Esta bien", "Despues le escribo".
+Response: ONE warm farewell only. No questions. No offers. No pushback.
+Verified: 5/5 closing test cases pass, zero ? marks in any farewell reply.
+
+**Bug 2: Agent verbally promised to send a photo it couldn't deliver.**
+"¿Le gustaría que le envíe una foto del proceso?" then "Se la envío ahora mismo."
+The agent made a verbal promise — the [[FOTO_AGUA]] marker was not emitted,
+so no image arrived. Customer saw an empty promise.
+Fix: Added NO PROMETAS ENVIAR NADA EN TEXTO rule. Never use verbal language
+about sending photos/brochures/material. Use [[FOTO_AGUA]], [[SEPTICO_FUNCIONAMIENTO]]
+etc. directly — engine delivers silently, no promise needed.
+
+### Prompt integrity guard — permanent automated check
+
+scripts/test_prompt_integrity.py: 39-check guard covering all research-backed
+rules from R1-R6, all business rules, and all session fixes.
+
+PROTOCOL FOR ALL FUTURE PROMPT CHANGES (Claude as orchestrator):
+After every system.md patch, before every commit, run:
+  docker exec -i kommo-agent python3 < /app/data/prompt_guard.py
+Must exit 0 (PASS). If any check fails, fix the missing rule before committing.
+Never commit a prompt change without running this guard.
+Guard file lives at /app/data/prompt_guard.py (MCP-accessible)
+and mirrored at kommo-agent/scripts/test_prompt_integrity.py (git).
+
+### Current prompt state
+160 lines | 39/39 integrity checks pass | sandwich confirmed | commit bfba8bd

@@ -131,6 +131,10 @@ WhatsApp / Instagram / Facebook
 - Every Salesbot: empty Triggers panel
 - Patches: write to /app/data/ → `docker exec -i kommo-agent python3 < /app/data/patch.py`
 - End of every session: commit all + update CONTEXT-LOG.md
+- BEFORE every prompt commit: run integrity guard:
+  docker exec -i kommo-agent python3 < /app/data/prompt_guard.py
+  Must return PASS (exit 0). Block commit if any check fails.
+  Guard checks 39 research-backed rules across R1-R6 + business rules.
 
 ---
 

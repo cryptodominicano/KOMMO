@@ -749,20 +749,26 @@ async def handle_message(msg: dict) -> None:
                     "necesito hablar con alguien","quiero comunicarme directamente",
                     "le puedo hacer una llamada"]),
             ]
+            # Collect ALL matched agua voice bots then fire sequentially.
+            # 5s pause between each so customer hears them in order.
+            _agua_to_fire = []
             for _vk, _kws in _VOZ_KW:
                 if any(kw in _tna for kw in _kws):
                     if not state.voice_already_sent(talk_id, _vk):
                         _bid = _voz_triggers.get(_vk)
                         if _bid:
-                            try:
-                                await k.run_bot(int(_bid), entity_id, _entity_type(msg))
-                                state.mark_voice_sent(talk_id, _vk)
-                                _voz_fired = _vk
-                                log.info("talk=%s launched %s bot %s",
-                                         talk_id, _vk, _bid)
-                            except KommoError as e:
-                                log.error("talk=%s %s failed: %s", talk_id, _vk, e)
-                    break  # one voice note per turn
+                            _agua_to_fire.append((_vk, int(_bid)))
+            for _idx_a, (_vk, _bid) in enumerate(_agua_to_fire):
+                if _idx_a > 0:
+                    await asyncio.sleep(5.0)
+                try:
+                    await k.run_bot(_bid, entity_id, _entity_type(msg))
+                    state.mark_voice_sent(talk_id, _vk)
+                    _voz_fired = _vk  # last fired = followup text source
+                    log.info("talk=%s launched %s bot %s (%d of %d)",
+                             talk_id, _vk, _bid, _idx_a + 1, len(_agua_to_fire))
+                except KommoError as e:
+                    log.error("talk=%s %s failed: %s", talk_id, _vk, e)
 
         # --- VOZ_IMHOFF_2-4: séptico keyword-triggered, no-repeat per convo -------
         # VOZ_IMHOFF_4 fires a 3-step sequence: voice → Instagram text → Wellington image.
@@ -821,53 +827,57 @@ async def handle_message(msg: dict) -> None:
                 ]),
             ]
             if _is_septico_flow:
+                # Collect ALL matched IMHOFF voice bots then fire sequentially.
+                # 5s pause between each. VOZ_IMHOFF_4 sequence fires after its audio.
+                _imhoff_to_fire = []
                 for _vk_i, _kws_i in _IMHOFF_KW:
                     if any(kw in _tna_i for kw in _kws_i):
                         if not state.voice_already_sent(talk_id, _vk_i):
-                            # VOZ_AGUA_6 lives in voz_triggers (agua), not imhoff_triggers
                             _bid_i = (_voz_triggers.get(_vk_i)
                                       if _vk_i.startswith("VOZ_AGUA")
                                       else _imhoff_triggers.get(_vk_i))
                             if _bid_i:
+                                _imhoff_to_fire.append((_vk_i, int(_bid_i)))
+                for _idx_i, (_vk_i, _bid_i) in enumerate(_imhoff_to_fire):
+                    if _idx_i > 0:
+                        await asyncio.sleep(5.0)
+                    try:
+                        await k.run_bot(_bid_i, entity_id, _entity_type(msg))
+                        state.mark_voice_sent(talk_id, _vk_i)
+                        _voz_fired = _vk_i  # last fired = followup text source
+                        log.info("talk=%s launched %s bot %s (%d of %d)",
+                                 talk_id, _vk_i, _bid_i, _idx_i + 1,
+                                 len(_imhoff_to_fire))
+                        if _vk_i == "[[VOZ_IMHOFF_4]]":
+                            await asyncio.sleep(2)
+                            _ig_text = (
+                                "📍 También puedes conocer más sobre nuestra "
+                                "empresa, nuestros proyectos y el trabajo que "
+                                "realizamos visitando nuestro Instagram oficial. "
+                                "Allí encontrarás fotografías, videos de "
+                                "instalaciones reales, testimonios de clientes "
+                                "y mucho más.\n\n"
+                                "👉 Instagram: @aguasprofundas_rd\n\n"
+                                "Será un gusto recibirte y ayudarte con "
+                                "cualquier duda."
+                            )
+                            await k.send_message(talk_id, _ig_text)
+                            log.info("talk=%s sent Instagram text (VOZ_IMHOFF_4)",
+                                     talk_id)
+                            await asyncio.sleep(1)
+                            _wbot = int(_imhoff_triggers.get(
+                                "wellington_lider_foto_bot_id", 0) or 0)
+                            if _wbot:
                                 try:
-                                    await k.run_bot(int(_bid_i), entity_id,
+                                    await k.run_bot(_wbot, entity_id,
                                                     _entity_type(msg))
-                                    state.mark_voice_sent(talk_id, _vk_i)
-                                    _voz_fired = _vk_i
-                                    log.info("talk=%s launched %s bot %s",
-                                             talk_id, _vk_i, _bid_i)
-                                    if _vk_i == "[[VOZ_IMHOFF_4]]":
-                                        await asyncio.sleep(2)
-                                        _ig_text = (
-                                            "📍 También puedes conocer más sobre nuestra "
-                                            "empresa, nuestros proyectos y el trabajo que "
-                                            "realizamos visitando nuestro Instagram oficial. "
-                                            "Allí encontrarás fotografías, videos de "
-                                            "instalaciones reales, testimonios de clientes "
-                                            "y mucho más.\n\n"
-                                            "👉 Instagram: @aguasprofundas_rd\n\n"
-                                            "Será un gusto recibirte y ayudarte con "
-                                            "cualquier duda."
-                                        )
-                                        await k.send_message(talk_id, _ig_text)
-                                        log.info("talk=%s sent Instagram text "
-                                                 "(VOZ_IMHOFF_4)", talk_id)
-                                        await asyncio.sleep(1)
-                                        _wbot = int(_imhoff_triggers.get(
-                                            "wellington_lider_foto_bot_id", 0) or 0)
-                                        if _wbot:
-                                            try:
-                                                await k.run_bot(_wbot, entity_id,
-                                                                _entity_type(msg))
-                                                log.info("talk=%s launched Wellington "
-                                                         "image bot %s", talk_id, _wbot)
-                                            except KommoError as e:
-                                                log.error("talk=%s Wellington bot "
-                                                          "failed: %s", talk_id, e)
+                                    log.info("talk=%s launched Wellington "
+                                             "image bot %s", talk_id, _wbot)
                                 except KommoError as e:
-                                    log.error("talk=%s %s failed: %s",
-                                              talk_id, _vk_i, e)
-                        break  # one voice note per turn
+                                    log.error("talk=%s Wellington bot failed: %s",
+                                              talk_id, e)
+                    except KommoError as e:
+                        log.error("talk=%s %s failed: %s", talk_id, _vk_i, e)
 
         # --- RAG + LLM ---
         kb = await rag.retrieve(text)

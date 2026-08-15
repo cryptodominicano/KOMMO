@@ -2,7 +2,7 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-15 — **v3.5 deployed — Haiku semantic voice-bot routing.**
+Last updated: 2026-08-15 — **v3.5 live — séptico flow fully validated end-to-end.**
 
 ---
 
@@ -188,6 +188,8 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 - `docker commit kommo-agent kommo-agent:latest` before any restart
 - infra-mcp drops under load → `docker restart infra-mcp`
 - Patches: write to /app/data/ → `docker exec -i kommo-agent python3 < /app/data/patch.py`
+- Salesbot queue delay: `run_bot()` goes through Kommo queue; `send_message()` is instant.
+  Always add 2s pause before send_message when a Salesbot fires same turn, or text arrives first.
 - After ANY patch: commit container → restart → verify logs → push to GitHub
 - Never push to Vercel manually
 - Every Salesbot: empty Triggers panel (Kommo defaults to "Any new conversation" — always delete)
@@ -244,8 +246,8 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 **Must fix before production traffic:**
 1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo Salesbot UI
 
-**Next session:**
-2. Agua flow end-to-end test (séptico fully validated; agua not yet)
+**Next session — priority order:**
+2. Agua flow end-to-end test — run same 7-scenario matrix as séptico
 3. Live test Haiku semantic routing with real WhatsApp conversations
 4. Weekly threshold tuning: sample 100 conversations, measure false-audio rate
 5. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics

@@ -96,7 +96,28 @@ Reglas:
 1. Identifica TODAS las intenciones distintas en el mensaje (puede haber 1, 2 o 3).
 2. Clasifica cada una con la categoría más específica.
 3. Si hay duda entre categorías, elige adjacent_out_of_scope.
-4. Responde SOLO en XML con este formato exacto, sin texto adicional.
+4. Adicionalmente, detecta si el mensaje activa alguna nota de voz de ventas.
+5. Responde SOLO en XML con este formato exacto, sin texto adicional.
+
+## Intenciones de nota de voz (voice_bot_intent)
+Solo para mensajes subsiguientes (no primer contacto). Detecta si aplica:
+
+AGUA/PERFORACIÓN:
+- drilling_price: pregunta por costo de perforar, precio del pozo, cuánto cuesta por pie/metro
+- how_to_start: quiere iniciar el proceso, qué pasos seguir, cómo hacer el estudio
+- payment_agua: quiere pagar, dónde depositar, datos bancarios, listo para reservar
+- price_objection_agua: dice que está caro, fuera de presupuesto, competencia más barata (agua)
+- location_agua: dónde están ubicados, tienen oficina, en qué ciudad/provincia (agua)
+- payment_conditions: cómo se paga, cuándo se paga, formas de pago, financiamiento
+- call_request: quiere llamar, hablar con alguien, que lo llamen, prefiere hablar
+
+SÉPTICO IMHOFF:
+- purchase_process_septico: cómo comprar, proceso de pedido, cómo proceder, cuánto tarda entrega
+- price_objection_septico: está cara, competencia más barata, fuera de presupuesto (séptico)
+- trust_question: cómo saber si son legítimos, empresa verdadera/real/legal, confianza,
+  registro mercantil, cómo verificar, quién es Wellington, pueden confiar en ellos,
+  no quiere pagar por internet, quiere ver el producto primero, empresa registrada
+- location_septico: dónde están, tienen oficina, dónde queda (séptico context)
 
 Formato de respuesta:
 <razonamiento>análisis breve interno</razonamiento>
@@ -104,6 +125,29 @@ Formato de respuesta:
 <intencion id="1" categoria="CATEGORIA">texto de la intención</intencion>
 <intencion id="2" categoria="CATEGORIA">texto de la intención</intencion>
 </intenciones>
+<voz_bots>
+<voz_bot intent="INTENT" confidence="0.0-1.0"/>
+</voz_bots>
+Si no aplica ninguna nota de voz, escribe: <voz_bots/>
+
+Ejemplos de voz_bots:
+Mensaje: "Como se que ustedes son una empresa verdadera y legitima"
+<voz_bots><voz_bot intent="trust_question" confidence="0.95"/></voz_bots>
+
+Mensaje: "ta muy caro eso, la competencia la tiene mas barata"
+<voz_bots><voz_bot intent="price_objection_septico" confidence="0.90"/></voz_bots>
+
+Mensaje: "cuanto cuesta perforar y donde estan ubicados"
+<voz_bots><voz_bot intent="drilling_price" confidence="0.95"/><voz_bot intent="location_agua" confidence="0.85"/></voz_bots>
+
+Mensaje: "quiero ordenar, como es el proceso"
+<voz_bots><voz_bot intent="purchase_process_septico" confidence="0.90"/></voz_bots>
+
+Mensaje: "hola buenos dias"
+<voz_bots/>
+
+Mensaje: "8"
+<voz_bots/>
 """
 
 
@@ -129,7 +173,7 @@ async def classify(text: str, flow: str = "agua") -> list[dict]:
                 headers={"Authorization": f"Bearer {settings.openai_api_key}"},
                 json={
                     "model": "gpt-4o-mini",  # cheapest fast model on OpenAI
-                    "max_tokens": 300,
+                    "max_tokens": 500,
                     "temperature": 0,
                     "messages": [
                         {"role": "system", "content": _SYSTEM},
@@ -146,7 +190,9 @@ async def classify(text: str, flow: str = "agua") -> list[dict]:
 
 
 def _parse_xml(raw: str, fallback_text: str) -> list[dict]:
-    """Parse the XML response into a list of intent dicts."""
+    """Parse the XML response into a list of intent dicts.
+    Also extracts voice-bot intents from the <voz_bots> block.
+    """
     import re
     intents = []
     for m in re.finditer(
@@ -160,7 +206,32 @@ def _parse_xml(raw: str, fallback_text: str) -> list[dict]:
         })
     if not intents:
         intents = [{"id": 1, "text": fallback_text, "scope": "in_scope_agua"}]
+    # Parse voice-bot intents from <voz_bots> block
+    voz_bots = []
+    voz_block = re.search(r'<voz_bots>(.*?)</voz_bots>', raw, re.DOTALL)
+    if voz_block:
+        for vm in re.finditer(
+            r'<voz_bot\s+intent="([^"]+)"\s+confidence="([^"]+)"/?>',
+            voz_block.group(1)
+        ):
+            try:
+                conf = float(vm.group(2))
+            except ValueError:
+                conf = 0.0
+            voz_bots.append({"intent": vm.group(1), "confidence": conf})
+    # Attach voice-bot intents to the first intent dict for easy access
+    if intents:
+        intents[0]["voz_bots"] = voz_bots
     return intents
+
+
+def get_voz_bot_intents(intents: list[dict]) -> list[dict]:
+    """Extract voice-bot intents from the Haiku classification result.
+    Returns [{"intent": "trust_question", "confidence": 0.95}, ...]
+    ordered by confidence descending.
+    """
+    voz = intents[0].get("voz_bots", []) if intents else []
+    return sorted(voz, key=lambda x: x["confidence"], reverse=True)
 
 
 def is_soft_farewell(intents: list[dict]) -> bool:

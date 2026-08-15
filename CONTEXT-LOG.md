@@ -6,6 +6,123 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 13:00 UTC
+
+### Four fixes deployed. Discount removed. Nudge system re-architected.
+
+All changes committed to main (commits listed per change below). Container committed after each change. Prompt guard 39/39 throughout.
+
+---
+
+### Fix 1: Séptico ficha técnica image not firing (commits 0da667c, 0936526)
+
+**Bug.** Customer said "Mándeme la ficha técnica de instalacion." Isla replied "Le comparto la ficha técnica de instalación para que su plomero la revise" in text but never emitted `[[SEPTICO_FICHA]]`. Engine never fired bot 76624. Customer got a broken text promise, no image.
+
+**Root cause.** Sentinel firing on image bots measures ~80-90% (documented since July 17). The model describes the action in text instead of emitting the marker — violating the "NO PROMETAS ENVIAR NADA EN TEXTO" rule already in the prompt. The rule was at the bottom as a reminder, not wired to a specific output path.
+
+**Researched Kommo docs** before fixing. Confirmed: Power-up (NLP intent recognition) is a legacy feature, not available to new accounts. The `POST /api/v4/bots/{id}/run` API pattern we use is correct and the only programmatic hook available. No Kommo-native keyword→bot trigger exists for mid-conversation use.
+
+**Two-layer fix:**
+
+Layer 1 — system.md step 5 rewritten. Old: "No instalamos. El cliente contrata su plomero. Envía ficha técnica: `[[SEPTICO_FICHA]]`" — vague, gave the model latitude to describe without marking. New: verbatim output template with marker baked in (same pattern as step 4 deposit line) + explicit `NUNCA digas que enviarás la ficha sin incluir [[SEPTICO_FICHA]] en la misma respuesta.`
+
+Layer 2 — worker.py `_SEPTICO_FALLBACKS` table (belt-and-suspenders). Before the sentinel loop, if the reply contains "ficha técnica", "funcionamiento", "ventajas", "no se cuartea", "no contamina" etc. WITHOUT the corresponding marker, engine injects the marker and logs `SENTINEL_FALLBACK`. One injection per turn max. Scoped to `_is_septico_flow` to prevent agua false positives.
+
+**Principle reinforced:** Prompt layer prevents the miss. Code layer catches it if prompt fails. Defense in depth, same as handoff and deposit.
+
+---
+
+### Fix 2: Discount logic removed entirely (commits 6a6a202, 4abd33c)
+
+**Decision.** Owner removed the 5% séptico recovery discount feature entirely. No discount should ever be offered.
+
+**Removed from worker.py — 4 blocks:**
+- `_HES_PHRASES` — 50+ hesitation phrase list
+- `_ASK_PHRASES` — discount request detection phrases
+- Discount window calculation block (24h timer, `offer_discount`, `offer_is_ask`, `DESCUENTO_5` injections into `extra`)
+- `[[DESC_OFRECIDO]]` sentinel stripping + `_OFFER_ASK` / `_OFFER_TAIL` hardcoded strings and firing logic
+
+**Removed from system.md:** `[[DESC_OFRECIDO]]` line from markers section.
+
+**Left in place (harmless dead code):** `state.py` functions `mark_discount_offered()` / `discount_offered()` / `hours_since_first()` / `note_first_seen()` and their DB tables. Not worth a schema migration.
+
+**Verified:** zero grep hits for `_HES_PHRASES`, `_ASK_PHRASES`, `offer_discount`, `DESCUENTO_5`, `DESC_OFRECIDO`, `discount_offered` in worker.py after removal.
+
+---
+
+### Fix 3: Scenario-specific bathroom nudge (commits b3ae39d, e8f3583, f3de89a)
+
+**New feature.** When Isla asks "¿Cuántos baños tiene su propiedad?" in the séptico flow and the customer goes quiet, send a fixed verbatim message 15 minutes later.
+
+Message (owner-approved, verbatim): "Quedo atento a tu respuesta para entender sus necesidades. 🙏"
+
+**Implementation:** Extended the existing `followup` table with `override_message` column (idempotent `ALTER TABLE` migration). `arm_followup()` accepts optional `override_message`. `claim_due_followups()` returns `(talk_id, due_at, override_msg)`. Main.py loop uses override when present, falls back to `followup_nudge` config message otherwise. Worker.py detects bathroom phrases in the reply (séptico flow only) and arms with 15-min delay + override message, skipping the generic 120-min arm for that turn.
+
+**Note:** This was built correctly but then immediately superseded by Fix 4 (architecture refactor). The bathroom nudge behavior is unchanged; only the internal machinery changed.
+
+---
+
+### Fix 4: Nudge system re-architected — `scheduled_nudges` outbox (commits 60fe537, b13a530, 2ae7abf)
+
+**Motivation.** Research (deep search, 7 sources) confirmed the `followup` table with `override_message` bolted on was not the right foundation for a multi-scenario nudge system. Problems: no priority system, no one-active-nudge invariant, no 24h window guard at fire time, no scenario context, stacking risk when multiple scenarios pending simultaneously.
+
+**New table: `scheduled_nudges`**
+```sql
+scheduled_nudges(
+  id INTEGER PK AUTOINCREMENT,
+  lead_id TEXT,           -- Kommo lead id (entity_id)
+  talk_id TEXT,
+  scenario TEXT,          -- 'bathrooms' | 'location' | 'deposit' | 'generic' | ...
+  priority INTEGER,       -- lower = more important (deposit=1, bathrooms=5, generic=9)
+  fire_at REAL,
+  status TEXT,            -- 'pending' | 'sent' | 'cancelled' | 'superseded' | 'expired'
+  attempt INTEGER,
+  message TEXT,
+  last_inbound_at REAL,   -- used for 24h window guard at fire time
+  context_json TEXT,      -- future: snapshot of conversation state
+  created_at REAL
+)
+```
+
+**Partial unique index** on `(lead_id) WHERE status='pending'` — database-level guarantee that only one nudge is ever active per lead.
+
+**New API in state.py:**
+- `schedule_nudge(lead_id, talk_id, scenario, message, delay_seconds, priority, ...)` — inserts if no pending nudge, supersedes if new priority is lower (more important), no-ops if existing priority is lower or equal.
+- `cancel_nudges(lead_id)` — cancels all pending nudges for a lead. Called on every inbound message and human takeover.
+- `claim_due_nudges(now)` — atomically claims due rows, applies 24h window guard (marks `expired` instead of sending if window closed), drains legacy `followup` table for backward compatibility. Returns `[(talk_id, message, scenario)]`.
+
+**Legacy shims kept:** `arm_followup`, `clear_followup`, `claim_due_followups` are thin wrappers so existing call sites in worker.py still work without change.
+
+**Main.py loop:** now calls `claim_due_nudges()` directly, polls every 30s (was 60s), logs scenario name.
+
+**Worker.py:** bathroom nudge now calls `schedule_nudge()` with proper `lead_id=entity_id`, `scenario='bathrooms'`, `priority=5`. Generic fallback calls `schedule_nudge()` with `scenario='generic'`, `priority=9`, only when no scenario-specific nudge was already scheduled that turn.
+
+**24h window guard (research-driven):** Free-form nudges inside the 24h service window are free today but **become paid per-message from October 1, 2026** (same rate as utility templates, no volume discount). The `last_inbound_at` field + `expired` status enforce this at fire time automatically.
+
+**Research key findings recorded:**
+- Speed-to-lead: MIT/InsideSales study — 100x contact advantage at 5 min vs 30 min.
+- Nudge timing by scenario: qualification questions 10-15 min; location 5-10 min; deposit 30-60 min; general 2-4h.
+- Hard cap: 2-3 total nudges per lead before block/spam risk rises.
+- One-active-nudge invariant is the critical architectural constraint.
+- Oct 1, 2026 pricing change: service messages become paid — instrument before expanding.
+
+**Functional tests:** all 6 pass (schedule, priority-guard no-op, supersede, cancel, 24h expiry, legacy drain).
+
+**Adding a new scenario in future:** one `schedule_nudge()` call in worker.py with the right priority and delay. Architecture handles priority, deduplication, 24h guard, and cancellation automatically.
+
+### Open items carried forward
+- Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+- Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s
+- IMHOFF lifespan: ask Wellington → add to KB → re-ingest
+- Stage 2 re-engagement templates (3 templates for Wellington → Meta HSM approval)
+- Stage 3 conversation state persistence to Kommo custom fields
+- October 1, 2026: service messages become paid — instrument nudge reply rates before that date
+- Daily conversation-review automation: not built yet
+- Legacy number +1 829-566-7542: wind-down pending
+
+
+---
+
 ## Session: July 21, 2026 — 19:40 UTC
 
 ### Callback-capture flow for "can I talk to someone / call me".

@@ -422,7 +422,10 @@ async def handle_message(msg: dict) -> None:
         if _is_generic_greeting:
             log.info("talk=%s generic greeting — service selection menu will show",
                      talk_id)
-        if welcome_bot and entity_id and is_first:
+        # Skip the generic agua welcome image when the customer opened with
+        # séptico keywords — the SEPTICO_COMPARATIVA image that fires with
+        # VOZ_IMHOFF_1 is the correct visual welcome for that context.
+        if welcome_bot and entity_id and is_first and not _septico_first:
             try:
                 await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
                 log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)

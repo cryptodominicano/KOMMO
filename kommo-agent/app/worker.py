@@ -757,7 +757,7 @@ async def handle_message(msg: dict) -> None:
                     "no puedo pagar eso ahora",
                 ]),
                 ("[[VOZ_IMHOFF_2]]", [
-                    "quiero comprar","como la compro","como funciona",
+                    "quiero comprar","como la compro",
                     "que debo hacer","cual es el proceso","como procedo",
                     "quiero adquirir una","que necesito","como hacemos",
                     "quiero ordenar","quiero hacer el pedido","estoy listo",
@@ -978,10 +978,9 @@ async def handle_message(msg: dict) -> None:
                          "for %s", talk_id, _voz_fired)
             # VOZ_AGUA_1 / VOZ_IMHOFF_1 / VOZ_IMHOFF_4: no hardcoded line, normal LLM flow
         # Fire paired image bot if this voice note has one.
-        # Runs whether or not there is a direct_reply (VOZ_IMHOFF_4 has no
-        # hardcoded line but could still pair with an image in future).
+        # Sentinel stored now; bot_id resolved after `bots` is defined below.
         _voz_image_sentinel = _VOZ_IMAGE_PAIRS.get(_voz_fired) if _voz_fired else None
-        _voz_image_bot_id = int(bots.get(_voz_image_sentinel) or 0) if _voz_image_sentinel else 0
+        # _voz_image_bot_id resolved after bots dict is built (line ~1070)
 
         if _direct_reply:
             reply = _direct_reply
@@ -1068,6 +1067,8 @@ async def handle_message(msg: dict) -> None:
         # images. The model emits a sentinel; we strip it and launch the bot.
         sb = client_pack.pack().get("salesbot", {})
         bots = sb.get("triggers", {})
+        # Resolve paired image bot id now that bots dict is available
+        _voz_image_bot_id = int(bots.get(_voz_image_sentinel) or 0) if _voz_image_sentinel else 0
         fire: list[int] = []
 
         # --- DEPOSIT / BANK DETAILS: fired by the TEXT, not by a sentinel ---

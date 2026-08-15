@@ -6,6 +6,134 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 15, 2026 — 13:00–17:30 UTC
+
+### Full séptico audio+image workflow validated end to end. 20+ fixes deployed.
+
+All changes committed to main. Container committed after each change. Prompt guard 39/39 throughout. Zero unhandled errors in logs at session close.
+
+---
+
+### Aha moments and key learnings
+
+**1. Container restart ≠ code reload.**
+Patches written via `docker exec` update files on disk but uvicorn loads modules once at startup. Multiple bugs appeared "not fixed" during testing because the container was still running the 03:15 UTC image. Rule reinforced: always `docker commit` then `docker restart` after any patch. Verify with a fresh log tail before declaring a fix live.
+
+**2. The real reason images weren't firing.**
+`client_pack.salesbot()` was a nonexistent method called at line 1265 in the sentinel loop — after the reply was sent but before sentinels processed. This crashed the worker silently (reply delivered, customer visible, container healthy, image never fired). The container started at 03:15; all today's patches were on disk but not in memory. Once restarted, ficha técnica fired first try.
+
+**3. advance_stage used `c.rowcount` on the Connection object, not the cursor.**
+`c.execute()` returns a cursor; `c.rowcount` belongs on that cursor, not the connection. Was crashing `advance_stage()` on every turn that touched the stage FSM. Fixed by assigning `cur = c.execute(...)` and checking `cur.rowcount`.
+
+**4. The bot IDs were swapped in Kommo.**
+VOZ_IMHOFF_3 (bot 85804) contained the trust/registro mercantil audio. VOZ_IMHOFF_4 (bot 85806) contained the plastic vs cement price objection audio. The AUDIO_WORKFLOW.md had the transcripts correct but the IDs wrong. Fixed by swapping the bot IDs in client.toml (85804↔85806). Code logic unchanged — sentinel strings drive everything, not the IDs.
+
+**5. "Como funciona" was in the wrong keyword list.**
+It was in VOZ_IMHOFF_2 (purchase process) which fired a deposit audio at a customer asking how the product works. Removed from VOZ_IMHOFF_2. "Cómo funciona" now reaches the LLM which answers with SEPTICO_FUNCIONAMIENTO image via sentinel.
+
+**6. The agua welcome image ("Todo comienza encontrando el agua correcta") was firing on séptico-first contacts.**
+Non-séptico customers got the right welcome. Séptico customers got an irrelevant agua image. Fixed with `not _septico_first` guard on the welcome bot call. Séptico contacts now get SEPTICO_COMPARATIVA as their first image.
+
+**7. Voice and image bots were mutually exclusive per turn.**
+The hard `break` in both keyword loops meant: first matching keyword fires, stops. A message with two intents ("dónde están ubicados, cómo sé que son confiables") only fired one audio. Fixed by removing the `break` and replacing both loops with collect-then-fire: scan all keywords, build a list, fire sequentially with 5s pauses.
+
+**8. VOZ_IMHOFF_4 keyword list was too broad.**
+"Dónde están ubicados" triggered the trust/credibility audio (registro mercantil) when the customer just wanted to know the city. Location questions and trust questions are different intents. Split into two buckets: pure location → VOZ_AGUA_6 (Jarabacoa, serve whole country), genuine trust/credibility → VOZ_IMHOFF_4 (registro mercantil + Wellington sequence).
+
+**9. `_voz_image_bot_id` was computed before `bots` was defined.**
+`bots = sb.get("triggers", {})` is built at line ~1070. The VOZ→IMAGE pair lookup was placed at line ~984. Python raises `UnboundLocalError` at runtime. Fixed by storing only the sentinel at line 984 and resolving the bot ID after `bots` is defined.
+
+**10. `bots` also undefined early in the séptico first-contact block.**
+Same class of bug — used `bots.get("[[SEPTICO_COMPARATIVA]]")` before the dict was built. Fixed by using `_sb.get("triggers", {})` instead since `_sb` is defined at line 439, well before the first-contact block.
+
+**11. Discount feature removed entirely.**
+Owner decision. Four blocks deleted from worker.py: `_HES_PHRASES`, `_ASK_PHRASES`, discount window calculation, `_OFFER_ASK`/`_OFFER_TAIL` firing logic. `[[DESC_OFRECIDO]]` removed from system.md. state.py dead code left in place (harmless).
+
+**12. AI identity: respond as the team, not as Isla.**
+Owner direction: never volunteer name or AI status. System prompt changed from "Eres Isla" to "Eres el asistente de ventas de Aguas Profundas." Disclosure triggers expanded from one vague line to an explicit list of direct AI/human questions in two buckets: triggers (eres un bot, eres IA, eres humano, con quién hablo, etc.) and explicit non-triggers (estás ahí, hay alguien ahí — just checking for responsiveness, not questioning AI nature). Mandatory per Meta January 2026 policy.
+
+**13. Nudge system re-architected before adding more scenarios.**
+The research (multi-source deep search) confirmed the `followup` table with `override_message` was not a scalable foundation. Built `scheduled_nudges` outbox table: `scenario`, `priority`, `fire_at`, `status` (pending/sent/cancelled/superseded/expired), `last_inbound_at` for 24h window guard, `context_json` for future use. Partial unique index on `(lead_id) WHERE status='pending'` enforces one-active-nudge invariant at DB level. October 1, 2026: service messages become paid — instrument before expanding.
+
+**14. Cultural audio followup opener.**
+"Luego de escuchar la nota de voz, con gusto le atiendo. 😊" prepended to every non-first-contact audio followup. VOZ_AGUA_1 and VOZ_IMHOFF_1 (first contact audios) excluded — redundant to reference "the voice note" when it's the first thing they received.
+
+---
+
+### Changes by file
+
+**worker.py** (14 commits today):
+- `client_pack.salesbot()` → `client_pack.pack().get("salesbot", {}).get("deposit_bot_id")` (line 1265)
+- Nudge block wrapped in `try/except` — crash here never kills sentinel loop
+- `_SEPTICO_FALLBACKS` belt-and-suspenders: phrase detection → marker injection before sentinel loop
+- `_VOZ_IMAGE_PAIRS` dict: VOZ_IMHOFF_1→SEPTICO_COMPARATIVA, VOZ_IMHOFF_2→SEPTICO_FUNCIONAMIENTO, VOZ_IMHOFF_3→SEPTICO_VENTAJAS
+- `_voz_image_bot_id` lookup moved to after `bots` dict is defined
+- Both agua and IMHOFF keyword loops: `break` removed, replaced with collect-then-fire with 5s pauses
+- VOZ_IMHOFF_4 keyword list split: location phrases → VOZ_AGUA_6, trust phrases → VOZ_IMHOFF_4
+- VOZ_AGUA_6 in séptico flow: followup text "¿Tiene alguna otra consulta antes de avanzar?" (not bathroom repeat)
+- Welcome bot guard: `not _septico_first` — agua image skipped for séptico first contacts
+- Séptico first-contact sequence rewritten: SEPTICO_COMPARATIVA image → 1s → welcome text → 1.5s → VOZ_IMHOFF_1 audio → AUDIO_BYPASS bathroom question
+- `_sb.get("triggers", {})` used for SEPTICO_COMPARATIVA lookup (before `bots` dict exists)
+- `_VOZ_OPENER` defined before `_VOZ_FOLLOWUPS` dict; applied to all non-first-contact bots
+- VOZ_AGUA_1 and VOZ_IMHOFF_1 excluded from opener
+- Multi-audio: both loops now fire all matched bots sequentially with 5s pauses; `_voz_fired` tracks last fired for followup text selection
+- All discount logic removed (4 blocks)
+- cancel_nudges replaces clear_followup; schedule_nudge replaces arm_followup
+- "como funciona" removed from VOZ_IMHOFF_2 keywords
+
+**state.py** (3 commits):
+- `advance_stage`: `c.rowcount` → `cur.rowcount` (Connection vs cursor bug)
+- `scheduled_nudges` table with partial unique index
+- `schedule_nudge()`, `cancel_nudges()`, `claim_due_nudges()` new API
+- Legacy shims `arm_followup`, `clear_followup`, `claim_due_followups` kept
+
+**main.py** (1 commit):
+- `_followup_loop` uses `claim_due_nudges()`, polls every 30s (was 60s)
+- Logs scenario name per nudge
+
+**system.md** (5 commits):
+- Step 5 séptico: verbatim output template for ficha técnica + `NUNCA digas que enviarás la ficha sin incluir [[SEPTICO_FICHA]]`
+- `[[DESC_OFRECIDO]]` removed from markers
+- "Eres Isla" → "Eres el asistente de ventas de Aguas Profundas"
+- Identity section: NUNCA volunteer name or AI, respond as the team
+- AI disclosure expanded: explicit trigger list vs explicit non-trigger list, Meta Jan 2026 compliance
+
+**client.toml** (1 commit):
+- VOZ_IMHOFF_3 = 85806 (was 85804) — price objection audio verified live
+- VOZ_IMHOFF_4 = 85804 (was 85806) — trust/registro mercantil audio verified live
+
+**AUDIO_WORKFLOW.md** (1 commit):
+- VOZ_IMHOFF_3 and VOZ_IMHOFF_4 bot IDs corrected, swap note added, transcripts verified
+
+---
+
+### Séptico end-to-end test results (all passing at session close)
+
+| Scenario | Message | Audio | Image | Text |
+|---|---|---|---|---|
+| First contact | "hola necesito información del séptico IMHOFF" | VOZ_IMHOFF_1 ✅ | SEPTICO_COMPARATIVA ✅ | Welcome + bathroom Q ✅ |
+| Purchase process | "quiero ordenar una, cuál es el proceso" | VOZ_IMHOFF_2 ✅ | SEPTICO_FUNCIONAMIENTO ✅ | Opener + deposit Q ✅ |
+| Price objection | "está muy cara, la competencia la tiene más barata" | VOZ_IMHOFF_3 ✅ | SEPTICO_VENTAJAS ✅ | Opener + proceed Q ✅ |
+| Location only | "dónde están ubicados" | VOZ_AGUA_6 ✅ | None ✅ | Opener + any Q ✅ |
+| Trust/credibility | "cómo sé que son confiables" | VOZ_IMHOFF_4 ✅ | Wellington photo ✅ | Instagram text ✅ |
+| Multi-intent | "dónde están ubicados y cómo sé que son confiables" | VOZ_AGUA_6 + 5s + VOZ_IMHOFF_4 ✅ | Wellington photo ✅ | Sequence ✅ |
+| Ficha técnica | "necesito la ficha técnica de instalación" | None | SEPTICO_FICHA ✅ | Template text ✅ |
+
+---
+
+### Open items carried forward
+
+1. SEPTICO_VENTAJAS image (bot 76646) has legacy number 829-566-7542 printed on it — replace image in Kommo Salesbot before real traffic hits that scenario
+2. Agua flow audio+image testing not done this session — run the same end-to-end test for agua bots
+3. Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s
+4. IMHOFF lifespan: ask Wellington → add to KB → re-ingest Qdrant
+5. October 1, 2026: service messages become paid — instrument nudge reply rates before that date
+6. Daily conversation-review automation: not built yet
+7. Legacy number +1 829-566-7542: wind-down pending
+8. KOMMO repo README: still says "Claude LLM, not deployed"
+
+---
+
 ## Session: August 15, 2026 — 13:00 UTC
 
 ### Four fixes deployed. Discount removed. Nudge system re-architected.

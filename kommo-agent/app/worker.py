@@ -489,9 +489,8 @@ async def handle_message(msg: dict) -> None:
                     await asyncio.sleep(1.0)
                     await k.send_message(
                         talk_id,
-                        "¡Bienvenido! 😊 Soy Isla, la asistente del señor Wellington "
-                        "Valenzuela y el equipo de Aguas Profundas. Con gusto le "
-                        "orientamos sobre nuestras plantas sépticas IMHOFF."
+                        "¡Bienvenido! 😊 Con gusto le orientamos sobre "
+                        "nuestras plantas sépticas IMHOFF."
                     )
                     log.info("talk=%s septico welcome text sent", talk_id)
                     # Step 3: VOZ_IMHOFF_1 audio

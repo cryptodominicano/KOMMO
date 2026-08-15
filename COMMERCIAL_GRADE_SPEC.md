@@ -636,3 +636,202 @@ Never start from zero with a re-engaged lead.
 Check WhatsApp Manager weekly. Green = healthy. Yellow = pause new templates.
 Red = reduce messaging limits. Over-probing (3+ touches) risks blocks/reports
 which feed quality rating directly. One follow-up acceptable, never three.
+
+---
+
+## Section 12 — August 15, 2026 Build Learnings (Aguas Profundas RD v3.5)
+
+This section documents architectural decisions and aha moments from the full-day build session on the Aguas Profundas agent. These learnings should be applied to all future commercial agent builds.
+
+---
+
+### 12.1 Three-Tier Hybrid Voice-Bot Routing
+
+**Problem solved:** Any agent with multiple voice/media bots mapped to sales intents will fail if routing uses keyword lists for nuanced intents. Keyword recall collapses to 11-13% on non-obvious intents (SIGIR 2025, peer-reviewed). Every paraphrase you don't have in the list is a miss.
+
+**The pattern:**
+
+Tier 0 — Keywords for unambiguous, zero-paraphrase intents (purchase confirmation, explicit price question). High precision, keep it.
+
+Tier 1 — LLM pre-processor (Haiku/equivalent) for all nuanced intents. The pre-processor already runs on every message for scope classification. Extend its output schema to include voice-bot intent labels + confidence scores. Zero added latency, zero added cost.
+
+Tier 2 — Text-only graceful degradation below confidence threshold. "Wrong audio is worse than no audio" is the guiding constraint. Enforce it at the threshold level.
+
+**Implementation:**
+```
+# haiku.py: add <voz_bots> block to XML output
+<voz_bots>
+  <voz_bot intent="trust_question" confidence="0.95"/>
+  <voz_bot intent="price_objection_septico" confidence="0.85"/>
+</voz_bots>
+
+# worker.py: _HAIKU_VOZ_MAP
+_HAIKU_VOZ_MAP = {
+    "trust_question": (bot_key, trigger_dict, 0.70),
+    "price_objection_*": (bot_key, trigger_dict, 0.70),
+    "location_*": (bot_key, trigger_dict, 0.65),
+    ...
+}
+```
+
+**Confidence thresholds by risk level:**
+- High stakes (trust, price objection, purchase): 0.70
+- Medium stakes (location, call request): 0.65
+- Low stakes (informational): 0.60
+Tune weekly by sampling 100 conversations, measuring false-audio and missed-audio rates.
+
+**Multi-intent:** LLM classifier naturally handles compound messages ("cuánto cuesta y cómo sé que son confiables" → two intents → two bots fire sequentially with 5s pause). Keywords only catch the first match.
+
+---
+
+### 12.2 Audio-First Architecture with Image Pairs
+
+**Pattern:** Every voice note bot should have a paired image bot that fires 4 seconds after the audio. The image reinforces what was just heard and gives customers something to reference while making their decision.
+
+| Voice Bot | Intent | Paired Image |
+|---|---|---|
+| Welcome/intro | Product overview | Comparativa/overview image |
+| Purchase process | How to buy | Funcionamiento/how-it-works |
+| Price objection | Why it's worth it | Ventajas/comparison image |
+| Trust/credibility | Who we are | Owner photo + Instagram |
+
+**First-contact sequence (product-specific openers):**
+Image → Welcome text → Audio → Qualifying question
+NOT: Audio → Image (image should arrive first so customer has something to look at while audio plays)
+
+**Voice note followup text pattern:**
+- First contact audio: direct qualifying question (no opener)
+- All subsequent audios: warm rotating closer + qualifying question
+- Never reference the audio ("Luego de escuchar la nota de voz...") — redundant
+- Rotate closers so no two consecutive audios feel the same
+- Dominican register: "A la orden", "Con mucho gusto", "Cualquier consulta"
+
+---
+
+### 12.3 Anti-Repetition Coverage Ledger
+
+**Problem solved:** LLM repeats answers customers already received, especially when content was delivered via audio (never in text context) or scrolled out of the message window.
+
+**Architecture:**
+```sql
+covered_topics(lead_id, topic_key, channel TEXT, covered_at, times_covered, UNIQUE(lead_id, topic_key))
+```
+
+**Topic mapping:** Each voice bot maps to the topics it covers. When a bot fires, write all topics to the ledger as channel='audio'. When LLM covers a topic in text, write as channel='text'.
+
+**STATE BLOCK injection:** Before every LLM call, build a compact string from the ledger and inject into the system prompt:
+```
+TEMAS YA CUBIERTOS CON ESTE CLIENTE:
+  - dos_modulos: AUDIO (hace 45min)
+  - precio_septico: AUDIO (hace 45min)
+```
+
+**Cultural note (Dominican/LatAm):** NEVER say "ya te lo dije" or "¿no escuchaste el audio?" — these damage rapport. Always reframe as helpfulness: "por si el audio no le llegó bien, se lo dejo aquí escrito." The customer may genuinely not have played the audio.
+
+---
+
+### 12.4 Ambiguous Response Handling
+
+**Problem:** Generic greetings lead to service selection menus. Customers often respond with "Sí" (ambiguous). Repeating the same question verbatim is the wrong response.
+
+**Pattern:** Present both options with one-line real-world descriptions so the customer can self-identify:
+```
+"💧 Estudios de agua — para encontrar agua en su terreno.
+ 🪣 Plantas sépticas — para tratamiento de aguas residuales.
+ ¿Cuál aplica a su situación?"
+```
+
+"¿Cuál aplica a su situación?" outperforms "¿cuál le interesa?" — it invites self-identification rather than preference declaration.
+
+**Emoji service options:** 💧 and 🪣 emojis on WhatsApp/Kommo render correctly and materially improve readability for two-option menus. Customers answer with the product name ("imhoff") rather than a number or vague affirmative.
+
+---
+
+### 12.5 AI Identity and Disclosure (Meta Policy January 2026)
+
+**Rule:** Never volunteer name or AI status. Respond as the business team.
+
+**Disclosure triggers** (must disclose honestly when asked directly):
+- "eres un bot", "eres IA", "eres humano", "eres una persona"
+- "con quién hablo", "quién me está respondiendo"
+- "estoy hablando con una máquina", "es esto automático"
+
+**NOT disclosure triggers** (just checking responsiveness):
+- "estás ahí", "hay alguien ahí", "hola", follow-ups after silence
+
+**Response:** "Soy [Agent Name], asistente virtual de [Company]. 😊 El equipo humano también está disponible — ¿le conecto con alguien? [[HANDOFF]]"
+
+**Mandatory per Meta January 2026 policy.** All in-scope chatbots must disclose AI status when directly asked. Claiming to be human when asked is an active deception violation (higher penalty tier).
+
+---
+
+### 12.6 Nudge System Architecture (Scheduled Outbox)
+
+**Use `scheduled_nudges` table, not in-memory timers.** APScheduler with in-memory jobs is fragile (lost on restart, multiple workers cause duplicate fires).
+
+**Schema:**
+```sql
+scheduled_nudges(id, lead_id, talk_id, scenario, priority INT, fire_at REAL,
+                 status TEXT, attempt INT, message TEXT, last_inbound_at REAL,
+                 context_json TEXT, UNIQUE INDEX on (lead_id) WHERE status='pending')
+```
+
+**One-active-nudge invariant:** partial unique index enforces this at DB level. When higher-priority scenario arrives, supersede the existing one automatically.
+
+**Priority scale:** 1=deposit pending, 5=qualification question, 9=generic fallback
+
+**24h window guard:** check `last_inbound_at` at fire time. If outside 24h service window, mark `expired` instead of sending. Critical: service messages become **paid** from October 1, 2026.
+
+**Cultural note (DR):** Owner-approved verbatim nudge messages override research recommendations without exception. "Quedo atento a tu respuesta para entender sus necesidades. 🙏" was the approved text — use it verbatim.
+
+---
+
+### 12.7 Sentinel Belt-and-Suspenders Pattern
+
+**Problem:** LLM emits image sentinels unreliably (~80-90%). When it describes sending an image in text without emitting the marker, the customer gets a broken promise.
+
+**Two-layer fix:**
+1. Prompt layer: verbatim output template with marker baked in (same line as the text).
+   `"Aquí le comparto la ficha técnica para que su plomero la instale. [[SEPTICO_FICHA]] ¿Necesita algo más?"`
+   Add explicit "NUNCA digas que enviarás X sin incluir [[MARKER]] en la misma respuesta."
+
+2. Code layer: `_SEPTICO_FALLBACKS` phrase detection. If reply contains "ficha técnica" but `[[SEPTICO_FICHA]]` is absent, inject the marker before processing. Log as SENTINEL_FALLBACK. One injection per turn maximum. Scope to relevant flow to prevent false positives.
+
+---
+
+### 12.8 Container Restart vs Code Reload
+
+**Critical:** `docker exec` patches update files on disk. Uvicorn loads modules once at startup. Patches are not live until the container is restarted.
+
+**Pattern:**
+1. Write patch to `/app/data/patch_name.py`
+2. `docker exec -i container python3 < /app/data/patch_name.py`
+3. Syntax check + functional test
+4. `docker commit container container:latest`
+5. `docker restart container`
+6. Check logs for clean startup
+7. Push to GitHub
+
+Never declare a fix "live" until after step 5. Multiple bugs appeared "not fixed" because this step was skipped.
+
+---
+
+### 12.9 Bot ID Verification (Audio Content)
+
+**Always verify audio content against bot IDs before mapping them in code.** In the Aguas Profundas build, VOZ_IMHOFF_3 (bot 85804) and VOZ_IMHOFF_4 (bot 85806) had their audio content swapped in Kommo. The keyword routing was sending trust/credibility audio for price objection triggers and vice versa.
+
+**Process:** Before building keyword/semantic maps, have the client play each bot and confirm what the audio says. Document in AUDIO_WORKFLOW.md with transcript summaries and bot IDs. Never trust the bot name alone.
+
+---
+
+### 12.10 WhatsApp Service Window and Pricing (October 2026)
+
+**Meta policy change effective October 1, 2026:** Free-form messages inside the 24-hour service window become paid (per-message fee at utility/authentication rate, no volume discount).
+
+**Implications for nudge design:**
+- Every automated nudge becomes a marginal cost
+- 2nd and 3rd touches need positive ROI justification
+- Instrument nudge reply rates and conversion before the deadline
+- Design the 24h window guard into the nudge architecture from day one (see 12.6)
+
+**Service window:** resets every time customer sends a message. Outside 24h, only pre-approved templates can be sent.

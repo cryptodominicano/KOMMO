@@ -1312,64 +1312,61 @@ async def handle_message(msg: dict) -> None:
             "buen día", "buen dia", "buen día!", "hasta luego", "hasta pronto",
             "excelente día", "excelente dia", "igualmente", "que le vaya"))
         # ── Scenario-specific nudge scheduling ───────────────────────────────
-        # schedule_nudge() enforces one-active-nudge-per-lead (partial unique
-        # index). Higher-priority scenarios supersede lower ones automatically.
-        # lead_id is the Kommo lead id (entity_id); fall back to talk_id so
-        # the partial unique index still works if entity_id is temporarily None.
+        # Wrapped in try/except: a nudge scheduling crash must NEVER prevent
+        # the sentinel processing block below from running. Sentinels fire image
+        # bots; a crash here is what caused [[SEPTICO_FICHA]] to not fire.
         _nudge_lead_id = str(entity_id) if entity_id else talk_id
         _nudge_scheduled = False
-
-        # Scenario: bathrooms — séptico flow only, priority 5, 15 min.
-        # Owner-approved verbatim message; fires only if customer goes quiet
-        # after Isla asks how many bathrooms the property has.
-        _BATHROOM_PHRASES = (
-            "cuántos baños", "cuantos banos", "cuantos baños", "cuántos banos",
-        )
-        _reply_lower_fu = reply.lower()
-        _bathroom_asked = (
-            _is_septico_flow
-            and any(p in _reply_lower_fu for p in _BATHROOM_PHRASES)
-        )
-        if _bathroom_asked and not is_first and not handoff and not state.is_handed_off(talk_id):
-            import time as _time
-            state.schedule_nudge(
-                lead_id=_nudge_lead_id,
-                talk_id=talk_id,
-                scenario="bathrooms",
-                message="Quedo atento a tu respuesta para entender sus necesidades. 🙏",
-                delay_seconds=15 * 60,
-                priority=5,
-                last_inbound_at=_time.time(),
+        try:
+            # Scenario: bathrooms — séptico flow only, priority 5, 15 min.
+            _BATHROOM_PHRASES = (
+                "cuántos baños", "cuantos banos", "cuantos baños", "cuántos banos",
             )
-            _nudge_scheduled = True
-            log.info("talk=%s nudge scheduled (scenario=bathrooms, 15 min)", talk_id)
-
-        # Generic fallback nudge: fires for any unanswered reply that didn't
-        # match a specific scenario above. Uses the config followup_delay_minutes
-        # and the default followup_nudge text. Lower priority (9) so any
-        # scenario-specific nudge always wins.
-        if (reply and not is_first and not handoff and not send_bank
-                and not _farewell and not _looks_like_closing(text)
-                and not state.is_handed_off(talk_id)
-                and not _nudge_scheduled):
-            try:
-                _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
-            except Exception:
-                _fu_delay = 0
-            if _fu_delay > 0:
-                _default_nudge_msg = (
-                    client_pack.pack().get("messages", {}) or {}
-                ).get("followup_nudge") or ""
+            _reply_lower_fu = reply.lower()
+            _bathroom_asked = (
+                _is_septico_flow
+                and any(p in _reply_lower_fu for p in _BATHROOM_PHRASES)
+            )
+            if _bathroom_asked and not is_first and not handoff and not state.is_handed_off(talk_id):
                 import time as _time
                 state.schedule_nudge(
                     lead_id=_nudge_lead_id,
                     talk_id=talk_id,
-                    scenario="generic",
-                    message=_default_nudge_msg,
-                    delay_seconds=_fu_delay,
-                    priority=9,
+                    scenario="bathrooms",
+                    message="Quedo atento a tu respuesta para entender sus necesidades. 🙏",
+                    delay_seconds=15 * 60,
+                    priority=5,
                     last_inbound_at=_time.time(),
                 )
+                _nudge_scheduled = True
+                log.info("talk=%s nudge scheduled (scenario=bathrooms, 15 min)", talk_id)
+
+            # Generic fallback nudge
+            if (reply and not is_first and not handoff and not send_bank
+                    and not _farewell and not _looks_like_closing(text)
+                    and not state.is_handed_off(talk_id)
+                    and not _nudge_scheduled):
+                try:
+                    _fu_delay = int(float(client_pack.behavior("followup_delay_minutes")) * 60)
+                except Exception:
+                    _fu_delay = 0
+                if _fu_delay > 0:
+                    _default_nudge_msg = (
+                        client_pack.pack().get("messages", {}) or {}
+                    ).get("followup_nudge") or ""
+                    import time as _time
+                    state.schedule_nudge(
+                        lead_id=_nudge_lead_id,
+                        talk_id=talk_id,
+                        scenario="generic",
+                        message=_default_nudge_msg,
+                        delay_seconds=_fu_delay,
+                        priority=9,
+                        last_inbound_at=_time.time(),
+                    )
+        except Exception as _nudge_err:
+            log.warning("talk=%s nudge scheduling failed (non-fatal): %s",
+                        talk_id, _nudge_err)
 
     except KommoError as e:
         log.error("talk=%s kommo error: %s", talk_id, e)

@@ -2,7 +2,7 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-15 — **v3.3 deployed and fully tested.**
+Last updated: 2026-08-15 — **v3.4 deployed and fully validated end-to-end.**
 
 ---
 
@@ -20,46 +20,43 @@ Health: `GET https://kommo-agent.goldcoastai.pro/health`
 |---|---|
 | Live engine | GitHub `cryptodominicano/KOMMO` (`kommo-agent/`) |
 | Build history | `CONTEXT-LOG.md` (repo root) — read first every session |
-| Commercial spec | `COMMERCIAL_GRADE_SPEC.md` (repo root) |
 | System prompt | `kommo-agent/clients/aguas-profundas/prompts/system.md` |
 | Client config | `kommo-agent/clients/aguas-profundas/client.toml` |
-| Core eval suite | `/app/data/run_tests3.py` (20/20) |
-| Spanish multi-intent | `kommo-agent/scripts/eval_spanish_multi_final.py` (15/15) |
-| Prompt integrity guard | `/app/data/prompt_guard.py` — must return 39/39 before every commit |
+| Audio workflow | `kommo-agent/docs/AUDIO_WORKFLOW.md` |
+| Prompt guard | `/app/data/prompt_guard.py` — must return 39/39 before every commit |
 
 ---
 
-## 3. Architecture (v3.3)
+## 3. Architecture (v3.4)
 
 ```
 WhatsApp / Instagram / Facebook
   → Kommo webhook → FastAPI main.py (ack 200 in <2s)
-  → worker.py (per-talk asyncio.Lock — serializes all messages):
-       SCOPE GUARD (L1: patterns, L2: 30-char intent check)
-       FLOW LOCK (flow_state SQLite — agua/séptico forever)
-       CHANNEL GATE (_is_waba, _is_instagram_comment)
-       BLOQUEADO check
-       cancel_nudges(lead_id) ← cancels pending nudges on any inbound
-       MESSAGE TYPE:
-         voice → Whisper (DR dialect prompt + VAD + normalization)
-         location → 3s delay → flow-aware (agua=linderos, séptico=delivery)
-         picture → 30s cooldown → media ack + handoff
-         text → continue
-       VOICE BOT SELECTION (keyword → fire before LLM)
-       HAIKU PRE-PROCESSOR (intent extract + scope classify + DR slang)
-       FSM STAGE INJECTION (ESTADO ACTUAL: flujo=X, etapa=Y)
-       RAG (Qdrant, top_k=8)
-       GPT-4.1 (main model)
-       BELT-AND-SUSPENDERS: séptico image sentinel fallback
-       POST-GEN FILTERS:
-         phone number (DR regex 809/829/849 + guards)
-         markdown bold (**text** → text)
-       PRE-SEND SUPERSESSION CHECK
-       send_message → Kommo
-       SENTINEL PROCESSING (strip + fire image bots)
-       schedule_nudge() if scenario detected or generic fallback
+  → worker.py (per-talk asyncio.Lock):
+       cancel_nudges(lead_id) ← on every inbound
+       MESSAGE TYPE branch (voice/location/picture/text)
+       SÉPTICO FIRST CONTACT sequence (if is_first + _septico_first + _is_waba):
+         1. SEPTICO_COMPARATIVA image (immediately)
+         2. 1s → welcome text "¡Bienvenido! 😊 Con gusto le orientamos..."
+         3. 1.5s → VOZ_IMHOFF_1 audio
+         4. AUDIO_BYPASS → "¿Cuántos baños tiene su propiedad?"
+       AGUA FIRST CONTACT (if is_first + agua + _is_waba):
+         1. welcome-bot image 55340
+         2. VOZ_AGUA_1 audio
+         3. AUDIO_BYPASS → "Por favor mándeme la ubicación..."
+       KEYWORD LOOPS (subsequent messages, _is_waba only):
+         Agua: collect ALL matched bots → fire sequentially, 5s between each
+         IMHOFF: collect ALL matched bots → fire sequentially, 5s between each
+         VOZ_IMHOFF_4: voice → 2s → Instagram text → 1s → Wellington photo
+         _voz_fired = last bot fired (drives AUDIO_BYPASS followup text)
+       VOZ→IMAGE PAIRS (after each voice bot, 4s delay):
+         VOZ_IMHOFF_1 → SEPTICO_COMPARATIVA (fired in welcome sequence, deduped)
+         VOZ_IMHOFF_2 → SEPTICO_FUNCIONAMIENTO
+         VOZ_IMHOFF_3 → SEPTICO_VENTAJAS
+       AUDIO_BYPASS: _VOZ_OPENER + qualifying question (except VOZ_AGUA_1, VOZ_IMHOFF_1)
+       HAIKU PRE-PROCESSOR → GPT-4.1 → BELT-AND-SUSPENDERS sentinel fallback
+       POST-GEN FILTERS → send_message → SENTINEL LOOP → schedule_nudge
   → main.py _followup_loop() polls scheduled_nudges every 30s
-       claim_due_nudges() → 24h window guard → send or expire
 ```
 
 ---
@@ -71,15 +68,11 @@ WhatsApp / Instagram / Facebook
 | Kommo subdomain | `aguasprofundas` |
 | Pipeline ID | `14130431` |
 | Handoff stage | `Atención humana` / `109168423` |
-| Isaias user_id | `15588735` |
 | Sheyla user_id | `15589135` |
-| Webhook ID | `47409015` |
 | Qdrant collection | `aguas_profundas_kb` (1536-dim, 48 points) |
 | Main LLM | `gpt-4.1` (forced via model_post_init) |
 | Pre-processor | `gpt-4o-mini` via haiku.py |
-| Transcription | `gpt-4o-mini-transcribe` + DR dialect prompt |
-| Primary WABA | +1 829-558-3119 |
-| Latest commit | `2ae7abf` (worker.py, 2026-08-15) |
+| Transcription | `gpt-4o-mini-transcribe` |
 
 ---
 
@@ -87,140 +80,152 @@ WhatsApp / Instagram / Facebook
 
 | ID | Name | Fired by |
 |---|---|---|
-| 55340 | welcome-bot | Engine: first contact |
+| 55340 | welcome-bot | Engine: agua first contact only (not séptico-first) |
 | 55348 | agua-foto | [[FOTO_AGUA]] |
 | 55956 | banco-foto | [[DEPOSITO]] |
 | 59058 | Payment-Audio | [[AUDIO_PAGO]] |
 | 76624 | septico-ficha-tecnica | [[SEPTICO_FICHA]] |
-| 76632 | septico-comparativa | [[SEPTICO_COMPARATIVA]] |
-| 76634 | septico-funcionamiento | [[SEPTICO_FUNCIONAMIENTO]] |
-| 76646 | septico-ventajas | [[SEPTICO_VENTAJAS]] |
-| 85776 | VOZ_AGUA_1 | First water contact (1.5s paced) |
-| 85778-85790 | VOZ_AGUA_2-8 | Keywords — LLM BYPASSED |
-| 85800 | VOZ_IMHOFF_1 | First séptico contact |
-| 85802-85804 | VOZ_IMHOFF_2-3 | Keywords — LLM BYPASSED |
-| 85806 | VOZ_IMHOFF_4 | Location/trust keywords |
-| 85808 | Wellington_Lider_Foto | After VOZ_IMHOFF_4 |
+| 76632 | septico-comparativa | Séptico first-contact sequence + VOZ_IMHOFF_1 pair |
+| 76634 | septico-funcionamiento | [[SEPTICO_FUNCIONAMIENTO]] + VOZ_IMHOFF_2 pair |
+| 76646 | septico-ventajas | [[SEPTICO_VENTAJAS]] + VOZ_IMHOFF_3 pair |
+| 85776 | VOZ_AGUA_1 | Engine: agua first contact |
+| 85778 | VOZ_AGUA_2 | Drilling price keywords |
+| 85780 | VOZ_AGUA_3 | Start process keywords |
+| 85782 | VOZ_AGUA_4 | Payment/deposit keywords |
+| 85784 | VOZ_AGUA_5 | Price objection keywords (agua) |
+| 85786 | VOZ_AGUA_7 | Payment conditions keywords |
+| 85788 | VOZ_AGUA_6 | Office location keywords (agua + séptico) |
+| 85790 | VOZ_AGUA_8 | Call request keywords |
+| 85800 | VOZ_IMHOFF_1 | Engine: séptico first contact |
+| 85802 | VOZ_IMHOFF_2 | Purchase process keywords |
+| 85804 | VOZ_IMHOFF_4 | Trust/credibility keywords (verified 2026-08-15) |
+| 85806 | VOZ_IMHOFF_3 | Price objection keywords (verified 2026-08-15) |
+| 85808 | Wellington_Lider_Foto | After VOZ_IMHOFF_4 sequence |
+
+⚠️ NOTE: Bot IDs 85804 and 85806 were swapped on 2026-08-15 after live audio verification. 85804 = trust audio, 85806 = price objection audio. client.toml reflects the correct mapping.
 
 ---
 
-## 6. Control markers
+## 6. Audio keyword routing (séptico flow)
 
-```
-[[HANDOFF]]                  → stage move + Sheyla task + note
-[[DEPOSITO]]                 → banco-foto + bank text
-[[AUDIO_PAGO]]               → Payment-Audio (ETAPA 1 agua only)
-[[SECTOR:Provincia|Pueblo]]  → tag contact
-[[SEPTICO_COMPARATIVA]]      → image bot 76632
-[[SEPTICO_FUNCIONAMIENTO]]   → image bot 76634
-[[SEPTICO_FICHA]]            → image bot 76624 (ficha técnica for plumber)
-[[SEPTICO_VENTAJAS]]         → image bot 76646 (price objection image)
-[[FOTO_AGUA]]                → agua-foto 55348
-[[LINDEROS_LISTO]]           → ETAPA 1 deposit
-```
+| Bot sentinel | Keywords (sample) | Paired image (4s after) |
+|---|---|---|
+| VOZ_IMHOFF_2 | quiero comprar, cuál es el proceso, cómo procedo, cuánto tarda | SEPTICO_FUNCIONAMIENTO |
+| VOZ_IMHOFF_3 | está muy cara, la competencia, fuera de mi presupuesto, lo voy a pensar | SEPTICO_VENTAJAS |
+| VOZ_AGUA_6 | dónde están ubicados, tienen oficina, dónde queda | None |
+| VOZ_IMHOFF_4 | cómo sé que son confiables, no confío en transferir, son una empresa real, registro mercantil | Wellington photo (sequence) |
 
-**Belt-and-suspenders sentinel fallback (worker.py):** if the model emits prose
-describing a séptico image without the marker, engine detects the phrase and injects
-the marker before processing. Logged as `SENTINEL_FALLBACK`. One injection per turn.
+Multi-intent: all matched bots fire sequentially with 5s pauses. Last fired drives followup text.
 
 ---
 
-## 7. Nudge system (`scheduled_nudges` table)
+## 7. Audio followup text pattern
 
-Scenario-specific, priority-queued outbox. One active nudge per lead at a time
-(enforced by partial unique index). Poller runs every 30s in `main.py`.
+```
+VOZ_AGUA_1:    "Por favor mándeme la ubicación..." (no opener — first contact)
+VOZ_IMHOFF_1:  "¿Cuántos baños tiene su propiedad?" (no opener — first contact)
+VOZ_IMHOFF_4:  "" (Instagram text + Wellington photo handle the close)
+All others:    "Luego de escuchar la nota de voz, con gusto le atiendo. 😊 " + qualifying question
+```
 
-**Priority scale:** lower = more important.
+---
+
+## 8. Séptico image sentinel fallback (belt-and-suspenders)
+
+If the LLM describes sending a séptico image in text WITHOUT emitting the marker, the engine detects the phrase and injects the marker before the sentinel loop. Logged as `SENTINEL_FALLBACK`.
+
+Covered phrases: "ficha técnica", "funcionamiento", "ventajas", "no se cuartea", "no contamina".
+
+---
+
+## 9. Nudge system (`scheduled_nudges` table)
 
 | Scenario | Priority | Delay | Message |
 |---|---|---|---|
-| `bathrooms` | 5 | 15 min | "Quedo atento a tu respuesta para entender sus necesidades. 🙏" |
-| `generic` | 9 | 120 min (config) | `followup_nudge` from client.toml |
+| bathrooms | 5 | 15 min | "Quedo atento a tu respuesta para entender sus necesidades. 🙏" |
+| generic | 9 | 120 min | `followup_nudge` from client.toml |
 
-**Key behaviors:**
-- `cancel_nudges(lead_id)` fires on every inbound message — no nudge ever sends after the customer replies.
-- `claim_due_nudges()` applies a 24h window guard at fire time — marks `expired` instead of sending if the customer's service window has closed. Critical: service messages become **paid per-message from October 1, 2026**.
-- Higher-priority scenario supersedes a pending lower-priority nudge automatically.
-- Legacy `followup` table still drained for backward compatibility.
-
-**Adding a new scenario:** one `schedule_nudge()` call in worker.py with scenario name, message, delay, and priority. Architecture handles everything else.
-
-**state.py API:**
-- `schedule_nudge(lead_id, talk_id, scenario, message, delay_seconds, priority, last_inbound_at, context_json)`
-- `cancel_nudges(lead_id)`
-- `claim_due_nudges(now) → [(talk_id, message, scenario)]`
+One active nudge per lead (partial unique index). 24h window guard at fire time. October 1, 2026: service messages become paid.
 
 ---
 
-## 8. Non-negotiable rules
+## 10. Identity and AI disclosure
 
-- Never confirm payment — ask for comprobante + [[HANDOFF]]
+Never volunteer name or AI status. Respond as the Aguas Profundas team.
+
+**Disclosure triggers** (direct AI/human questions only):
+"eres un bot", "eres IA", "eres humano", "eres una persona", "con quién hablo", "estoy hablando con una máquina", "cómo sé que son confiables" (re: AI), "son confiables", "me responde una máquina", "es esto automático", "eres real", "hay una persona real ahí", "quién me está respondiendo"
+
+**NOT triggers** (just checking responsiveness):
+"estás ahí", "hay alguien ahí", "hola", follow-ups after silence.
+
+Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano también está disponible — ¿le conecto con alguien? [[HANDOFF]]"
+
+---
+
+## 11. Non-negotiable rules
+
+- Never confirm payment — receipt → acknowledge + [[HANDOFF]]
 - Never guarantee water 100% — "80-90% con el estudio"
-- Never give drilling prices in text
+- Never give drilling prices in text (VOZ_AGUA_2 handles)
 - Never repeat audio content in text reply
-- Never share phone numbers (regex filter enforced in code)
-- Never offer or mention any discount — feature removed entirely
-- Unknown answers: honest admit + [[HANDOFF]]
-- Always Spanish regardless of customer language
+- Never share phone numbers
+- Never offer or mention any discount — removed entirely
+- Never volunteer name or AI status
 - Max 2 lines per reply, one question, no lists or bold
-- Never promise to send an image in text — use the marker, let the engine send it
 
 ---
 
-## 9. Infrastructure rules
+## 12. Infrastructure rules
 
 - `docker restart` does NOT reload env_file → `docker compose up -d`
 - `docker commit kommo-agent kommo-agent:latest` before any restart
 - infra-mcp drops under load → `docker restart infra-mcp`
-- Never push to Vercel manually → GitHub only
-- Every Salesbot: empty Triggers panel
 - Patches: write to /app/data/ → `docker exec -i kommo-agent python3 < /app/data/patch.py`
-- End of every session: commit all + update CONTEXT-LOG.md + update CLAUDE.md
-- BEFORE every prompt commit: run integrity guard:
-  `docker exec -i kommo-agent python3 < /app/data/prompt_guard.py`
-  Must return 39/39 PASS. Block commit if any check fails.
+- After ANY patch: commit container → restart → verify logs → push to GitHub
+- Never push to Vercel manually
+- Every Salesbot: empty Triggers panel (Kommo defaults to "Any new conversation" — always delete)
+- Prompt guard: `docker exec -i kommo-agent python3 < /app/data/prompt_guard.py` → must be 39/39
 
 ---
 
-## 10. Version status
+## 13. Version history
 
-### v3.3 (live, 2026-08-15)
+### v3.4 (live, 2026-08-15)
+- Séptico workflow validated end-to-end: all 7 scenarios passing
+- Bot IDs 85804↔85806 swapped after live audio verification
+- Séptico first-contact sequence: SEPTICO_COMPARATIVA → welcome text → VOZ_IMHOFF_1 → bathroom Q
+- Agua welcome image skipped for séptico-first contacts
+- VOZ→IMAGE pairs: IMHOFF_2→funcionamiento, IMHOFF_3→ventajas (4s delay each)
+- Multi-audio: both keyword loops collect all matches, fire sequentially with 5s pauses
+- VOZ_IMHOFF_4 keywords split: location → VOZ_AGUA_6, trust → VOZ_IMHOFF_4
+- Cultural opener "Luego de escuchar la nota de voz..." on all non-first-contact followups
+- AI disclosure expanded with explicit trigger/non-trigger lists (Meta Jan 2026 compliance)
+- Identity: never volunteer name or AI; respond as the team
+- Discount feature removed entirely
+- scheduled_nudges outbox architecture with priority queue and 24h window guard
+- advance_stage Connection.rowcount → cursor.rowcount bug fixed
+- client_pack.salesbot() → pack().get("salesbot") bug fixed
+- Nudge scheduling block wrapped in try/except (never kills sentinel loop)
+- Belt-and-suspenders séptico image fallback for ficha/funcionamiento/ventajas phrases
 
-**Ficha técnica fix (sentinel reliability):**
-- system.md step 5 rewritten with verbatim output template + `NUNCA digas que enviarás la ficha sin incluir [[SEPTICO_FICHA]]` rule
-- worker.py `_SEPTICO_FALLBACKS` belt-and-suspenders: phrase detection → marker injection before sentinel loop
-- Covers: ficha técnica, funcionamiento, ventajas, no se cuartea, no contamina
-
-**Discount removed:**
-- All discount logic deleted from worker.py: `_HES_PHRASES`, `_ASK_PHRASES`, discount window calc, `_OFFER_ASK`/`_OFFER_TAIL`, `[[DESC_OFRECIDO]]` stripping
-- `[[DESC_OFRECIDO]]` removed from system.md markers
-- state.py discount functions left as harmless dead code
-
-**Nudge system re-architected:**
-- New `scheduled_nudges` table with priority, scenario, status, 24h window guard
-- Partial unique index enforces one-active-nudge-per-lead at DB level
-- `schedule_nudge()` / `cancel_nudges()` / `claim_due_nudges()` API
-- Legacy `followup` shims kept for backward compatibility
-- Bathroom scenario (priority 5, 15 min) migrated to new system
-- Poller interval 60s → 30s
+### v3.3 (2026-08-15 morning)
+- Ficha técnica image fix (sentinel + belt-and-suspenders)
+- Discount removed
+- Bathroom nudge (15 min, scenario-specific)
 
 ### v3.2 (2026-08-14)
-- MINITS farewell detection (soft_farewell + hard_no in haiku.py)
-- Prompt integrity guard: 39/39
-
-### v3.1 (2026-08-14)
-- Per-talk asyncio.Lock, markdown bold strip, DR transcription improvements
+- MINITS farewell detection, prompt integrity guard 39/39
 
 ---
 
-## 11. Open items
+## 14. Open items
 
-1. Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
-2. Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s — VOZ_AGUA_1 (~2 min) priority
-3. IMHOFF lifespan: ask Wellington → add to KB → re-ingest Qdrant
-4. October 1, 2026: service messages become paid — instrument nudge reply rates before that date
-5. Stage 2 re-engagement: 3 templates for Wellington → Meta HSM approval
-6. Stage 3: conversation state persistence to Kommo custom fields + opt-in capture at soft_farewell
-7. Daily conversation-review automation: not built yet
-8. Legacy number +1 829-566-7542: wind-down pending
-9. KOMMO repo README: still says "Claude LLM, not deployed" — fix when convenient
+1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo UI before this scenario hits real traffic
+2. Agua flow end-to-end test: run same 7-scenario test for agua audios and images
+3. Voice note duration audit: all 12 bots, target 20-40s, hard cap 60s
+4. IMHOFF lifespan: ask Wellington → add to KB → re-ingest Qdrant
+5. October 1, 2026: service messages become paid — instrument nudge reply rates now
+6. Daily conversation-review automation: not built
+7. Legacy number +1 829-566-7542: wind-down pending
+8. KOMMO repo README: still says "Claude LLM, not deployed"

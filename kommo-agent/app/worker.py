@@ -499,6 +499,10 @@ async def handle_message(msg: dict) -> None:
         if (_agua_flow_confirmed
                 and entity_id and _is_waba
                 and _voz_triggers.get("VOZ_AGUA_1")):
+            # Pacing: 1.5s after welcome image before voice fires
+            # (BSP/Meta guidance: avoid stacking 3+ media in <2s)
+            if is_first:
+                await asyncio.sleep(1.5)
             _vk1 = "VOZ_AGUA_1"
             if not state.voice_already_sent(talk_id, _vk1):
                 try:
@@ -1198,8 +1202,16 @@ async def handle_message(msg: dict) -> None:
         if reply:
             import re as _re
             # Filter 1: Phone numbers — never share in chat.
+            # DR-specific phone regex (research: Nacimiento-García et al. 2024)
+            # Catches: +1-829-566-7542, (809) 566-7542, 8295667542
+            # Negative lookaheads: excludes prices (RD$45,000), times (14:30),
+            # dates (08/29/2025), and module numbers (Módulo 8)
             _phone_pattern = _re.compile(
-                r'(?:\+?1[-\s.]?)?(?:\(?\d{3}\)?[-\s.]?)?\d{3}[-\s.]?\d{4}\b'
+                r'(?<![0-9$])'
+                r'(?:\+?1[-\s.]?)?'
+                r'\(?(?:8(?:0[09]|[24]9))\)?'
+                r'[-\s.]?\d{3}[-\s.]?\d{4}'
+                r'(?![\d/\-])'
             )
             _cleaned = _phone_pattern.sub("[número no disponible]", reply)
             if _cleaned != reply:

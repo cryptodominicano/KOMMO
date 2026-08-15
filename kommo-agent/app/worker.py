@@ -1224,23 +1224,50 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s hard_no detected — graceful close", talk_id)
 
             elif haiku_pre.is_soft_farewell(_intents):
-                # Soft farewell / latent objection — ONE diagnostic probe.
-                # MINITS signals already processed by Haiku. Inject probe
-                # instruction so GPT-4.1 asks the isolate-the-objection
-                # question, then closes if no reply (handled next turn).
-                extra = (
-                    "OBJECIÓN LATENTE DETECTADA: El cliente se está despidiendo "
-                    "de forma vaga. Per MINITS research esto es casi nunca un no "
-                    "definitivo. Haz UNA SOLA pregunta diagnóstica cálida para "
-                    "aislar la objeción real. Ejemplos: '¿Qué parte necesita "
-                    "pensar exactamente? ¿Es el precio, el proceso, o algo que "
-                    "no le quedó claro?' o '¿Le gustaría que le escriba en un "
-                    "par de días para ver si surgieron dudas?' "
-                    "UNA pregunta. Tono cálido y sin presión. "
-                    "NO digas que lo entiendes y punto — pregunta algo."
-                    + ("\n\n" + extra if extra else "")
-                ).strip()
-                log.info("talk=%s soft_farewell — MINITS probe injected", talk_id)
+                # Soft farewell / latent objection — MINITS framework.
+                # First occurrence: ONE diagnostic probe to isolate objection.
+                # Subsequent occurrences: graceful hold — customer has explained
+                # their reason (timing/logistics), don't push further.
+                _farewell_count = state.get_topic_coverage_count(
+                    str(entity_id) if entity_id else talk_id, "soft_farewell_probe"
+                )
+                if _farewell_count == 0:
+                    # First soft farewell — diagnostic probe
+                    extra = (
+                        "OBJECIÓN LATENTE DETECTADA: El cliente se está despidiendo "
+                        "de forma vaga. Per MINITS research esto es casi nunca un no "
+                        "definitivo. Haz UNA SOLA pregunta diagnóstica cálida para "
+                        "aislar la objeción real. Ejemplos: '¿Qué parte necesita "
+                        "pensar exactamente? ¿Es el precio, el proceso, o algo que "
+                        "no le quedó claro?' o '¿Le gustaría que le escriba en un "
+                        "par de días para ver si surgieron dudas?' "
+                        "UNA pregunta. Tono cálido y sin presión. "
+                        "NO digas que lo entiendes y punto — pregunta algo."
+                        + ("\n\n" + extra if extra else "")
+                    ).strip()
+                    state.mark_topic_covered(
+                        str(entity_id) if entity_id else talk_id,
+                        "soft_farewell_probe", "text"
+                    )
+                    log.info("talk=%s soft_farewell — MINITS probe injected (first)",
+                             talk_id)
+                else:
+                    # Repeated soft farewell — customer has explained their reason.
+                    # Graceful hold: warm, no pressure, door stays open.
+                    extra = (
+                        "PAUSA ELEGANTE: El cliente ya explicó su razón para esperar "
+                        "(logística, consultar con alguien, timing). NO hagas más "
+                        "preguntas diagnósticas — ya las hiciste. "
+                        "Responde con calidez y déjale saber que estarás aquí cuando esté listo. "
+                        "Ejemplos: 'Perfecto, le esperamos con gusto. 😊 Cuando hable "
+                        "con su familia y estén listos, por aquí estaremos.' o "
+                        "'Claro que sí, tómese su tiempo. 🙏 Cuando quiera avanzar "
+                        "aquí estamos a la orden.' "
+                        "Cálido, breve, sin presión. NO preguntes nada más."
+                        + ("\n\n" + extra if extra else "")
+                    ).strip()
+                    log.info("talk=%s soft_farewell — graceful hold (probe already sent)",
+                             talk_id)
 
             # Adjacent out-of-scope: inject one-turn redirect
             if haiku_pre.has_adjacent_out_of_scope(_intents):

@@ -951,6 +951,19 @@ async def handle_message(msg: dict) -> None:
             # Followed by Instagram text + Wellington image — no extra text override needed.
             "[[VOZ_IMHOFF_4]]": "",
         }
+        # Voice → image pairs: after a voice note fires, send its paired image bot
+        # with a 4s pause so the voice note lands before the image.
+        # Keyed by the voice bot sentinel; value is the image sentinel to look up
+        # in the bots dict (same dict used by the main sentinel loop).
+        _VOZ_IMAGE_PAIRS = {
+            # First séptico contact → comparativa image (IMHOFF vs traditional)
+            "[[VOZ_IMHOFF_1]]": "[[SEPTICO_COMPARATIVA]]",
+            # How it works / purchase process → funcionamiento brochure
+            "[[VOZ_IMHOFF_2]]": "[[SEPTICO_FUNCIONAMIENTO]]",
+            # Price objection → ventajas comparison image
+            "[[VOZ_IMHOFF_3]]": "[[SEPTICO_VENTAJAS]]",
+        }
+
         # If a voice bot fired AND has a prescribed follow-up line, skip the LLM
         # entirely and send the hardcoded line. This is the only reliable way to
         # prevent the LLM from contradicting the audio content — extra_system
@@ -964,6 +977,12 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s AUDIO_BYPASS: skipping LLM, sending direct followup "
                          "for %s", talk_id, _voz_fired)
             # VOZ_AGUA_1 / VOZ_IMHOFF_1 / VOZ_IMHOFF_4: no hardcoded line, normal LLM flow
+        # Fire paired image bot if this voice note has one.
+        # Runs whether or not there is a direct_reply (VOZ_IMHOFF_4 has no
+        # hardcoded line but could still pair with an image in future).
+        _voz_image_sentinel = _VOZ_IMAGE_PAIRS.get(_voz_fired) if _voz_fired else None
+        _voz_image_bot_id = int(bots.get(_voz_image_sentinel) or 0) if _voz_image_sentinel else 0
+
         if _direct_reply:
             reply = _direct_reply
         else:
@@ -1098,6 +1117,23 @@ async def handle_message(msg: dict) -> None:
                 state.clear_awaiting_linderos(talk_id)
                 log.info("talk=%s deposit message sent - firing bank text + photo %s",
                          talk_id, deposit_bot)
+        # VOZ → IMAGE PAIR: fire paired image bot 4s after voice+text delivered.
+        # Only fires on WhatsApp (waba), only if entity_id is known,
+        # only if the paired bot is configured, and only once per conversation
+        # (reuses the voice_sent guard with a "_img" suffix key).
+        if _voz_image_bot_id and entity_id and _is_waba:
+            _img_guard_key = (_voz_fired or "") + "_img"
+            if not state.voice_already_sent(talk_id, _img_guard_key):
+                try:
+                    await asyncio.sleep(4.0)
+                    await k.run_bot(_voz_image_bot_id, entity_id, _entity_type(msg))
+                    state.mark_voice_sent(talk_id, _img_guard_key)
+                    log.info("talk=%s VOZ_IMAGE_PAIR: fired %s (bot %s) after %s",
+                             talk_id, _voz_image_sentinel, _voz_image_bot_id, _voz_fired)
+                except KommoError as e:
+                    log.error("talk=%s VOZ_IMAGE_PAIR bot %s failed: %s",
+                              talk_id, _voz_image_bot_id, e)
+
         # BELT-AND-SUSPENDERS: séptico image marker injection.
         # Sentinel firing measured ~80-90% (context log, 2026-07-17 and proven again
         # 2026-08-15 with the ficha técnica miss). When the model describes sending an

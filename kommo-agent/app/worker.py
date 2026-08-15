@@ -1084,6 +1084,40 @@ async def handle_message(msg: dict) -> None:
                 extra = (_multi_prompt + "\n\n" + extra).strip()
                 log.info("talk=%s multi-intent coverage injected", talk_id)
 
+            # ── FAREWELL DETECTION (MINITS framework, Research Aug 2026) ──────
+            # soft_farewell: latent objection disguised as goodbye.
+            # Research: 'Lo voy a pensar' is almost never a true no.
+            # One diagnostic probe is warranted. Never two. Never three.
+            # hard_no: explicit opt-out — close gracefully, no probe.
+            if haiku_pre.is_hard_no(_intents):
+                # Explicit rejection — inject graceful close instruction
+                extra = (
+                    "CIERRE DEFINITIVO: El cliente rechazó explícitamente o "
+                    "pidió no ser contactado. Responde con UNA sola despedida "
+                    "cálida y breve. Sin preguntas. Sin ofertas. Sin marcadores."
+                    + ("\n\n" + extra if extra else "")
+                ).strip()
+                log.info("talk=%s hard_no detected — graceful close", talk_id)
+
+            elif haiku_pre.is_soft_farewell(_intents):
+                # Soft farewell / latent objection — ONE diagnostic probe.
+                # MINITS signals already processed by Haiku. Inject probe
+                # instruction so GPT-4.1 asks the isolate-the-objection
+                # question, then closes if no reply (handled next turn).
+                extra = (
+                    "OBJECIÓN LATENTE DETECTADA: El cliente se está despidiendo "
+                    "de forma vaga. Per MINITS research esto es casi nunca un no "
+                    "definitivo. Haz UNA SOLA pregunta diagnóstica cálida para "
+                    "aislar la objeción real. Ejemplos: '¿Qué parte necesita "
+                    "pensar exactamente? ¿Es el precio, el proceso, o algo que "
+                    "no le quedó claro?' o '¿Le gustaría que le escriba en un "
+                    "par de días para ver si surgieron dudas?' "
+                    "UNA pregunta. Tono cálido y sin presión. "
+                    "NO digas que lo entiendes y punto — pregunta algo."
+                    + ("\n\n" + extra if extra else "")
+                ).strip()
+                log.info("talk=%s soft_farewell — MINITS probe injected", talk_id)
+
             # Adjacent out-of-scope: inject one-turn redirect
             if haiku_pre.has_adjacent_out_of_scope(_intents):
                 _adj = "; ".join(i["text"] for i in _intents

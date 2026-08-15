@@ -7,6 +7,8 @@ each classified as one of:
   qualification_answer — customer answering a question we asked (location, banos, etc)
   greeting            — Hola, Buenas, dímelo, ¿qué lo que?, ta to
   adjacent_out_of_scope — water when in séptico flow, or séptico when in agua flow
+  soft_farewell       — 'Lo voy a pensar', 'Yo le aviso', latent objection disguised as farewell
+  hard_no             — explicit opt-out or annoyance, close gracefully
   fully_off_topic     — religion, politics, general knowledge, poems, weather
 
 Handles Dominican Spanish slang via a cached glossary block.
@@ -34,6 +36,12 @@ _DR_GLOSSARY = """
 - "motoconcho" / "concho" → shared transport (context: location question)
 - "la capital" / "el DN" → Santo Domingo
 - "la guagua" → bus
+## Señales MINITS para detección de objeción latente (Good et al. 2024)
+- Preguntas de compra previas (precio, entrega, depósito) = objeción latente alta
+- Conversación larga/profunda antes del farewell = objeción latente alta
+- Fecha específica dada ("el viernes le confirmo") = objeción latente media-alta
+- Farewell vago sin fecha ("yo le aviso") = objeción latente media
+- Molestia explícita o rechazo directo = hard_no, no soft_farewell
 """
 
 # ── Category taxonomy (cached block — static content) ─────────────────────────
@@ -62,6 +70,18 @@ adjacent_out_of_scope: menciona el servicio ALTERNATIVO —
 fully_off_topic: nada relacionado con los servicios de Aguas Profundas —
   religión, política, chistes, poemas, clima, noticias, otros negocios,
   solicitudes generales de información. Si hay duda, usa adjacent_out_of_scope.
+soft_farewell: cliente posponiendo o despidiéndose de forma vaga, con alta
+  probabilidad de objeción latente — "Lo voy a pensar", "Yo le aviso",
+  "Déjame consultarlo", "Después le confirmo", "Luego le escribo",
+  "Lo voy a hablar con mi esposo/esposa", "Está caro déjame pensar",
+  "Mañana le escribo", "Ahorita no puedo". IMPORTANTE: si el mensaje
+  contiene además una pregunta o interés activo, clasifica la pregunta
+  primero y el farewell también.
+
+hard_no: rechazo explícito, molestia o solicitud de no contactar —
+  "No me interesa", "No gracias ya decidí que no", "No escriba más",
+  "Bórreme", "STOP", "No quiero", "Déjeme tranquilo", "No moleste".
+  También: molestia clara ("esto es spam", "¿por qué me sigue escribiendo?").
 """
 
 _SYSTEM = f"""Eres un clasificador de mensajes de WhatsApp para una empresa dominicana
@@ -141,6 +161,26 @@ def _parse_xml(raw: str, fallback_text: str) -> list[dict]:
     if not intents:
         intents = [{"id": 1, "text": fallback_text, "scope": "in_scope_agua"}]
     return intents
+
+
+def is_soft_farewell(intents: list[dict]) -> bool:
+    """True if the primary intent is a soft farewell (latent objection).
+    Research: MINITS framework — one diagnostic probe is warranted.
+    Never returns True if there is also an in-scope question present.
+    """
+    scopes = [i["scope"] for i in intents]
+    has_farewell = "soft_farewell" in scopes
+    has_active_question = any(s in ("in_scope_agua", "in_scope_septico",
+                                    "qualification_answer")
+                              for s in scopes)
+    return has_farewell and not has_active_question
+
+
+def is_hard_no(intents: list[dict]) -> bool:
+    """True if the customer explicitly opted out or expressed annoyance.
+    Research: never probe after a hard_no — close gracefully only.
+    """
+    return any(i["scope"] == "hard_no" for i in intents)
 
 
 def is_simple_greeting(intents: list[dict]) -> bool:

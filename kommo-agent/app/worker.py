@@ -846,6 +846,10 @@ async def handle_message(msg: dict) -> None:
                     "como verifico","quiero verificar","registro mercantil",
                     "puedo ir a conocerlos","quiero pasar a verlos",
                     "quiero ir personalmente",
+                    "empresa verdadera","empresa legitima","empresa legal",
+                    "son legitimos","son de fiar","son reales",
+                    "como se que son","como saber si","verificar que son",
+                    "empresa registrada","tienen registro","estan registrados",
                 ]),
             ]
             if _is_septico_flow:

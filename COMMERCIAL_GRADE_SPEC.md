@@ -583,3 +583,56 @@ Negative lookbehind: exclude prices ($, RD$) and date digits.
 Negative lookahead: exclude date separators (/, -).
 Support parentheses format: \(?area\)?.
 Layer: regex (every message) → optional LLM judge (audit only, never sync).
+
+---
+
+## 13. Farewell Detection & Re-Engagement (Research-Backed, August 2026)
+
+Source: Good, Bhattacharya, Hochstein & Voorhees — MINITS framework
+(International Journal of Research in Marketing). SPIN Selling (Rackham).
+Marketing Donut. Chet Holmes Buyer Pyramid. bePragma dataset (80,000+ contacts).
+
+### Core principle (for every future client)
+"Lo voy a pensar" is almost never a true no. The real no is silence.
+63% of information requesters don't buy for 3+ months (Marketing Donut).
+Only 3% of any audience is buying now (Chet Holmes Buyer Pyramid).
+Soft farewells are latent objections disguised as goodbyes.
+
+### Required Haiku scope categories (add to every client build)
+soft_farewell: "Lo voy a pensar", "Yo le aviso", "Déjame consultarlo",
+  "Después le confirmo", vague postponement with no specific date.
+hard_no: "No me interesa", "No escriba más", "STOP", explicit annoyance.
+
+### Required behavior
+soft_farewell → ONE diagnostic probe:
+  "¿Qué parte necesita pensar exactamente? ¿Es el precio, el proceso,
+  o algo que no le quedó claro?"
+  Tone: warm, no pressure. One question. Never list benefits again.
+hard_no → ONE warm farewell. No probe. No questions. No offers.
+Probe limit: 1 = acceptable. 2 = borderline. 3 = spam → quality rating hit.
+
+### MINITS signals to include in Haiku prompt (per conversation context)
+- Buying questions asked earlier (price, deposit, delivery) → soft_farewell
+- Long/deep conversation before farewell → soft_farewell
+- Specific future date given → soft_farewell (strong signal)
+- Vague "yo le aviso" with no date → soft_farewell (medium signal)
+- Explicit annoyance or opt-out language → hard_no
+
+### Stage 2 — Re-engagement templates (requires Meta HSM approval)
+Only for contacts with captured opt-in. 3 templates max per lead.
+Cadence: Day 1-2 (contextual), Day 5-7 (value-add), Day 6-8 (break-up).
+Category: Marketing (may auto-recategorize from Utility since Apr 9, 2025).
+Template pacing: don't blast new templates — Meta throttles for first 7 days.
+WhatsApp reactivation rate: 22-34% vs email 6-11% (bePragma, directional).
+Stop after 3 touches with no reply.
+
+### Stage 3 — Context resumption
+Persist conversation state (product discussed, isolated objection, engagement
+score) to CRM contact fields. When template gets a reply (fresh 24h window),
+bot references prior context and resumes at the isolated objection.
+Never start from zero with a re-engaged lead.
+
+### Quality rating monitoring (required for all clients with re-engagement)
+Check WhatsApp Manager weekly. Green = healthy. Yellow = pause new templates.
+Red = reduce messaging limits. Over-probing (3+ touches) risks blocks/reports
+which feed quality rating directly. One follow-up acceptable, never three.

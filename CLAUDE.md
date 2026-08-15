@@ -149,6 +149,12 @@ All v3.0 features plus:
 - Welcome pacing: 1.5s before VOZ_AGUA_1 on first contact
 - DR phone regex: 809/829/849 specific + negative lookaheads
 
+### v3.2 additions (2026-08-14 Part 7)
+- MINITS farewell detection (haiku.py: soft_farewell + hard_no scopes)
+- soft_farewell → one diagnostic probe to isolate objection
+- hard_no → one warm farewell, no probe, no questions
+- Prompt integrity guard: 39/39 checks enforced before every commit
+
 ### Open items (v3.2)
 - Wellington_Lider_Foto (85808): verify image in Kommo UI
 - IMHOFF lifespan: ask Wellington → KB → re-ingest
@@ -159,3 +165,6 @@ All v3.0 features plus:
 - DR WER baseline: run held-out AP voice notes through gpt-4o-mini-transcribe
 - Redis debounce: upgrade when volume exceeds 500 concurrent talks/month
 - Daily conversation-review automation: not built yet
+- Stage 2 re-engagement: draft 3 templates for Wellington → Meta HSM
+- Stage 3 re-engagement: conversation state persistence to Kommo fields
+- Stage 3: opt-in capture at soft_farewell moment

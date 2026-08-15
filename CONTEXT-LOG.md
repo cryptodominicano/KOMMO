@@ -2395,3 +2395,89 @@ and mirrored at kommo-agent/scripts/test_prompt_integrity.py (git).
 
 ### Current prompt state
 160 lines | 39/39 integrity checks pass | sandwich confirmed | commit bfba8bd
+
+---
+
+## Session 2026-08-14 (Part 7) — Farewell research + MINITS Stage 1 implementation
+
+### Research document: Soft Farewell vs Latent Objection & WhatsApp Re-Engagement
+
+Source: Good, Bhattacharya, Hochstein & Voorhees — MINITS framework
+(International Journal of Research in Marketing, peer-reviewed).
+Supplemented by: SPIN Selling (Rackham, 35,000 calls / 12 years),
+LAER (Carew International), Chet Holmes Buyer Pyramid, Marketing Donut,
+Gong win-rate data, bePragma WhatsApp reactivation dataset (80,000+ contacts).
+
+**Core finding:** "Lo voy a pensar" is almost never a true no.
+The real no is silence, not words. 63% of people requesting information
+don't buy for at least 3 months (Marketing Donut). At any moment only 3%
+of prospects are buying now (Chet Holmes Buyer Pyramid). Soft farewells
+are latent objections disguised as goodbyes.
+
+**MINITS signals (predict latent objection vs true farewell):**
+- Did they ask buying questions (price, deposit, delivery)? → probe
+- Deep conversation before farewell? → probe
+- Specific date given ("el viernes te confirmo") → strong probe signal
+- Vague farewell ("yo le aviso", no date) → medium probe signal
+- Explicit annoyance or opt-out ("no escriba más", STOP) → hard_no, close only
+
+**Optimal chatbot behavior:**
+- soft_farewell: ONE diagnostic probe to isolate the real objection
+  "¿Qué parte necesita pensar exactamente? ¿Es el precio, el proceso,
+  o algo que no le quedó claro?"
+- hard_no: ONE warm farewell, no probe, no offers, no questions
+- Never probe after a hard_no — risks blocks/spam reports → quality rating
+- Probe limit: 1 acceptable, 2 borderline, 3 = spam (Meta quality impact)
+
+**Re-engagement outside 24h window (Stage 2 — NOT yet built):**
+- Requires Meta-approved Message Templates (HSM)
+- Marketing category (may be auto-recategorized from Utility since Apr 2025)
+- Cadence: Day 1-2, Day 5-7, Day 6-8 break-up touch
+- Stop after 3 touches with no reply
+- Requires explicit opt-in captured at soft farewell moment
+- WhatsApp reactivation 22-34% vs email 6-11% (bePragma dataset, directional)
+- Templates need Wellington approval + Meta review before deployment
+
+**Re-engagement context resumption (Stage 3 — NOT yet built):**
+- Persist conversation state to Kommo contact custom fields
+- When template gets a reply (fresh 24h window), bot references prior context
+- Resume at isolated objection, not from zero
+
+### Stage 1 implementation (DONE, commit c1bc9f9)
+
+**haiku.py — 2 new scope categories:**
+  soft_farewell: "Lo voy a pensar", "Yo le aviso", "Déjame consultarlo",
+    "Después le confirmo", "Luego le escribo", "Lo voy a hablar con mi esposa",
+    "Ahorita no puedo", "Mañana le escribo"
+  hard_no: "No me interesa", "No escriba más", "STOP", "Bórreme",
+    "No moleste", "Ya decidí que no", molestia explícita
+  New helpers: is_soft_farewell(), is_hard_no()
+  MINITS signals added to DR glossary block
+  9/9 classifier tests pass
+
+**worker.py — farewell routing before adjacent_out_of_scope check:**
+  hard_no → CIERRE DEFINITIVO injected → GPT-4.1 gives one warm farewell
+  soft_farewell → OBJECIÓN LATENTE DETECTADA injected → GPT-4.1 asks ONE
+    diagnostic probe to isolate the objection
+  5/5 end-to-end GPT-4.1 tests pass
+
+**system.md — CIERRE section updated:**
+  CASO 1 (OBJECIÓN LATENTE): one diagnostic probe, warm, no pressure
+  CASO 2 (DESPEDIDA DEFINITIVA): one warm farewell, no questions
+  Prompt integrity guard: 39/39 pass
+
+### Prompt integrity guard protocol (established Part 6, enforced Part 7)
+Before every system.md commit, run:
+  docker exec -i kommo-agent python3 < /app/data/prompt_guard.py
+Must return 39/39 PASS. Commit blocked if any check fails.
+Guard updated this session to reflect new CASO 1/CASO 2 structure.
+
+### Open items from research (Stages 2 + 3 — next sessions)
+- Draft 3 re-engagement templates for Wellington review:
+  T1: Day 1-2 contextual follow-up (reference product + isolated objection)
+  T2: Day 5-7 value-add (new info or social proof)
+  T3: Day 6-8 break-up touch ("no quiero insistir, dejo la puerta abierta")
+- Submit approved templates to Meta for HSM approval
+- Build opt-in capture at soft_farewell moment (store in Kommo contact field)
+- Build conversation state persistence to Kommo custom fields (Stage 3)
+- Instrument: reply rate per template, block/spam rate, quality rating weekly

@@ -1093,6 +1093,7 @@ async def handle_message(msg: dict) -> None:
                 "trust_question":           ("[[VOZ_IMHOFF_4]]", _imhoff_triggers, 0.70),
                 "location_septico":         ("VOZ_AGUA_6",       _voz_triggers,    0.65),
             }
+            _haiku_voz_fired = False
             if not is_first and _is_waba and entity_id and not _voz_fired:
                 _haiku_voz = haiku_pre.get_voz_bot_intents(_intents)
                 if _haiku_voz:
@@ -1129,6 +1130,7 @@ async def handle_message(msg: dict) -> None:
                         await k.run_bot(_hv_bid, entity_id, _entity_type(msg))
                         state.mark_voice_sent(talk_id, _hv_key)
                         _voz_fired = _hv_key
+                        _haiku_voz_fired = True
                         log.info("talk=%s HAIKU_VOZ: fired %s (intent=%s conf=%.2f)",
                                  talk_id, _hv_key, _hv_intent, _hv_conf)
                         # Coverage ledger
@@ -1401,6 +1403,10 @@ async def handle_message(msg: dict) -> None:
             log.info("talk=%s superseded before send — reply discarded", talk_id)
             return
         if reply:
+            # If Haiku fired a voice bot this turn, pause so the audio
+            # reaches the customer before the text followup arrives.
+            if locals().get('_haiku_voz_fired'):
+                await asyncio.sleep(2.0)
             await k.send_message(talk_id, reply)
             # Non-WhatsApp delivery warning: Kommo returns 202 Accepted but
             # Instagram/Facebook may silently fail (expired OAuth token, comment

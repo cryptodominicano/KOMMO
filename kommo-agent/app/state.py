@@ -551,10 +551,10 @@ def advance_stage(talk_id: str, stage: str) -> None:
     if new_idx <= current_idx:
         return  # never go backward
     with _conn() as c:
-        c.execute(
+        cur = c.execute(
             "UPDATE flow_state SET stage=?, stage_at=? WHERE talk_id=?",
             (stage, _t.time(), str(talk_id)))
-        if c.rowcount == 0:
+        if cur.rowcount == 0:
             # No row yet — insert with stage
             c.execute(
                 "INSERT OR IGNORE INTO flow_state "

@@ -110,7 +110,11 @@ AGUA/PERFORACIÓN:
 - how_to_start: quiere iniciar el proceso, qué pasos seguir, cómo hacer el estudio
 - payment_agua: quiere pagar, dónde depositar, datos bancarios, listo para reservar
 - price_objection_agua: dice que está caro, fuera de presupuesto, competencia más barata. SOLO si FLUJO ACTIVO = AGUA.
-- location_agua: dónde están ubicados, tienen oficina, en qué ciudad/provincia (agua)
+- location_agua: cliente PREGUNTA dónde está la empresa/oficina, en qué ciudad trabajan.
+  SOLO cuando el cliente pregunta POR LA EMPRESA, no cuando da su propio pueblo o terreno.
+  NUNCA uses este intent cuando el cliente está RESPONDIENDO dónde está su terreno.
+  Ejemplo SÍ: 'dónde están ustedes', 'en qué ciudad trabajan', 'tienen oficina'
+  Ejemplo NO: 'mi terreno está en Nagua', 'el terreno queda en Cabrera', 'estoy en Punta Cana'
 - payment_conditions: cómo se paga, cuándo se paga, formas de pago, financiamiento
 - call_request: quiere llamar, hablar con alguien, que lo llamen, prefiere hablar
 
@@ -120,7 +124,8 @@ SÉPTICO IMHOFF:
 - trust_question: cómo saber si son legítimos, empresa verdadera/real/legal, confianza,
   registro mercantil, cómo verificar, quién es Wellington, pueden confiar en ellos,
   no quiere pagar por internet, quiere ver el producto primero, empresa registrada
-- location_septico: dónde están, tienen oficina, dónde queda (séptico context)
+- location_septico: cliente PREGUNTA dónde está la empresa/oficina (séptico context).
+  SOLO cuando el cliente pregunta POR LA EMPRESA, no cuando da su propia dirección.
 
 Formato de respuesta:
 <razonamiento>análisis breve interno</razonamiento>
@@ -145,6 +150,18 @@ Mensaje (FLUJO ACTIVO: AGUA): "ta muy cara esa vaina"
 
 Mensaje: "cuanto cuesta perforar y donde estan ubicados"
 <voz_bots><voz_bot intent="drilling_price" confidence="0.95"/><voz_bot intent="location_agua" confidence="0.85"/></voz_bots>
+
+Mensaje: "mi terreno está en Cabrera, Baoba de Pinar a 900 mts de la playa"
+<voz_bots/>
+
+Mensaje: "el terreno queda en Nagua"
+<voz_bots/>
+
+Mensaje (FLUJO ACTIVO: SEPTICO): "dónde queda su oficina"
+<voz_bots><voz_bot intent="location_septico" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: SEPTICO): "mi propiedad está en La Romana"
+<voz_bots/>
 
 Mensaje: "quiero ordenar, como es el proceso"
 <voz_bots><voz_bot intent="purchase_process_septico" confidence="0.90"/></voz_bots>

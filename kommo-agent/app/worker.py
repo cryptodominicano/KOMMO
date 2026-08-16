@@ -1125,10 +1125,32 @@ async def handle_message(msg: dict) -> None:
                 if _haiku_voz:
                     log.info("talk=%s haiku voz_bot_intents: %s", talk_id, _haiku_voz)
                 _haiku_fired = []
+                # Flow-aware intents that are agua-only
+                _AGUA_ONLY_INTENTS = {
+                    "drilling_price", "how_to_start", "payment_agua",
+                    "price_objection_agua", "payment_conditions", "call_request",
+                }
+                # Intents that are septico-only
+                _SEPTICO_ONLY_INTENTS = {
+                    "purchase_process_septico", "price_objection_septico",
+                    "trust_question", "location_septico",
+                }
                 for _hv in _haiku_voz:
                     _hv_intent = _hv["intent"]
                     _hv_conf = _hv["confidence"]
                     if _hv_intent not in _HAIKU_VOZ_MAP:
+                        continue
+                    # Flow guard: never fire agua-only bots in séptico flow
+                    # and never fire séptico-only bots in agua flow.
+                    # Exception: location_agua (VOZ_AGUA_6) is company-level,
+                    # allowed in both flows.
+                    if _is_septico_flow and _hv_intent in _AGUA_ONLY_INTENTS:
+                        log.info("talk=%s haiku voz SKIP %s — agua intent in septico flow",
+                                 talk_id, _hv_intent)
+                        continue
+                    if not _is_septico_flow and _hv_intent in _SEPTICO_ONLY_INTENTS:
+                        log.info("talk=%s haiku voz SKIP %s — septico intent in agua flow",
+                                 talk_id, _hv_intent)
                         continue
                     _hv_key, _hv_triggers, _hv_threshold = _HAIKU_VOZ_MAP[_hv_intent]
                     if _hv_conf < _hv_threshold:

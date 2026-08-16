@@ -115,11 +115,14 @@ AGUA/PERFORACIÓN:
   NUNCA uses este intent cuando el cliente está RESPONDIENDO dónde está su terreno.
   Ejemplo SÍ: 'dónde están ustedes', 'en qué ciudad trabajan', 'tienen oficina'
   Ejemplo NO: 'mi terreno está en Nagua', 'el terreno queda en Cabrera', 'estoy en Punta Cana'
-- payment_conditions: cómo se paga, cuándo se paga, formas de pago, financiamiento
+- payment_conditions: cómo se paga, cuándo se paga, formas de pago, financiamiento.
+  SOLO si FLUJO ACTIVO = AGUA. Para séptico, usa purchase_process_septico.
 - call_request: quiere llamar, hablar con alguien, que lo llamen, prefiere hablar
 
 SÉPTICO IMHOFF:
-- purchase_process_septico: cómo comprar, proceso de pedido, cómo proceder, cuánto tarda entrega
+- purchase_process_septico: cómo comprar, proceso de pedido, cómo proceder, cuánto tarda entrega.
+  También cubre: forma de pago, pago contra entrega, depósito, si se paga antes o después,
+  métodos de pago, si aceptan efectivo. SOLO si FLUJO ACTIVO = SEPTICO.
 - price_objection_septico: está cara, competencia más barata, fuera de presupuesto. SOLO si FLUJO ACTIVO = SEPTICO.
 - trust_question: cómo saber si son legítimos, empresa verdadera/real/legal, confianza,
   registro mercantil, cómo verificar, quién es Wellington, pueden confiar en ellos,
@@ -165,6 +168,15 @@ Mensaje (FLUJO ACTIVO: SEPTICO): "mi propiedad está en La Romana"
 
 Mensaje: "quiero ordenar, como es el proceso"
 <voz_bots><voz_bot intent="purchase_process_septico" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: SEPTICO): "hay forma de pago contra entrega o yo buscarla"
+<voz_bots><voz_bot intent="purchase_process_septico" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: SEPTICO): "aceptan efectivo, no hacemos pagos por adelantado"
+<voz_bots><voz_bot intent="purchase_process_septico" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "hay forma de pago contra entrega"
+<voz_bots><voz_bot intent="payment_conditions" confidence="0.90"/></voz_bots>
 
 Mensaje: "hola buenos dias"
 <voz_bots/>

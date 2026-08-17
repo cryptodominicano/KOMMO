@@ -2,7 +2,7 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-16 — **v3.6 live — state-aware routing, flow guards, intent hardening.**
+Last updated: 2026-08-17 — **v3.6.1 — greeting PREVIO_BYPASS, flow-aware reply.**
 
 ---
 
@@ -266,6 +266,8 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 3. price_objection_septico: apply price_disclosed gate (same as agua)
 4. Coverage ledger Stage 2: write price topic when LLM gives price in text
 5. VOZ_AGUA_1: 2:01 duration — needs re-recording (target 30-40s)
+6. Generic nudge guard: don't fire on fresh leads where customer never answered
+   qualifying question (no pueblo/sector or bathroom count in history yet)
 3. Live test Haiku semantic routing with real WhatsApp conversations
 4. Weekly threshold tuning: sample 100 conversations, measure false-audio rate
 5. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics

@@ -105,11 +105,22 @@ REGLA DE FLUJO: Para intenciones con variantes _agua/_septico, usa SIEMPRE
 el FLUJO ACTIVO. FLUJO ACTIVO=SEPTICO → septico; FLUJO ACTIVO=AGUA → agua.
 NUNCA uses variante del flujo contrario.
 
+REGLA DE PRECIO (crítica): El mensaje incluye PRECIO_YA_DIVULGADO=true/false.
+Si PRECIO_YA_DIVULGADO=false → preguntas de precio son price_inquiry_first NUNCA price_objection_agua.
+Si PRECIO_YA_DIVULGADO=true → preguntas de precio pueden ser price_objection_agua.
+price_inquiry_first: frases interrogativas (¿cuánto cuesta?, a cómo, en cuánto me sale, qué cobran).
+price_objection_agua: frases declarativas (ta caro, está muy caro, competencia cobra menos, no tengo presupuesto).
+price_inquiry_first NO dispara ningún voice bot — el LLM responde con información del estudio.
+
 AGUA/PERFORACIÓN:
 - drilling_price: pregunta por costo de perforar, precio del pozo, cuánto cuesta por pie/metro
 - how_to_start: quiere iniciar el proceso, qué pasos seguir, cómo hacer el estudio
 - payment_agua: quiere pagar, dónde depositar, datos bancarios, listo para reservar
-- price_objection_agua: dice que está caro, fuera de presupuesto, competencia más barata. SOLO si FLUJO ACTIVO = AGUA.
+- price_inquiry_first: cliente pregunta el precio por primera vez. SOLO si PRECIO_YA_DIVULGADO=false.
+  Señal: frase interrogativa. Ejemplo: 'cuánto cuesta el estudio', 'a cómo', 'qué precio tienen'.
+  NO dispara voice bot — el LLM da la información.
+- price_objection_agua: cliente reacciona a un precio ya conocido. SOLO si FLUJO ACTIVO = AGUA Y PRECIO_YA_DIVULGADO=true.
+  Señal: declarativa. Ejemplo: 'ta caro', 'está muy caro', 'competencia cobra menos', 'no tengo presupuesto'.
 - location_agua: cliente PREGUNTA dónde está la empresa/oficina, en qué ciudad trabajan.
   SOLO cuando el cliente pregunta POR LA EMPRESA, no cuando da su propio pueblo o terreno.
   NUNCA uses este intent cuando el cliente está RESPONDIENDO dónde está su terreno.
@@ -144,6 +155,18 @@ Si no aplica ninguna nota de voz, escribe: <voz_bots/>
 Ejemplos de voz_bots:
 Mensaje: "Como se que ustedes son una empresa verdadera y legitima"
 <voz_bots><voz_bot intent="trust_question" confidence="0.95"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA, PRECIO_YA_DIVULGADO=false): "cuánto cuesta el estudio"
+<voz_bots/>
+
+Mensaje (FLUJO ACTIVO: AGUA, PRECIO_YA_DIVULGADO=false): "a cómo me sale eso"
+<voz_bots/>
+
+Mensaje (FLUJO ACTIVO: AGUA, PRECIO_YA_DIVULGADO=true): "ta muy cara esa vaina"
+<voz_bots><voz_bot intent="price_objection_agua" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA, PRECIO_YA_DIVULGADO=false): "ta muy cara esa vaina"
+<voz_bots/>
 
 Mensaje (FLUJO ACTIVO: SEPTICO): "ta muy caro eso, la competencia la tiene mas barata"
 <voz_bots><voz_bot intent="price_objection_septico" confidence="0.90"/></voz_bots>
@@ -186,7 +209,7 @@ Mensaje: "8"
 """
 
 
-async def classify(text: str, flow: str = "agua") -> list[dict]:
+async def classify(text: str, flow: str = "agua", price_disclosed: bool = False) -> list[dict]:
     """Classify a customer message into a list of intents.
     
     Returns: [{"id": 1, "text": "...", "scope": "in_scope_agua"}, ...]
@@ -198,7 +221,12 @@ async def classify(text: str, flow: str = "agua") -> list[dict]:
     if not text or not text.strip():
         return [{"id": 1, "text": text, "scope": "greeting"}]
 
-    user_msg = f"FLUJO ACTIVO: {flow.upper()}\n\nMensaje del cliente: {text}"
+    _price_flag = "true" if price_disclosed else "false"
+    user_msg = (
+        f"FLUJO ACTIVO: {flow.upper()}\n"
+        f"PRECIO_YA_DIVULGADO: {_price_flag}\n\n"
+        f"Mensaje del cliente: {text}"
+    )
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:

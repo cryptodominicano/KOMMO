@@ -6,6 +6,138 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 16, 2026 — Full day (agua flow + intent routing hardening)
+
+### 9 bugs fixed. Agua flow partially validated. Intent routing hardened with state-awareness.
+
+---
+
+### Bugs found and fixed
+
+**Bug 1 — location_agua firing when customer gives their own terreno address**
+Dr. Luis Argenis answered "Cabrera, Baoba de Pinar a 950 mts de la Playa"
+(answering pueblo/sector question) → location_agua(0.90) → VOZ_AGUA_6 fired.
+Fix: explicit rules in haiku.py — location_agua/septico ONLY fires when
+customer ASKS about company location. Added negative few-shot examples.
+API: 8/8 correct including typos ("donde estan uvicado" → location_agua(0.95) ✅,
+"mi terreno está en Nagua" → NONE ✅).
+
+**Bug 2 — payment questions in séptico firing VOZ_AGUA_7**
+"Hay forma de pago contra entrega" in séptico → payment_conditions → VOZ_AGUA_7.
+Fix: payment_conditions labeled SOLO si FLUJO ACTIVO = AGUA. Extended
+purchase_process_septico to cover payment questions in séptico. API: 8/8.
+
+**Bug 3 — no flow guard preventing cross-flow audio**
+Added hard flow guard in worker.py: _AGUA_ONLY_INTENTS set blocks agua voice
+bots in séptico flow. _SEPTICO_ONLY_INTENTS blocks séptico bots in agua flow.
+Exception: VOZ_AGUA_6 (company location, flow-agnostic). Two-layer: prompt + code.
+
+**Bug 4 — price_objection firing before price was disclosed (state-blind classifier)**
+"cuánto cuesta el estudio" → price_objection_agua → would fire VOZ_AGUA_5.
+But customer had never heard the price — first-time inquiry not an objection.
+Fix: state-aware price routing.
+- `price_disclosed = get_topic_coverage_count(lead_id, "estudio_precio") > 0`
+- Passed to haiku.classify() as `price_disclosed: bool`
+- Injected as `PRECIO_YA_DIVULGADO: true/false` in user message
+- New intent: `price_inquiry_first` — returns no voice bot, LLM handles
+- Stage gate in worker.py: price_objection_agua skipped if not price_disclosed
+API: 8/8 — pre/post disclosure both correct, DR slang correct.
+
+**Bug 5 — Agua first contact missing welcome text**
+image → audio → pueblo Q. No welcome text.
+Fix: Added "¡Bienvenido! 😊 Con gusto le orientamos sobre nuestros estudios
+de agua y perforación de pozos." with 1s/1.5s pauses, matching séptico pattern.
+
+**Bug 6 — VOZ_AGUA_1 AUDIO_BYPASS asking for GPS pin too early**
+"Por favor mándeme la ubicación" → fixed to "¿En qué pueblo o sector está
+el terreno donde desea hacer el estudio? 🙏"
+
+**Bug 7 — WhatsApp location instructions missing from agua step 2**
+Added + button → Ubicación instructions with satellite photo explanation
+to system.md agua flow step 2.
+
+**Bug 8 — Pushy followup texts after audios**
+VOZ_AGUA_2/4/5/7 pushing for commitment too soon.
+Updated to warmer consultative closers.
+
+**Bug 9 — Audio first-contact re-lock after transcription**
+Voice note first contact locked to agua before transcription. Re-evaluation
+added after transcription so séptico keywords redirect correctly.
+
+---
+
+### Aha moments (August 16)
+
+**Intent classification fails when it lacks conversation state.**
+"Cuánto cuesta el estudio" and "ta caro" require completely different responses
+but can't be distinguished from words alone. The differentiator is whether
+the price was already disclosed — a state signal, not a linguistic one.
+Research (CASA-NLU, EMNLP 2019): "short utterances whose intent depends entirely
+on conversation history" — context injection yields 4-7% accuracy gains.
+
+**The coverage ledger was already tracking estudio_precio.**
+VOZ_AGUA_1 covers ["estudio_proceso", "estudio_precio", "perforacion_tipos"] in
+_AUDIO_TOPIC_MAP. The only missing piece was reading it back via
+`get_topic_coverage_count` and passing it to the classifier. One function call.
+
+**Two-layer protection is mandatory for all routing decisions.**
+Every intent gate is now implemented both in the Haiku prompt (semantic rule)
+AND in worker.py (code gate). Single-point-of-failure routing has caused every
+major bug this build. The dual-layer pattern prevents regressions.
+
+**Direction matters in location statements.**
+"Dónde están ustedes" (asking) and "mi terreno está en Nagua" (telling) both
+mention locations but are opposite in intent. The fix required explicit rules
+about the DIRECTION of information flow, enforced via few-shot examples.
+
+**MINITS graceful hold: probe once, warm hold thereafter.**
+Dominican customers say "déjame hablar con mi padre" as a logistics pause,
+not an objection. Probing twice reads as pushy. The `soft_farewell_probe`
+counter in the coverage ledger enforces the one-probe rule.
+
+---
+
+### Agua flow validation (partial — real traffic interrupted testing)
+
+| Scenario | Status |
+|---|---|
+| First contact | ✅ Image → welcome text → audio → pueblo Q |
+| Pueblo/sector → province confirm | ✅ Province mapped, price quoted |
+| Drilling price (semantic) | ✅ VOZ_AGUA_2 |
+| Price inquiry pre-disclosure | ✅ NEW — NONE, LLM informs |
+| Price objection post-disclosure | ✅ VOZ_AGUA_5 |
+| Location (company) | ✅ VOZ_AGUA_6 |
+| Payment/deposit | 🔲 Not yet tested live |
+| Call request | 🔲 Not yet tested live |
+| GPS pin → linderos | 🔲 Not yet tested live |
+| Deposit → banco-foto | 🔲 Not yet tested live |
+
+---
+
+### Daily conversation audit (43 talks, Aug 16)
+
+Overall: system performing well. Real DR customers including voice notes,
+multi-turn clarifications, hard_no re-engagement, soft farewell handling.
+Two issues found (location_agua on terreno address, price_objection pre-disclosure)
+both fixed same day and deployed. Whisper hallucination observed once on talk=698
+(recited word list as transcript) — classified correctly as adjacent_out_of_scope.
+
+---
+
+### Open items
+
+1. SEPTICO_VENTAJAS image (bot 76646): legacy number — replace in Kommo UI
+2. Agua: payment/deposit, call request, GPS pin, linderos, banco-foto not tested
+3. VOZ_AGUA_1: 2:01 duration, needs re-recording (target 30-40s)
+4. price_objection_septico: apply same price_disclosed gate
+5. Coverage ledger Stage 2: write estudio_precio when LLM gives price in text
+6. October 1 2026: service messages become paid (45 days)
+7. Weekly threshold tuning
+8. Facebook CTWA prefill per campaign
+9. Daily conversation-review automation: not built
+
+---
+
 ## Session: August 15, 2026 — 19:30 UTC (séptico e2e complete)
 
 ### Haiku semantic routing bugs fixed. Séptico flow fully validated end-to-end.

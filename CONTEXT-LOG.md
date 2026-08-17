@@ -6,6 +6,71 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 17, 2026 — 01:00 UTC
+
+### Bug: duplicate welcome menu on greeting sent after audio (talk=706, Zeida).
+
+---
+
+### What happened
+
+Customer Zeida (+34 Spain) clicked a Facebook ad which pre-filled
+"Quiero mas informacion sobre los estudios de busqueda de agua subterraneas!"
+and sent it. Then immediately sent "Hola" as a separate message.
+
+Execution sequence:
+1. First message triggered full welcome sequence: image → welcome text → VOZ_AGUA_1
+2. Debounce superseded the AUDIO_BYPASS followup text (newer message arrived)
+3. "Hola" processed next — not in _CLOSED_RESPONSES, so PREVIO_BYPASS skipped it
+4. LLM called for "Hola" → generated fresh service selection menu
+5. Customer got: image + welcome text + VOZ_AGUA_1 audio + DUPLICATE WELCOME MENU
+
+The duplicate "¡Bienvenido a Aguas Profundas RD! Tenemos estudios de agua para
+pozos y plantas sépticas IMHOFF. ¿Cuál le interesa más?" came from the LLM
+treating "Hola" as a new conversation start, ignoring the audio that just fired.
+
+Secondary issue: generic nudge fired at 03:15 ("Fue un placer hablar con usted
+hoy") on a brand new customer who never answered the qualifying question.
+Not appropriate for a fresh lead with no real exchange.
+
+### Fix
+
+Added greeting words to _CLOSED_RESPONSES so PREVIO_BYPASS catches them after
+audio has fired, instead of sending them to the LLM:
+"hola", "buenas", "buen dia", "buenos dia", "buenas tarde", "buenas noche",
+"saludos", "klk", "que lo que", "dime"
+
+Changed the positive PREVIO_BYPASS reply from "¡De nada! mándeme la ubicación"
+(always agua, always wrong for séptico) to a flow-aware contextual reply:
+- Agua: "¡Con gusto! 😊 ¿En qué pueblo o sector está el terreno? 🙏"
+- Séptico: "¡Con gusto! 😊 ¿Cuántos baños tiene su propiedad? 🙏"
+
+Commit: df904e5f3ab0
+
+### Aha moment
+
+**The debounce supersede + greeting combo is a silent double-welcome trap.**
+When two messages arrive in quick succession (ad pre-fill + manual "Hola"),
+the debounce correctly merges the first message's processing but the greeting
+then arrives as a clean new turn. If that greeting isn't in _CLOSED_RESPONSES,
+the LLM treats it as a new conversation and re-delivers the welcome sequence.
+Pattern to remember for future clients: ALL common greeting variants must be in
+_CLOSED_RESPONSES so post-audio greetings get contextual replies, not re-welcomes.
+
+**Generic nudge on fresh unanswered leads is wrong.**
+The 2-hour generic nudge fired on a customer who never answered the qualifying
+question. The nudge system needs a guard: don't fire the generic nudge if the
+customer never responded to the first qualifying question (pueblo/sector for agua,
+bathroom count for séptico). This is a Stage 2 nudge improvement — open item.
+
+### Open items added
+
+- Generic nudge guard: don't fire on leads where customer never answered
+  qualifying question (no qualification_answer in conversation history)
+- Review all PREVIO_BYPASS positive replies for flow-awareness
+
+---
+
 ## Session: August 16, 2026 — Full day (agua flow + intent routing hardening)
 
 ### 9 bugs fixed. Agua flow partially validated. Intent routing hardened with state-awareness.

@@ -975,7 +975,10 @@ async def handle_message(msg: dict) -> None:
             _CLOSED_RESPONSES = [
                 "no", "asi no", "de saber", "gracia", "esta bien", "ok",
                 "okay", "bueno", "entendido", "claro", "perfecto", "bien",
-                "no gracias", "no me interesa", "lo voy a pensar", "despues"
+                "no gracias", "no me interesa", "lo voy a pensar", "despues",
+                # Greetings after audio — don't re-trigger LLM welcome menu
+                "hola", "buenas", "buen dia", "buenos dia", "buenas tarde",
+                "buenas noche", "saludos", "klk", "que lo que", "dime"
             ]
             # Best practice 2026 (Botpress, Infobip): never bypass the LLM
             # for messages containing a question mark — those are genuine
@@ -1002,8 +1005,14 @@ async def handle_message(msg: dict) -> None:
                                      "Si en algún momento desea más información o "
                                      "avanzar, aquí estamos para ayudarle.")
                 else:
-                    _direct_reply = ("¡De nada! 😊 Cuando guste, por favor mándeme "
-                                     "la ubicación de su terreno para comenzar. 📍")
+                    # Flow-aware reply: continue the conversation naturally
+                    # without re-delivering the full welcome/menu
+                    if _is_septico_flow:
+                        _direct_reply = ("¡Con gusto! 😊 ¿Cuántos baños tiene "
+                                         "su propiedad para recomendarle el módulo? 🙏")
+                    else:
+                        _direct_reply = ("¡Con gusto! 😊 ¿En qué pueblo o sector "
+                                         "está el terreno donde desea hacer el estudio? 🙏")
                 log.info("talk=%s PREVIO_BYPASS: short/closed response, skipping LLM",
                          talk_id)
             else:

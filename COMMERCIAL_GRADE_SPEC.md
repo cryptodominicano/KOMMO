@@ -863,3 +863,87 @@ Never declare a fix "live" until after step 5. Multiple bugs appeared "not fixed
 - Design the 24h window guard into the nudge architecture from day one (see 12.6)
 
 **Service window:** resets every time customer sends a message. Outside 24h, only pre-approved templates can be sent.
+
+---
+
+## Section 12.12 — State-Aware Price Intent Classification
+
+**Problem:** "Cuánto cuesta el estudio" (first-time inquiry) misclassified as
+price_objection because the classifier had no awareness of whether price was
+already disclosed. These require completely different responses.
+
+**Research basis (CASA-NLU, EMNLP 2019):** Short utterances whose intent depends
+entirely on conversation history require state injection, not better keywords.
+Context-aware classification yields 4-7% accuracy gains.
+
+**Pattern:**
+1. Write price topic (e.g. `estudio_precio`) to coverage ledger when audio fires
+   or LLM states a price.
+2. `price_disclosed = get_topic_coverage_count(lead_id, "estudio_precio") > 0`
+3. Pass to classifier: `price_disclosed=price_disclosed`
+4. Inject into prompt: `PRECIO_YA_DIVULGADO: true/false`
+5. Classifier rule: pre-disclosure → `price_inquiry_first` (no audio, LLM informs).
+   Post-disclosure → `price_objection` → objection audio fires.
+6. Stage gate in FastAPI: `price_objection` only routes if `price_disclosed=True`.
+
+**Two new intent labels:**
+- `price_inquiry_first` — pre-disclosure price question, no voice bot
+- `price_clarification` — post-disclosure inquiry (they know price, want detail)
+
+Apply to both flows (agua and séptico) with separate topic keys.
+
+---
+
+## Section 12.13 — Location Intent Direction (Company vs Customer)
+
+**Problem:** "Cabrera, Baoba de Pinar a 950 mts de la Playa" (customer giving
+terreno address) fired company-location audio (Jarabacoa).
+
+**Pattern:**
+- `location_agua`/`location_septico` ONLY fires when customer ASKS about
+  company: "dónde están", "en qué ciudad", "tienen oficina".
+- When customer GIVES their own location/terreno: return NONE. LLM handles.
+
+**Implementation:** Explicit rule + negative few-shot examples in Haiku prompt.
+```
+Mensaje: "mi terreno está en Nagua" → <voz_bots/>
+Mensaje: "dónde están ustedes ubicados" → <voz_bots><voz_bot intent="location_agua".../></voz_bots>
+```
+Negative examples are as important as positive ones for direction-sensitive intents.
+
+---
+
+## Section 12.14 — Cross-Flow Audio Guard (Dual Layer)
+
+**Rule:** Agua bots never fire in séptico flow. Séptico bots never fire in agua.
+Exception: company-level content (VOZ_AGUA_6 — location) is flow-agnostic.
+
+**Two-layer implementation:**
+1. Haiku prompt: `SOLO si FLUJO ACTIVO = X` on every flow-specific label.
+2. worker.py gate:
+```python
+_AGUA_ONLY_INTENTS = {"drilling_price", "how_to_start", "payment_agua",
+                       "price_objection_agua", "payment_conditions", "call_request"}
+if _is_septico_flow and _hv_intent in _AGUA_ONLY_INTENTS:
+    continue  # gate blocks it
+```
+**Never implement a routing guard in only one layer.** Prompt-only fails when
+Haiku misfires. Code-only fails when you add new intents and forget the list.
+Both layers always.
+
+---
+
+## Section 12.15 — MINITS Graceful Hold (Repeated Soft Farewell)
+
+**Pattern:**
+- 1st `soft_farewell` → MINITS diagnostic probe (isolate the objection)
+- 2nd+ `soft_farewell` after customer explained reason → graceful hold,
+  no probe: "Perfecto, le esperamos con gusto. Cuando estén listos, aquí estamos."
+
+**Implementation:** Write `soft_farewell_probe` to coverage ledger on first probe.
+Check count before second: `get_topic_coverage_count(lead_id, "soft_farewell_probe") > 0`
+→ switch to PAUSA ELEGANTE prompt injection.
+
+**Cultural note (DR/LatAm):** "Déjame hablar con mi padre primero" is a logistics
+pause, not an objection. Probing twice reads as harassment in high-context cultures.
+Probe once to isolate genuine objections. Then let go gracefully.

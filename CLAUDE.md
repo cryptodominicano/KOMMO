@@ -2,7 +2,7 @@
 
 Single source-of-truth for the Aguas Profundas WhatsApp AI agent.
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-15 — **v3.5 live — séptico flow fully validated end-to-end.**
+Last updated: 2026-08-16 — **v3.6 live — state-aware routing, flow guards, intent hardening.**
 
 ---
 
@@ -199,6 +199,21 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 
 ## 13. Version history
 
+### v3.6 (live, 2026-08-16)
+- State-aware price routing: price_disclosed flag from coverage ledger injected
+  into Haiku. Pre-disclosure → price_inquiry_first (no audio). Post-disclosure → VOZ_AGUA_5
+- price_inquiry_first: new Haiku intent label returning no voice bot (LLM informs)
+- location_agua/septico: only fires when customer ASKS about company, not when giving terreno
+- Hard flow guard in worker.py: _AGUA_ONLY_INTENTS/_SEPTICO_ONLY_INTENTS sets
+- payment_conditions agua-only; purchase_process_septico covers séptico payment Q
+- Agua first contact: welcome text added (image→text→audio matching séptico)
+- VOZ_AGUA_1 followup: pueblo/sector Q not GPS pin
+- WhatsApp + button location instructions in system.md agua step 2
+- VOZ_AGUA_2/4/5/7 followups softened — consultative not pushy
+- MINITS graceful hold: 1st farewell → probe; 2nd+ → warm hold
+- Audio first-contact re-lock after transcription
+- Daily audit: 43 talks reviewed, 2 issues found and fixed same day
+
 ### v3.5 (live, 2026-08-15)
 - Haiku semantic voice-bot routing — replaces keyword lists for all nuanced intents
 - Three-tier hybrid: keywords (unambiguous) → Haiku semantic (nuanced) → text-only fallback
@@ -247,7 +262,10 @@ Response: "Soy Isla, asistente virtual de Aguas Profundas. 😊 El equipo humano
 1. SEPTICO_VENTAJAS image (bot 76646): has legacy number 829-566-7542 — replace in Kommo Salesbot UI
 
 **Next session — priority order:**
-2. Agua flow end-to-end test — run same 7-scenario matrix as séptico
+2. Agua flow remaining: payment/deposit → banco-foto, call request, GPS pin → linderos
+3. price_objection_septico: apply price_disclosed gate (same as agua)
+4. Coverage ledger Stage 2: write price topic when LLM gives price in text
+5. VOZ_AGUA_1: 2:01 duration — needs re-recording (target 30-40s)
 3. Live test Haiku semantic routing with real WhatsApp conversations
 4. Weekly threshold tuning: sample 100 conversations, measure false-audio rate
 5. Coverage ledger Stage 2: add `mark_topic_covered` for text-delivered topics

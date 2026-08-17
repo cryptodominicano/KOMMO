@@ -77,6 +77,11 @@ soft_farewell: cliente posponiendo o despidiéndose de forma vaga, con alta
   "Mañana le escribo", "Ahorita no puedo". IMPORTANTE: si el mensaje
   contiene además una pregunta o interés activo, clasifica la pregunta
   primero y el farewell también.
+  NUNCA uses soft_farewell para solicitudes de información activa:
+  "Más información", "Más info", "Quiero saber más", "Cuéntame más",
+  "Más detalles", "Explíqueme más" → son in_scope, NO soft_farewell.
+  La diferencia: soft_farewell = cliente cerrando/aplazando;
+  solicitud de info = cliente queriendo saber MÁS, interés activo.
 
 hard_no: rechazo explícito, molestia o solicitud de no contactar —
   "No me interesa", "No gracias ya decidí que no", "No escriba más",
@@ -202,6 +207,10 @@ Mensaje (FLUJO ACTIVO: AGUA): "hay forma de pago contra entrega"
 <voz_bots><voz_bot intent="payment_conditions" confidence="0.90"/></voz_bots>
 
 Mensaje: "hola buenos dias"
+<voz_bots/>
+
+Mensaje: "Más información"
+# NOTA: esto es solicitud de info activa, NO soft_farewell
 <voz_bots/>
 
 Mensaje: "8"

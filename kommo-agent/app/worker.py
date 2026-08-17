@@ -1093,7 +1093,13 @@ async def handle_message(msg: dict) -> None:
                 extra = (_coverage_block + "\n\n" + extra).strip()
                 log.debug("talk=%s coverage block injected (%d topics)",
                           talk_id, len(_coverage_block.splitlines()) - 1)
-            _intents = await haiku_pre.classify(text, flow=_flow_label)
+            # price_disclosed: True if estudio_precio already covered this conversation
+            _price_disclosed = state.get_topic_coverage_count(
+                _cov_lead_id, "estudio_precio"
+            ) > 0
+            _intents = await haiku_pre.classify(
+                text, flow=_flow_label, price_disclosed=_price_disclosed
+            )
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])
@@ -1147,6 +1153,15 @@ async def handle_message(msg: dict) -> None:
                     if _is_septico_flow and _hv_intent in _AGUA_ONLY_INTENTS:
                         log.info("talk=%s haiku voz SKIP %s — agua intent in septico flow",
                                  talk_id, _hv_intent)
+                        continue
+                    # Price gate: price_objection_agua only fires if price was
+                    # already disclosed. Pre-disclosure it's a first inquiry —
+                    # let the LLM handle it with informational response.
+                    if (_hv_intent == "price_objection_agua"
+                            and not _price_disclosed):
+                        log.info("talk=%s haiku voz SKIP price_objection_agua — "
+                                 "price not yet disclosed (first inquiry)",
+                                 talk_id)
                         continue
                     if not _is_septico_flow and _hv_intent in _SEPTICO_ONLY_INTENTS:
                         log.info("talk=%s haiku voz SKIP %s — septico intent in agua flow",

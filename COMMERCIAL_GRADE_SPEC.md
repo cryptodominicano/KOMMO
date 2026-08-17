@@ -947,3 +947,62 @@ Check count before second: `get_topic_coverage_count(lead_id, "soft_farewell_pro
 **Cultural note (DR/LatAm):** "Déjame hablar con mi padre primero" is a logistics
 pause, not an objection. Probing twice reads as harassment in high-context cultures.
 Probe once to isolate genuine objections. Then let go gracefully.
+
+---
+
+## Section 12.16 — Greeting Words in PREVIO_BYPASS (Post-Audio Re-Welcome Trap)
+
+**Problem:** When a customer sends two messages in rapid succession (e.g. an ad
+pre-fill + "Hola"), the debounce merges the first message correctly but the greeting
+arrives as a clean new turn. If greeting words are not in `_CLOSED_RESPONSES`,
+the LLM treats the greeting as a new conversation start and re-delivers the entire
+welcome sequence — resulting in a duplicate welcome.
+
+**Pattern:**
+Add ALL common greeting variants to `_CLOSED_RESPONSES` so PREVIO_BYPASS catches
+them after an audio has fired:
+```python
+_CLOSED_RESPONSES = [
+    "no", "asi no", "gracia", "ok", "okay", "bueno", "claro", "perfecto",
+    # Greetings — never re-trigger LLM welcome menu after audio
+    "hola", "buenas", "buen dia", "buenos dia", "buenas tarde",
+    "buenas noche", "saludos", "klk", "que lo que", "dime",
+    ...
+]
+```
+
+**Flow-aware positive reply:**
+The PREVIO_BYPASS positive branch (for non-negative short responses) must be
+flow-aware. A single hardcoded reply ("mándeme la ubicación") breaks in séptico
+conversations. Pattern:
+```python
+if _is_septico_flow:
+    _direct_reply = "¡Con gusto! 😊 ¿Cuántos baños tiene su propiedad? 🙏"
+else:
+    _direct_reply = "¡Con gusto! 😊 ¿En qué pueblo o sector está el terreno? 🙏"
+```
+
+**The debounce + greeting combo is a silent double-welcome trap.** Every future
+client build must include greeting words in `_CLOSED_RESPONSES` from day one.
+This is not optional — it protects against the very common pattern of ad-click
+pre-fill followed by a manual greeting.
+
+---
+
+## Section 12.17 — Nudge Guard for Fresh Unanswered Leads
+
+**Problem:** Generic nudge fires on brand new leads where the customer never
+answered the qualifying question. "Fue un placer hablar con usted hoy" to a
+customer who sent one message and never responded is confusing and damages trust.
+
+**Pattern (not yet implemented — open item as of Aug 17):**
+Before firing the generic nudge, check if any `qualification_answer` scope
+has been received in the conversation. If the customer never answered the
+qualifying question (pueblo/sector for agua, bathroom count for séptico),
+suppress the generic nudge entirely or replace it with a softer re-engagement:
+"¿Le gustaría que le contemos más sobre el proceso? 😊"
+
+**Implementation approach:**
+Check Kommo message history for any `author_type=external` message that was
+classified as `qualification_answer`. If none found, either cancel the nudge
+or use a different scenario with a more appropriate opening message.

@@ -439,15 +439,8 @@ async def handle_message(msg: dict) -> None:
         if _is_generic_greeting:
             log.info("talk=%s generic greeting — service selection menu will show",
                      talk_id)
-        # Skip the generic agua welcome image when the customer opened with
-        # séptico keywords — the SEPTICO_COMPARATIVA image that fires with
-        # VOZ_IMHOFF_1 is the correct visual welcome for that context.
-        if welcome_bot and entity_id and is_first and not _septico_first:
-            try:
-                await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
-                log.info("talk=%s launched welcome bot %s", talk_id, welcome_bot)
-            except KommoError as e:
-                log.error("talk=%s welcome bot launch failed: %s", talk_id, e)
+        # CHANGED 2026-08-19: welcome image removed per client request.
+        # First contact is welcome text + audio only. welcome_bot (55340) no longer fires.
 
         # Tracks which voice note fired this turn so the LLM text follows up correctly.
         _voz_fired = None
@@ -501,16 +494,9 @@ async def handle_message(msg: dict) -> None:
             _vk_i1 = "[[VOZ_IMHOFF_1]]"
             if not state.voice_already_sent(talk_id, _vk_i1):
                 try:
-                    # Step 1: SEPTICO_COMPARATIVA image first
-                    # _sb is already defined above; bots dict not yet built at this point
-                    _comp_bot = int((_sb.get("triggers") or {}).get("[[SEPTICO_COMPARATIVA]]") or 0)
-                    if _comp_bot:
-                        await k.run_bot(_comp_bot, entity_id, _entity_type(msg))
-                        # Mark the image pair guard so VOZ_IMAGE_PAIR doesn't re-fire it
-                        state.mark_voice_sent(talk_id, _vk_i1 + "_img")
-                        log.info("talk=%s septico welcome: fired SEPTICO_COMPARATIVA %s",
-                                 talk_id, _comp_bot)
-                    # Step 2: Isla welcome text
+                    # CHANGED 2026-08-19: SEPTICO_COMPARATIVA image removed per client request.
+                    # Séptico first contact is now: welcome text + VOZ_IMHOFF_1 audio only.
+                    # Step 1: Isla welcome text
                     await asyncio.sleep(1.0)
                     await k.send_message(
                         talk_id,

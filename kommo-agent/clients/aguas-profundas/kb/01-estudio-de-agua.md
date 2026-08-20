@@ -22,7 +22,7 @@ Comienza desde RD$45,000 e incluye los tres estudios (topográfico, dos líneas 
 Antes de perforar siempre se realiza primero el estudio de agua del terreno; es un paso necesario para saber dónde y a qué profundidad perforar, y para proteger su inversión. No perforamos sin un estudio previo. La perforación se coordina después de tener los resultados.
 
 ## ¿En qué provincias trabajan? ¿Cuánto cuesta el estudio en mi zona o pueblo?
-El precio estándar del estudio completo de agua (topográfico + radiestesia + geohidrológico) es de RD$45,000 en las siguientes provincias: Puerto Plata, Espaillat, Santiago, La Vega, Monseñor Nouel, Sánchez Ramírez, Duarte, María Trinidad Sánchez, Samaná, Monte Plata, Santo Domingo, Distrito Nacional, San Cristóbal, Peravia, San José de Ocoa y Azua.
+El precio estándar del estudio completo de agua (topográfico + radiestesia + geohidrológico) es de RD$45,000 en las siguientes provincias: Puerto Plata, Espaillat, Santiago, La Vega, Monseñor Nouel, Sánchez Ramírez (también llamada Hermanas Mirabal, capital Salcedo), Duarte, María Trinidad Sánchez, Samaná, Monte Plata, Santo Domingo, Distrito Nacional, San Cristóbal, Peravia, San José de Ocoa y Azua.
 Cuando el cliente mencione un pueblo, sector, paraje, comunidad o municipio, identifica a qué provincia pertenece (incluyendo los pueblos y comunidades cercanas dentro de esas provincias). Si el terreno está en cualquiera de estas provincias, informa que el costo del estudio es de RD$45,000. Si la zona pertenece a una provincia que NO está en la lista, no inventes un precio: dile que confirmarás la cobertura y la tarifa con el equipo y añade [[HANDOFF]].
 
 ## Provincias con estudio de agua a RD$50,000

@@ -1041,8 +1041,8 @@ async def handle_message(msg: dict) -> None:
         # Keyed by the voice bot sentinel; value is the image sentinel to look up
         # in the bots dict (same dict used by the main sentinel loop).
         _VOZ_IMAGE_PAIRS = {
-            # First séptico contact → comparativa image (IMHOFF vs traditional)
-            "[[VOZ_IMHOFF_1]]": "[[SEPTICO_COMPARATIVA]]",
+            # CHANGED 2026-08-19: SEPTICO_COMPARATIVA removed from welcome entry per client request.
+            # VOZ_IMHOFF_1 no longer auto-pairs with an image — audio only on first contact.
             # How it works / purchase process → funcionamiento brochure
             "[[VOZ_IMHOFF_2]]": "[[SEPTICO_FUNCIONAMIENTO]]",
             # Price objection → ventajas comparison image

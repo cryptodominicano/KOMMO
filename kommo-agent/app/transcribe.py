@@ -40,8 +40,22 @@ _HALLUCINATIONS = {
     "you", "amara.org", "¡gracias!", "subscribe", "suscríbete",
     # Additional known gpt-4o-transcribe leakage patterns
     "aguas profundas.", "aguas profundas",  # prompt leakage on silence
-    "vaina, tíguere,",  # prompt leakage fragments
+    "vaina, tiguere,",  # prompt leakage fragments
 }
+
+# Prompt-dump detection: if 5+ domain hint words appear, Whisper echoed our prompt.
+_PROMPT_DUMP_WORDS = [
+    "vaina", "tiguere", "motoconcho", "diache", "colmado", "guagua",
+    "jevi", "cuartos", "concho", "dique",
+    "perforacion", "radiestesia", "geohidrologico", "topografico",
+    "aforo", "caudal", "bauche", "jarabacoa", "linderos",
+]
+
+
+def _is_prompt_dump(text):
+    norm = text.lower()
+    hits = sum(1 for w in _PROMPT_DUMP_WORDS if w in norm)
+    return hits >= 5
 
 # Repetition detection — hallucinated loops
 _REPETITION_RE = re.compile(r'(.{10,}?)\1{2,}', re.DOTALL)
@@ -66,6 +80,8 @@ class TranscriptionRejected(Exception):
 
 
 def _looks_hallucinated(text: str) -> bool:
+    if _is_prompt_dump(text):
+        return True
     norm = re.sub(r"\s+", " ", text.strip().lower())
     if norm in _HALLUCINATIONS:
         return True

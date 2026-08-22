@@ -403,6 +403,8 @@ async def handle_message(msg: dict) -> None:
                      talk_id, _locked_flow, _is_septico_first_msg)
             state.advance_stage(talk_id, "greeting")
         _is_septico_flow = (_locked_flow == "septico")
+        # IMMUTABILITY: once agua is confirmed, never re-classify to séptico.
+        _agua_confirmed = (state.is_flow_confirmed(talk_id) and _locked_flow == "agua")
         # Water-ad Click-to-WhatsApp: a known pre-filled first message routes
         # straight into the agua flow (no 3-option menu / welcome infographic).
         # The prompt has the matching reply rule; here we suppress the menu image.
@@ -581,7 +583,8 @@ async def handle_message(msg: dict) -> None:
             # Re-evaluate flow lock for audio first-contact messages.
             # Flow was locked before transcription using empty text — now
             # that we have the transcript, re-lock if séptico keywords found.
-            if is_first and _locked_flow == "agua":
+            _flow_confirmed_check = state.is_flow_confirmed(talk_id)
+            if is_first and _locked_flow == "agua" and not _flow_confirmed_check:
                 _SEPTICO_FIRST_WORDS_AUDIO = [
                     "septic", "séptic", "imhoff", "planta de trat",
                     "planta septic", "modulo", "módulo", "tanque septic",
@@ -685,7 +688,7 @@ async def handle_message(msg: dict) -> None:
         _flow_was_generic = (not state.is_flow_confirmed(talk_id)
                              and not is_first
                              and _locked_flow == "agua")
-        if _flow_was_generic and entity_id and _is_waba:
+        if _flow_was_generic and entity_id and _is_waba and not _agua_confirmed:
             _tna_confirm = _deaccent(text)
             _confirms_septico = any(w in _tna_confirm for w in _SEPTICO_CONFIRM_WORDS)
             _confirms_agua = any(w in _tna_confirm for w in _AGUA_CONFIRM_WORDS)

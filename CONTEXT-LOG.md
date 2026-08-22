@@ -6,6 +6,152 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+---
+
+## Session: August 21, 2026 — 23:59 UTC
+
+### 8-change session: province pricing, welcome images, séptico fixes, flow immutability, hallucination filter.
+
+All changes deployed, committed to cryptodominicano/KOMMO main, container restarted healthy.
+
+---
+
+**1. Province pricing disclosed on confirmation (system.md + kb/01).**
+Isla was confirming the province without mentioning the price, then asking "¿Le
+gustaría avanzar?" — a lost conversion opportunity. Step 1 of the agua flow rewritten:
+Isla now delivers the exact price (RD$45,000 or RD$50,000 per KB province list) in
+the same message that confirms the province, plus the RD$5,000 first deposit. Template:
+"Perfecto, [Pueblo] pertenece a la provincia [Provincia]. 😊 El estudio completo
+(topográfico + radiestesia + geohidrológico) para esa zona tiene un costo de RD$[X]
+e incluye los tres estudios. El primer depósito para iniciar es de RD$5,000.
+¿Le gustaría avanzar? [[SECTOR:Provincia|Pueblo]]"
+Added explicit rule: province list in KB is the authoritative source — never use the
+generic "desde RD$45,000" once the province is known.
+
+**2. Hermanas Mirabal alias added to KB (kb/01).**
+Province officially renamed from Sánchez Ramírez in 2008; KB only had the old name.
+Model was routing Salcedo/Saucedo leads to [[HANDOFF]] instead of RD$45,000. Fixed
+with "Sánchez Ramírez (también llamada Hermanas Mirabal, capital Salcedo)". KB
+re-ingested (48 points). All 32 DR provinces now correctly mapped — no province
+should ever trigger a handoff on price.
+
+**3. Dead "unknown province → handoff" rule removed (system.md + kb/01).**
+Since all 32 DR provinces are covered between the two price tiers, the rule was dead
+code that could only misfire. Replaced with: "Todas las provincias de RD están
+cubiertas. Solo [[HANDOFF]] si la ubicación es extranjera o completamente
+irreconocible."
+
+**4. Welcome images removed from ALL first-contact flows (worker.py).**
+Client direction: audio + text only on welcome, no intro images. Removed:
+- welcome-bot (55340) fire from agua and séptico first-contact paths
+- SEPTICO_COMPARATIVA (76632) from VOZ_IMHOFF_1 image pair in _VOZ_IMAGE_PAIRS
+- Generic greeting path: welcome-bot trigger was firing from Kommo UI independently
+  (bot 55340 had no API-visible trigger but was Kommo-native firing) — resolved by
+  docker restart after confirming code was correct.
+VOZ_IMAGE_PAIRS for IMHOFF_2 (funcionamiento) and IMHOFF_3 (ventajas) remain active
+mid-conversation; only the entry-point image is removed.
+
+**5. Generic greeting reformatted (system.md).**
+Old: numbered emoji list that WhatsApp rendered as plain text with no formatting.
+New: WhatsApp-native *bold* via asterisks, emoji anchors, clean line breaks:
+"¡Bienvenido a Aguas Profundas RD! 😊 ¿En qué le podemos ayudar?
+💧 *1. Estudio de agua y perforación de pozos*
+🪣 *2. Planta séptica IMHOFF*
+Escríbame el número de su opción y con gusto le oriento. 🙏"
+
+**6. Séptico KB corrections (kb/03).**
+Two Wellington-reported errors fixed:
+- Removed "no emitimos comprobante fiscal" from KB prose + added absolute rule #4
+  to system.md: never mention comprobante fiscal unless customer asks directly.
+- Módulo 16 size corrected: it is only 1 pie más de profundidad + 1 pie más de
+  circunferencia than the Módulo 8, but has DOUBLE the treatment capacity. Previous
+  KB said "el 16 es el doble" (ambiguous, implied double in size).
+
+**7. Generic greeting no-repeat rule (system.md).**
+When customer ignores the service menu and sends another greeting or vague message,
+Isla was repeating the exact same question verbatim — robotic. New rule: NUNCA
+repeats same phrasing. Two templates added:
+- Ignored menu: "¡Buenas! 😊 Cuénteme, ¿en qué le podemos ayudar? Trabajamos con
+  estudios de agua para pozos 💧 y plantas sépticas IMHOFF 🪣 — ¿alguno de los dos
+  le interesa?"
+- Call request before service identified: acknowledge call + ask service in one
+  message: "Con gusto le llamamos. 😊 Para asignarle al especialista correcto, ¿me
+  indica si es para un estudio de agua 💧 o una planta séptica IMHOFF 🪣?
+  Le contactamos enseguida."
+
+**8. Flow immutability: confirmed agua can never re-lock to séptico (worker.py).**
+Root cause of two separate live bugs (voice note hallucination → séptico re-lock;
+generic first-contact locking to wrong flow):
+- Added `_agua_confirmed` flag: once `state.is_flow_confirmed(talk_id)` is True
+  and `_locked_flow == "agua"`, `_is_septico_flow` can never become True.
+- Audio re-lock gated on `not _flow_confirmed_check` in addition to `is_first`.
+- Service-confirm séptico switch gated on `not _agua_confirmed`.
+Design principle confirmed and documented: flow lock is immutable once confirmed.
+A customer from a water ad will virtually never pivot to séptico mid-conversation;
+if they have both needs, complete agua flow first.
+
+**9. Whisper hallucination filter: prompt-dump detection (transcribe.py).**
+Root cause: customer sent a noisy/short voice note → Whisper echoed our entire
+PROMPT_HINT verbatim (every DR slang + domain vocab word) → transcript contained
+"séptico, IMHOFF, módulo, baños" → engine re-locked to séptico → VOZ_IMHOFF_1 fired
+on agua-locked talk. The existing hallucination filter had two leakage patterns but
+not the full prompt-dump pattern.
+Fix: `_is_prompt_dump(text)` — if transcript contains 5+ of our domain hint words
+(motoconcho, radiestesia, geohidrológico, jarabacoa, etc.), reject as hallucination.
+Threshold of 5 prevents false positives on real customer messages that happen to
+mention "pozo" and "perforación". Fires `TranscriptionRejected` → sends
+`audio_unclear` message: "Disculpe, no logré escuchar bien su nota de voz 🙏
+¿Podría repetirla o escribirme el mensaje?" — asking customer to repeat is best
+practice; never guess intent from bad audio.
+7/7 tests passing.
+
+### Commits this session (cryptodominicano/KOMMO main)
+- a8cb5fb: feat: price disclosure on province confirm — agua flow step 1
+- c4e4b4d: fix: add Hermanas Mirabal alias for Sánchez Ramírez in KB
+- c50aee1: fix: province list takes priority over generic price anchor
+- 53978dd: feat: remove welcome images — text + audio only on first contact
+- 93252f7: fix: generic greeting WhatsApp-native formatting
+- b30492d: fix: remove comprobante fiscal + correct Módulo 16 dimensions
+- f50042: fix: comprobante fiscal rule 4 added to system.md absolutes
+- 9f1645: fix: remove SEPTICO_COMPARATIVA from VOZ_IMHOFF_1 image pair
+- 3b2ce3: fix: no-repeat menu + natural rephrase on ignored service question
+- 566ca0: fix: agua flow immutability — confirmed agua can never re-lock to séptico
+- 0d2225: fix: hallucination filter — reject Whisper prompt-dump transcripts
+
+### Key learnings
+- **Province pricing must land immediately on confirmation** — withholding it costs
+  conversions. Same message as province confirmation, always.
+- **All 32 DR provinces are covered** — dead "unknown province" handoff rules create
+  false handoffs. Remove them.
+- **WhatsApp formatting rules:** `*bold*` via asterisks works; numbered emoji
+  (1️⃣) and markdown lists do not render as formatted; always test in actual WhatsApp.
+- **Flow immutability is non-negotiable** — once a flow is confirmed, no downstream
+  signal (audio transcript, keyword, service menu) can switch it. Dual-layer: flag
+  in worker.py + state.is_flow_confirmed() gate.
+- **Whisper echoes PROMPT_HINT on bad audio** — the domain vocabulary we inject for
+  better transcription becomes a hallucination vector on noisy/silent audio. Detect
+  by counting hint-word density (≥5 = reject). Threshold must be high enough to
+  allow real messages with 1-2 domain words.
+- **"KOMMO 2" in Kommo UI** is a second integration/account — not our agent. When
+  debugging cross-flow bugs, always verify via logs which talk_id is involved before
+  assuming it's our code.
+- **Kommo shows Facebook ad card above conversation** — the ad creative is not the
+  customer's first message. Always read actual message transcript from API to diagnose
+  flow detection issues.
+
+### Open items carried forward
+- Callback-capture + service-identification flows: when customer gives phone number
+  before identifying service, the call acknowledgment and service question should be
+  delivered seamlessly together (partially addressed in prompt; deeper fix needs
+  callback flow to be service-aware).
+- VOZ_AGUA_1: still 2:01 duration, re-recording pending (target 30-40s).
+- Agua flow validation: payment/deposit → banco-foto, GPS pin → linderos scenarios
+  still need end-to-end testing.
+- Daily conversation-review automation: not built.
+- Legacy number +1 829-566-7542: wind-down pending.
+
+---
+
 ## Session: August 17, 2026 — 01:00 UTC
 
 ### Bug: duplicate welcome menu on greeting sent after audio (talk=706, Zeida).

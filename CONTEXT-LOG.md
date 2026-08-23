@@ -3685,3 +3685,20 @@ The guard script referenced in the handoff does not exist at /app/data/
 inside the container or anywhere on the filesystem. Skipped for this session.
 Either it was never written to the container or was lost in a prior rebuild.
 Needs to be recreated if guardrail validation is required going forward.
+
+### SSH tunnel root cause fixed (same session).
+Root cause: Windows Balanced power plan was throttling the NIC during idle
+periods (silent SSH tunnel = idle traffic), causing TCP resets. Error was
+`client_loop: send disconnect: Connection reset` with exit code 255.
+infra-mcp container ruled out (0 restarts, running since April 30). VPS
+MaxSessions not the issue (only 5 active sessions).
+
+Fixes applied:
+1. Restarted SSHTunnel-MCP service to restore immediate connectivity.
+2. Switched Windows power plan to High Performance via powercfg /setactive.
+3. Set PnPCapabilities=24 in registry for all active NICs to prevent Windows
+   from powering down the adapter during idle. Full effect after next reboot.
+
+Tunnel keepalive config was already correct — no changes needed there.
+Open item: reboot the Windows machine next restart to fully apply the
+PnPCapabilities registry change.

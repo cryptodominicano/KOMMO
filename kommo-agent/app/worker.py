@@ -956,6 +956,9 @@ async def handle_message(msg: dict) -> None:
             _intents = await haiku_pre.classify(
                 text, flow=_flow_label, price_disclosed=_price_disclosed
             )
+            # Deterministic correction for documented slang misreads
+            # (drilling-cost vs study-objection, oblique location asks).
+            _intents = haiku_pre.correct_scope(_intents, text, _flow_label)
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])

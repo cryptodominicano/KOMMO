@@ -180,8 +180,38 @@ Mensaje (FLUJO ACTIVO: AGUA): "ta muy cara esa vaina"
 Mensaje: "cuanto cuesta perforar y donde estan ubicados"
 <voz_bots><voz_bot intent="drilling_price" confidence="0.95"/><voz_bot intent="location_agua" confidence="0.85"/></voz_bots>
 
+Mensaje (FLUJO ACTIVO: AGUA): "cuánto cuesta perforar"
+<voz_bots><voz_bot intent="drilling_price" confidence="0.95"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "cuánto cuesta hacer un pozo"
+<voz_bots><voz_bot intent="drilling_price" confidence="0.93"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "cobran por pie de perforación"
+<voz_bots><voz_bot intent="drilling_price" confidence="0.92"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "en cuánto me sale el pozo completo"
+<voz_bots><voz_bot intent="drilling_price" confidence="0.90"/></voz_bots>
+
 Mensaje: "mi terreno está en Cabrera, Baoba de Pinar a 900 mts de la playa"
 <voz_bots/>
+
+Mensaje (FLUJO ACTIVO: AGUA): "¿Y dónde están ustedes ubicados?"
+<voz_bots><voz_bot intent="location_agua" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "en qué ciudad trabajan"
+<voz_bots><voz_bot intent="location_agua" confidence="0.88"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "tienen oficina, puedo visitarlos"
+<voz_bots><voz_bot intent="location_agua" confidence="0.85"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "pueden llamarme"
+<voz_bots><voz_bot intent="call_request" confidence="0.92"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "prefiero hablar con alguien"
+<voz_bots><voz_bot intent="call_request" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "quiero que me llamen, tengo preguntas"
+<voz_bots><voz_bot intent="call_request" confidence="0.88"/></voz_bots>
 
 Mensaje: "el terreno queda en Nagua"
 <voz_bots/>
@@ -203,6 +233,15 @@ Mensaje (FLUJO ACTIVO: SEPTICO): "aceptan efectivo, no hacemos pagos por adelant
 
 Mensaje (FLUJO ACTIVO: AGUA): "hay forma de pago contra entrega"
 <voz_bots><voz_bot intent="payment_conditions" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "cómo funciona el pago"
+<voz_bots><voz_bot intent="payment_conditions" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "cómo se hace el pago, cuándo se paga"
+<voz_bots><voz_bot intent="payment_conditions" confidence="0.90"/></voz_bots>
+
+Mensaje (FLUJO ACTIVO: AGUA): "aceptan transferencia, pueden cobrar efectivo"
+<voz_bots><voz_bot intent="payment_conditions" confidence="0.88"/></voz_bots>
 
 Mensaje: "hola buenos dias"
 <voz_bots/>
@@ -295,13 +334,90 @@ def _parse_xml(raw: str, fallback_text: str) -> list[dict]:
     return intents
 
 
+import unicodedata as _ud
+
+
+def _deaccent(s: str) -> str:
+    return "".join(
+        c for c in _ud.normalize("NFD", s.lower())
+        if _ud.category(c) != "Mn"
+    )
+
+
+# Deterministic corrections for the specific slang confusions gpt-4o-mini
+# makes systematically. Measured Aug 2026: drilling-cost questions phrased
+# colloquially ("perforar a como ta", "el hoyo cuanto sale", "que me cuesta
+# abrir el pozo") get misread as study-price objections, and oblique
+# location asks ("darme una vuelta por alla") get read as greetings.
+# Haiku's NLU is trusted for everything else — this only overrides the two
+# documented misreads, and only when the correcting evidence is present.
+_DRILL_TERMS = (
+    "perforar", "perforacion", "abrir el pozo", "abrir pozo",
+    "hacer el pozo", "hacer un pozo", "el hoyo", "un hoyo", "ese hoyo",
+    "por pie", "por metro", "pozo cuanto", "el pozo cuanto",
+)
+_COST_SIGNALS = (
+    "cuesta", "cuanto", "a como", "como ta", "como esta", "precio",
+    "sale", "vale", "cobran", "cobra", "presupuesto", "me sale",
+)
+_LOC_VISIT = (
+    "darme una vuelta", "dar una vuelta", "pasar por alla", "pasar por alli",
+    "ir a verlos", "ir a conocerlos", "visitarlos", "pasar a verlos",
+    "puedo pasar", "puedo ir",
+)
+
+
+def correct_scope(intents: list[dict], text: str, flow: str) -> list[dict]:
+    """Apply deterministic corrections to Haiku's scope classification for
+    the documented slang confusions. Mutates and returns the intent list."""
+    t = _deaccent(text)
+    has_drill = any(term in t for term in _DRILL_TERMS)
+    has_cost = any(s in t for s in _COST_SIGNALS)
+    has_loc_visit = any(p in t for p in _LOC_VISIT)
+    loc_scope = "location_agua" if flow == "agua" else "location_septico"
+    for i in intents:
+        sc = i.get("scope")
+        # Drilling cost question misread as study-price objection or generic
+        if has_drill and has_cost and sc in (
+            "price_objection_agua", "in_scope_agua", "greeting"
+        ):
+            i["scope"] = "drilling_price"
+        # Oblique visit/location ask misread as greeting or generic
+        elif has_loc_visit and sc in ("greeting", "in_scope_agua",
+                                      "in_scope_septico"):
+            i["scope"] = loc_scope
+    return intents
+
+
+# Scope values that map directly to a voice bot. The scope field of the
+# Haiku classification is the single source of truth for audio routing —
+# it is far more reliable than a redundant parallel <voz_bots> block, which
+# gpt-4o-mini drops inconsistently. The intent name handed to worker.py's
+# _HAIKU_VOZ_MAP is the scope string itself (they share one vocabulary).
+_VOZ_SCOPES = {
+    "location_agua", "drilling_price", "payment_conditions",
+    "call_request", "price_objection_agua",
+    "location_septico", "purchase_process_septico",
+    "price_objection_septico", "trust_question",
+}
+
+
 def get_voz_bot_intents(intents: list[dict]) -> list[dict]:
-    """Extract voice-bot intents from the Haiku classification result.
-    Returns [{"intent": "trust_question", "confidence": 0.95}, ...]
-    ordered by confidence descending.
+    """Derive voice-bot intents from the reliable scope classification.
+    Every intent whose scope is audio-triggering yields one voice bot.
+    Multi-intent messages (e.g. drilling_price + location_agua) naturally
+    produce multiple bots. Confidence is a constant 0.9 — the real gating
+    (price_disclosed, flow-awareness) happens in worker.py, and scope is a
+    categorical decision, not a scored one.
     """
-    voz = intents[0].get("voz_bots", []) if intents else []
-    return sorted(voz, key=lambda x: x["confidence"], reverse=True)
+    out = []
+    seen = set()
+    for i in intents:
+        scope = i.get("scope")
+        if scope in _VOZ_SCOPES and scope not in seen:
+            seen.add(scope)
+            out.append({"intent": scope, "confidence": 0.9})
+    return out
 
 
 def is_soft_farewell(intents: list[dict]) -> bool:

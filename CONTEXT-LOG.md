@@ -3652,3 +3652,36 @@ Guard updated this session to reflect new CASO 1/CASO 2 structure.
 - Build opt-in capture at soft_farewell moment (store in Kommo contact field)
 - Build conversation state persistence to Kommo custom fields (Stage 3)
 - Instrument: reply rate per template, block/spam rate, quality rating weekly
+
+---
+
+## Session: August 22, 2026 — 18:00 UTC
+
+### VOZ_AGUA_4 (payment_agua intent) removed.
+
+Removed VOZ_AGUA_4 (bot 85782) completely from the engine. Its audio covered
+deposit process, timeline, and voucher instructions — all human-handled now
+that the agua flow sends customers straight to handoff after province + price.
+KB already has deposit amounts informatively (RD$5,000 ETAPA 1).
+
+Files changed:
+- worker.py: removed payment_agua from Haiku intent-to-bot map, AUDIO_BYPASS
+  followup text, and no-repeat list.
+- haiku.py: removed payment_agua intent definition.
+- client.toml: removed VOZ_AGUA_4 = 85782 entry.
+- system.md: removed VOZ_AGUA_4 knowledge note.
+
+Container healthy post-restart: {"ok":true,"subdomain":"aguasprofundas","provider":"openai"}
+
+### SSH tunnel instability diagnosed.
+The infra-mcp MCP connection drops periodically because the NSSM SSH tunnel
+on the Windows machine (Lisette's PC) loses its TCP connection without
+keepalives. The infra-mcp container on the VPS is healthy (up 3 months).
+Fix: add ServerAliveInterval 30 and ServerAliveCountMax 3 to the NSSM SSH
+tunnel command. Not yet applied.
+
+### prompt_guard.py not found.
+The guard script referenced in the handoff does not exist at /app/data/
+inside the container or anywhere on the filesystem. Skipped for this session.
+Either it was never written to the container or was lost in a prior rebuild.
+Needs to be recreated if guardrail validation is required going forward.

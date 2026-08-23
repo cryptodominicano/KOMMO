@@ -3772,3 +3772,54 @@ Verified LIVE (talk 902, real WhatsApp): Hola -> VOZ_AGUA_1 (records estudio_pre
 
 Deployed: image 358280ce, container healthy, pushed 44c38e7.
 Backup: worker.py.bak_ledger. Test lead 19714996 state was reset before the test.
+
+### Agua flow state machine + pre-deploy guard (talk 902/903 audit).
+
+Audit of talk 902 (full thread pulled from Kommo API) surfaced three flow bugs,
+all sharing one root: the flow never advanced past greeting, and audio followups
+were hardcoded strings that skipped the LLM and couldn't be state-aware.
+
+Symptoms: (1) asked "¿en qué pueblo/sector?" 3x after Puerto Plata was already
+captured; (2) buy signal "quiero comprar, cuál es el próximo paso" fired the
+payment audio (VOZ_AGUA_7) instead of collecting name/phone; (3) conversation
+never reached name/phone + [[HANDOFF]].
+
+Root causes + fixes:
+- Stage machine (STAGES in state.py) never advanced through location_captured/
+  price_presented in agua flow — only greeting/deposit_requested/handoff were
+  wired. FIX: SECTOR marker now advances to price_presented + persists the sector.
+- Captured sector was only a Kommo tag, never persisted to conversation state or
+  injected into the LLM. FIX: flow_state.sector column + set_sector/get_sector;
+  injected as "UBICACIÓN YA CAPTURADA: <pueblo>. NUNCA vuelvas a preguntar."
+- AUDIO_BYPASS followups (VOZ_AGUA_5/6/7) were hardcoded — VOZ_AGUA_6's agua
+  followup literally re-asked the sector. FIX: these 3 bots now LLM-generate a
+  state-aware followup (audio still fires; _VOZ_AUDIO_TOPIC injected so LLM
+  acknowledges without repeating). Hardcoded line kept as fail-open fallback.
+- Buy signals had no distinct intent. FIX: new ready_to_proceed_agua scope in
+  haiku.py (not in _HAIKU_VOZ_MAP → no audio); worker injects collect-name+phone
+  instruction + advances stage. Validated 8/8 vs payment_conditions, 12/12 no reg.
+
+MID-SESSION CRASH (talk 903): first deploy of the buy-signal block referenced
+_intents before it was assigned on the PREVIO_BYPASS path (short/closed reply
+skips the LLM block where _intents is defined). UnboundLocalError. FIX: moved the
+buy-signal check to immediately after correct_scope() where _intents exists.
+
+NEW PRE-DEPLOY GUARD (scripts/prompt_guard_uba.py): AST audit for use-before-
+assignment across branches. PROVEN that ast.parse, pyflakes, AND pylint all miss
+this class (reproduced the bug shape; all three passed it). The guard catches it
+(comprehension iterable treated as a real read). Fails exit 1 on any finding;
+passes clean on current engine. Full engine also passes runtime import smoke test.
+
+UPDATED DEPLOY CYCLE (use going forward):
+  1. python3 -c "import ast; ast.parse(open('app/worker.py').read())"  # syntax
+  2. python3 scripts/prompt_guard_uba.py app/worker.py app/haiku.py app/state.py  # UBA guard
+  3. docker commit kommo-agent kommo-agent:latest
+  4. docker restart kommo-agent && sleep 8 && curl .../health
+  5. push all changed files + update this log
+
+Deployed: image a978eacc, healthy. Pushed 836a872.
+Backups: worker.py.bak_flow, state.py.bak_flow, worker.py.bak_ledger, *.bak_voz.
+
+NOTE: flow followup LLM-generation quality (VOZ_AGUA_5/6/7 state-aware lines) and
+the end-to-end name→phone→handoff close still need a clean live WhatsApp run to
+confirm — classifier + state mechanics validated, live LLM text not yet observed.

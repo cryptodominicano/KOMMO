@@ -163,7 +163,6 @@ def _looks_like_closing(text: str) -> bool:
 _AUDIO_TOPIC_MAP = {
     "VOZ_AGUA_1":       ["estudio_proceso", "estudio_precio", "perforacion_tipos"],
     "VOZ_AGUA_2":       ["perforacion_precio"],
-    "VOZ_AGUA_3":       ["estudio_inicio", "ubicacion_como_enviar"],
     "VOZ_AGUA_4":       ["deposito_agua", "pago_proceso_agua"],
     "VOZ_AGUA_5":       ["precio_objecion_agua"],
     "VOZ_AGUA_6":       ["ubicacion_empresa"],
@@ -745,13 +744,6 @@ async def handle_message(msg: dict) -> None:
                     "enviame los datos","donde transfiero","listo para pagar",
                     "quiero reservar","procedamos","ya tengo todo",
                     "aqui esta mi ubicacion","ya envie la ubicacion"]),
-                ("VOZ_AGUA_3", ["quiero hacer el estudio","vamos a hacerlo",
-                    "quiero proceder","que necesito","cual es el siguiente paso",
-                    "como funciona","como se hace","que debo enviar",
-                    "que necesitan de mi","como empezamos","quiero contratar el estudio",
-                    "estoy listo","quiero iniciar","como es el procedimiento",
-                    "expliqueme el proceso","que sigue","que hago ahora",
-                    "quiero coordinar"]),
                 ("VOZ_AGUA_2", ["cuanto cuesta perforar","que cuesta un pozo",
                     "cuanto vale hacer un pozo","cual es el precio","en cuanto sale",
                     "cuanto cobran","cuanto cuesta hacer un hoyo",
@@ -1025,7 +1017,6 @@ async def handle_message(msg: dict) -> None:
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
-            "VOZ_AGUA_3": "¡Perfecto! Para coordinarle con nuestro equipo, ¿me puede dar su nombre completo y un número de teléfono de contacto? 🙏",
             "VOZ_AGUA_4": "Con mucho gusto le envío los datos del depósito cuando esté listo. 😊 ¿Tiene alguna pregunta sobre el proceso? 🙏",
             "VOZ_AGUA_5": "Entendemos perfectamente. 😊 Cualquier duda adicional, aquí estamos para orientarle. 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
@@ -1111,7 +1102,6 @@ async def handle_message(msg: dict) -> None:
             _HAIKU_VOZ_MAP = {
                 # agua bots
                 "drilling_price":          ("VOZ_AGUA_2", _voz_triggers, 0.70),
-                "how_to_start":            ("VOZ_AGUA_3", _voz_triggers, 0.65),
                 "payment_agua":            ("VOZ_AGUA_4", _voz_triggers, 0.70),
                 "price_objection_agua":    ("VOZ_AGUA_5", _voz_triggers, 0.70),
                 "location_agua":           ("VOZ_AGUA_6", _voz_triggers, 0.65),
@@ -1131,7 +1121,7 @@ async def handle_message(msg: dict) -> None:
                 _haiku_fired = []
                 # Flow-aware intents that are agua-only
                 _AGUA_ONLY_INTENTS = {
-                    "drilling_price", "how_to_start", "payment_agua",
+                    "drilling_price", "payment_agua",
                     "price_objection_agua", "payment_conditions", "call_request",
                 }
                 # Intents that are septico-only

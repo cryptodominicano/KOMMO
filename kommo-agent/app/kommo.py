@@ -115,6 +115,19 @@ class KommoClient:
         tags = lead.get("_embedded", {}).get("tags", []) or []
         return [str(t.get("name", "")).strip().lower() for t in tags]
 
+    async def get_lead_status(self, lead_id: int | str) -> int | None:
+        """Current pipeline stage (status_id) of a lead, or None on failure.
+        Used to keep the bot silent while a lead sits in the human-handoff
+        stage — the stage is the native, board-visible source of truth for
+        'a human owns this conversation'. A human moving the lead to any other
+        stage naturally reactivates the bot."""
+        lead = await self._req("GET", f"/leads/{lead_id}") or {}
+        sid = lead.get("status_id")
+        try:
+            return int(sid) if sid is not None else None
+        except (TypeError, ValueError):
+            return None
+
     async def tag_lead_contact(self, lead_id: int | str, tag: str) -> dict | None:
         """Add a tag to the lead's MAIN contact. Geographic/audience data belongs
         to the PERSON (persists across deals, and broadcasts target contacts), not

@@ -342,6 +342,23 @@ async def handle_message(msg: dict) -> None:
                         return
                 except KommoError:
                     pass
+            # STAGE = source of truth for handoff silence. If the lead is in the
+            # "Atención humana" handoff stage, a human owns the conversation —
+            # stay fully silent (no grace timer, no resume). A human moving the
+            # lead to any other pipeline stage naturally reactivates the bot.
+            # This is the Kommo-native handoff signal; the grace timer below is
+            # only a fallback for leads flagged handed-off but not in the stage.
+            _handoff_status_id = (client_pack.pack().get("kommo", {})
+                                  .get("handoff_status_id"))
+            if entity_id_h and _handoff_status_id:
+                try:
+                    _cur_status = await k.get_lead_status(int(entity_id_h))
+                    if _cur_status is not None and _cur_status == int(_handoff_status_id):
+                        log.info("talk=%s in handoff stage (%s) - staying silent",
+                                 talk_id, _cur_status)
+                        return
+                except (KommoError, TypeError, ValueError):
+                    pass  # fall through to grace-timer fallback
             human_min = await _human_last_active_min(k, talk_id)
             if human_min is not None and human_min < grace:
                 log.info("talk=%s handoff, human active %.1fm ago - silent",

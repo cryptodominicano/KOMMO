@@ -3850,3 +3850,25 @@ First real use of the new pre-deploy guard (prompt_guard_uba.py): PASSED. Full
 deploy cycle followed (syntax + guard + import smoke test → commit → restart →
 health). Deployed image c14ca1a9, healthy. Pushed aef88a9.
 Backups: kommo.py.bak_silence, worker.py.bak_silence.
+
+### Documentation consolidated for template reuse (Aug 23, 2026).
+
+Updated the three master reference docs so the next client build (starting soon,
+new KB, same engine) inherits every pattern from this session:
+
+- AGENT-BUILD-PLAYBOOK.md (395 → 534 lines): corrected Principle 1 handoff text to
+  stage-based silence; added §3.6 (flow-state, intent routing, silence — 8 patterns)
+  and §3.7 (deploy discipline + the UBA guard, with the exact deploy cycle); added
+  9 rows to the capability matrix.
+- COMMERCIAL_GRADE_SPEC.md (1008 → 1217 lines, now v1.1): correction note on §12.12
+  (price gate was documented but the welcome audio never wrote the ledger); new
+  §12.18–12.25 (scope-derived routing, slang correction layer, welcome-audio ledger
+  write, stage machine + sector memory, buy-signal routing, stage-based silence,
+  name-safe spam filter, pre-deploy UBA guard); refreshed §6 client-build rules.
+- CLAUDE.md (234 → 260 lines): removed VOZ_AGUA_4 as active; rewrote §8 for
+  scope-derived routing; added stage/gate/silence to key rules; new deploy cycle in
+  infra rules; refreshed open items (agua flow validated live talk 906; séptico
+  objection + next-day-returning-customer still to test; lead_id-keying durability gap).
+
+Engine code, guard, and these docs are all pushed to main. The playbook + spec are
+now the authoritative "build the next one" reference.

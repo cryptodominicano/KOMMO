@@ -4,7 +4,7 @@ Single source-of-truth for the Aguas Profundas WhatsApp AI agent. This file live
 "Aguas Profundas" Claude project so every session starts oriented on the live system.
 
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-22 (agua flow simplified, VOZ_AGUA_3 removed, Haiku sole classifier).
+Last updated: 2026-08-23 (scope-derived audio routing, stage machine + sector memory, state-gated price objection, buy-signal routing, stage-based handoff silence, spam-filter name fix, pre-deploy UBA guard. VOZ_AGUA_4 removed.)
 
 ---
 
@@ -123,7 +123,6 @@ Human team handles: GPS pin, satellite photo, linderos, deposits, scheduling.
 | `76646` | septico-ventajas | Engine: `[[SEPTICO_VENTAJAS]]` / VOZ_IMHOFF_3 pair |
 | `85776` | VOZ_AGUA_1 | Engine: first water contact (WhatsApp only) |
 | `85778` | VOZ_AGUA_2 | Haiku: `drilling_price` intent |
-| `85782` | VOZ_AGUA_4 | Haiku: `payment_agua` intent |
 | `85784` | VOZ_AGUA_5 | Haiku: `price_objection_agua` intent (declarative + interrogative) |
 | `85786` | VOZ_AGUA_7 | Haiku: `payment_conditions` intent |
 | `85788` | VOZ_AGUA_6 | Haiku: `location_agua` intent |
@@ -134,27 +133,39 @@ Human team handles: GPS pin, satellite photo, linderos, deposits, scheduling.
 | `85806` | VOZ_IMHOFF_4 | Haiku/keyword: location/trust keywords |
 | `85808` | Wellington_Lider_Foto | Engine: after VOZ_IMHOFF_4 sequence |
 
-**REMOVED:** VOZ_AGUA_3 (85780) — was GPS/linderos process explanation. Obsolete.
-Bot still exists in Kommo UI but is never called by the engine.
+**REMOVED:** VOZ_AGUA_3 (85780) GPS/linderos explanation, and VOZ_AGUA_4 (85782) payment/deposit process — both obsolete (deposits/GPS are human-handled). Bots still exist in the Kommo UI but the engine never calls them.
 
 ---
 
-## 8. Voice bot classification — Haiku is the sole classifier
+## 8. Voice bot routing — derived from the classifier SCOPE field (2026-08-23)
 
-All agua voice bots (VOZ_AGUA_2, 4, 5, 6, 7, 8) are fired exclusively by Haiku
-intent classification. The legacy keyword trigger block was removed 2026-08-22.
+Audio routing is driven by the Haiku (gpt-4o-mini) **scope** classification, in
+code (`get_voz_bot_intents` maps scope->bot). The old parallel `<voz_bots>` XML
+block was unreliable (the model dropped it even when scope was correct, so audio
+silently stopped firing) — scope is now the single source of truth. A thin
+`correct_scope()` layer fixes ONLY two measured slang misreads (drill-cost read as
+price objection; oblique location read as greeting), when the correcting evidence
+is present. The prompt's few-shot examples stay (they sharpen scope accuracy) but
+no longer drive routing.
 
-**Architecture principle:** If a voice bot is missing on a customer message, fix
-the Haiku prompt — do NOT add a keyword list. Haiku generalizes; keyword lists don't.
+**Architecture principle:** classify once (scope), act in code. If a bot is
+missing, check the scope the classifier returned in the logs first; only add a
+`correct_scope()` rule for a *systematic* misread, never a broad keyword list.
 
-Key Haiku intent → bot mappings:
+Scope → bot mappings:
 - `drilling_price` → VOZ_AGUA_2 (never give drilling prices in text)
-- `payment_agua` → VOZ_AGUA_4
-- `price_objection_agua` → VOZ_AGUA_5 (declarative OR interrogative rhetorical price challenge)
-- `location_agua` → VOZ_AGUA_6
-- `payment_conditions` → VOZ_AGUA_7
+- `price_objection_agua` → VOZ_AGUA_5 — **gated on `price_disclosed`** (only fires
+  after the price was disclosed; the welcome audio VOZ_AGUA_1 records `estudio_precio`)
+- `location_agua` → VOZ_AGUA_6 (state-aware LLM followup, not hardcoded)
+- `payment_conditions` → VOZ_AGUA_7 (state-aware LLM followup)
 - `call_request` → VOZ_AGUA_8
-- `how_to_start` → REMOVED (was VOZ_AGUA_3, now handled by LLM proceed flow)
+- `ready_to_proceed_agua` → **no audio** — routes to name+phone collection + advance to handoff
+- payment/deposit "how" question → answered from KB text (VOZ_AGUA_4 removed)
+
+Flow state: `flow_state` carries `stage` (greeting → price_presented → handoff) and
+`sector`; both are injected into the LLM prompt every turn so the model never
+re-asks a captured location. Price gate is flow-aware (agua `estudio_precio`,
+septico `precio_septico`).
 
 ---
 
@@ -201,7 +212,10 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 - **FLOW IMMUTABILITY: confirmed agua flow can never re-lock to séptico**
 - **ALWAYS collect name + phone before [[HANDOFF]]** — Facebook leads have no phone
 - All 32 DR provinces covered — never handoff on province alone
-- Haiku is sole intent classifier for voice bots — no keyword lists
+- Audio routing derives from classifier SCOPE (code), not a keyword list or a separate block
+- Price-objection audio (VOZ_AGUA_5) only fires AFTER price disclosed (`price_disclosed` gate)
+- Handoff silence = pipeline STAGE: lead in Atención humana (109168423) → bot fully silent;
+  a human moving the lead to another stage reactivates it (grace timer + NO_REACTIVAR are fallbacks)
 
 ---
 
@@ -221,12 +235,24 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 - Every Salesbot must have empty Triggers panel in Kommo UI
 - Never push to Vercel manually — push to GitHub
 - infra-mcp drops under load — `docker restart infra-mcp` resolves
+- **Deploy cycle: syntax check → `scripts/prompt_guard_uba.py` (UBA guard, blocks on exit 1) →
+  import smoke test → `docker commit` → restart → health → push + update CONTEXT-LOG**
+- `docker restart` does NOT reload env_file — use `docker compose up -d` for env changes
 
 ---
 
 ## 14. Open items
 
-1. VOZ_AGUA_4 (`payment_agua` intent) still mapped — payment is now human-only; consider removing
+1. Agua flow validated end-to-end live (talk 906, 2026-08-23): welcome → sector capture →
+   location audio → price objection (gate open) → buy signal → name+phone → handoff → silence.
+   Remaining agua scenarios to live-test: GPS pin, banco-foto/deposit path (human-handled now,
+   but confirm the acknowledgement text), and a returning next-day customer reusing an open talk.
+2. Séptico flow: price-objection gate now flow-aware (`precio_septico`), but the VOZ_IMHOFF_1
+   ledger-write + septico objection gate were not yet live-tested — run a séptico objection.
+3. Consider keying `sector`/`stage` by lead_id (not talk_id) so flow-state survives a talk CLOSE,
+   not just an open talk. Not urgent (Kommo reuses the talk_id), but it's the durability gap.
+4. Pre-existing hardening from the playbook still open: silence the webhook-secret access log,
+   drop customer transcripts to DEBUG (Business Solution Data at rest).
 2. Complete end-to-end live test: name+phone capture → [[HANDOFF]] confirmed
 3. VOZ_AGUA_1: 2:01 duration, re-recording pending (target 30-40s)
 4. Daily conversation-review automation: not built

@@ -1,5 +1,5 @@
 # Gold Coast AI Automations — WhatsApp AI Sales Agent
-## Commercial-Grade Build Specification v1.0
+## Commercial-Grade Build Specification v1.1 (updated 2026-08-23)
 ### Authored: August 14, 2026 | Isaias Perez, Gold Coast AI Automations / Intelia Automatizaciones
 
 ---
@@ -359,14 +359,20 @@ Run before every prompt or model change.
 - Handoff enforcement: code state machine, not prompt instruction
 - Flow locking: DB table, not re-detection per message
 - Deposit cap: cooldown in state, not prompt rule
+- Handoff silence: pipeline STAGE is the authority (lead in human stage → silent; move out → reactivate), grace timer only a fallback (§12.23)
+- Buy signal is its own scope routed to the close, never an FAQ audio (§12.22)
+- Pre-flow spam/scope filters: word-boundary match, never substring names; bypass for engaged leads (§12.24)
+- Every deploy runs `scripts/prompt_guard_uba.py` (use-before-assignment guard) after the syntax check — linters miss this class (§12.25)
 
 ### Voice Note Architecture
 - Human voice only (never AI voice for relationship moments)
 - 10-30 seconds per note (flag and replace anything over 60s)
 - Audio-first at: process explanation, price objection, close, location/trust
 - Text-forward for: prices, links, CTAs, confirmations, deposit data
-- LLM bypass after audio: hardcoded follow-up only, no LLM
+- After audio: INFORMATIONAL bots use a hardcoded follow-up (no LLM); ADVANCEMENT-CRITICAL bots (objection/location/payment) LLM-generate the follow-up WITH state injected (§12.21) so they don't re-ask or dead-end
 - No-repeat per conversation: voice_sent SQLite table
+- Audio routing derives from classifier SCOPE in code, not a parallel block or keyword list (§12.18); add a `correct_scope` rule only for MEASURED systematic slang misreads (§12.19)
+- Objection audio is STATE-GATED on price disclosure; every price-disclosing audio must write its topic to the coverage ledger on fire (§12.20)
 
 ### Channel Behavior
 - WhatsApp: full flow (audio + text + images)
@@ -892,6 +898,16 @@ Context-aware classification yields 4-7% accuracy gains.
 
 Apply to both flows (agua and séptico) with separate topic keys.
 
+**CORRECTION (Aug 23, 2026 — found live):** Step 1 was NOT actually happening for
+the WELCOME audio. VOZ_AGUA_1 / VOZ_IMHOFF_1 disclose the price range in-audio but
+their firing paths called `mark_voice_sent` and never `mark_topic_covered`, so
+`estudio_precio` / `precio_septico` were never written and the gate stayed shut all
+conversation — a price objection silently downgraded to `in_scope`. FIX: every audio
+that discloses a price MUST write its `_AUDIO_TOPIC_MAP` topics to the ledger on
+fire (the IMHOFF loop and HAIKU_VOZ paths already did; the two welcome paths did
+not). Also the gate read `estudio_precio` regardless of flow — made it flow-aware
+(`precio_septico` in séptico). See Section 12.20.
+
 ---
 
 ## Section 12.13 — Location Intent Direction (Company vs Customer)
@@ -1006,3 +1022,196 @@ suppress the generic nudge entirely or replace it with a softer re-engagement:
 Check Kommo message history for any `author_type=external` message that was
 classified as `qualification_answer`. If none found, either cancel the nudge
 or use a different scenario with a more appropriate opening message.
+
+
+---
+
+## Section 12.18 — Scope-Derived Audio Routing (Not a Parallel Block)
+
+**Problem:** The classifier emitted BOTH a scope (`<intencion categoria=...>`) and
+a separate `<voz_bots>` XML block naming which audio to fire. gpt-4o-mini dropped
+the second block inconsistently even when the scope was correct — so post-welcome
+audio (location, drilling price, payment) silently stopped firing mid-conversation.
+The scope was right every time; the redundant second emission was the failure.
+
+**Research basis:** asking one model to express the same decision twice in two
+formats multiplies the chance it omits one. Single-responsibility output is more
+reliable than parallel structured emissions from a cheap model.
+
+**Pattern:**
+1. `get_voz_bot_intents(intents)` derives the voice bot from the SCOPE field only
+   (scope == intent vocabulary; a fixed dict maps scope → bot). Iterates all
+   intents so multi-intent messages fire multiple bots.
+2. The `<voz_bots>` few-shot examples STAY in the prompt — measured that removing
+   them dropped scope accuracy 12/12 → 10/12 (they reinforce scope). They just no
+   longer drive routing.
+3. Real gating (price_disclosed, flow-awareness) stays in the worker, not the model.
+
+**Lesson:** classify once, act in code. If a bot is missing, read the scope in the
+logs before touching anything — the routing bug is usually "scope right, emission
+dropped," not a classification failure.
+
+---
+
+## Section 12.19 — Slang Correction Layer (Scalpel, Not Keyword Wall)
+
+**Problem:** Pure scope classification handled most DR slang ("diache eso ta caro",
+"llamame manito") but two confusions were *systematic*: colloquial drilling-cost
+questions ("el hoyo cuanto sale", "perforar a como ta") read as price objections,
+and oblique location asks ("darme una vuelta por alla") read as greetings.
+Measured 12/16 on a slang stress set — the 4 misses were these two classes.
+
+**Pattern (`correct_scope(intents, text, flow)`):** a thin deterministic override
+that fires ONLY on the measured confusions, ONLY when the correcting evidence is
+present:
+- drill term (`perforar`, `abrir el pozo`, `el hoyo`, `por pie`...) + cost signal
+  (`cuesta`, `cuanto`, `a como`, `sale`...) AND scope in {price_objection, in_scope,
+  greeting} → force `drilling_price`.
+- visit phrase (`darme una vuelta`, `pasar por alla`, `puedo ir`...) AND scope in
+  {greeting, in_scope} → force `location_<flow>`.
+
+Result: 18/18 on the full slang matrix incl. negative controls ("quiero hacer un
+pozo" has a drill term but NO cost signal → correctly stays NONE).
+
+**Rule for future clients:** do NOT rebuild keyword lists. The LLM does general NLU.
+Add a `correct_scope` rule only for a confusion you have MEASURED to be systematic,
+and require corroborating evidence so it never hijacks a correct classification.
+
+---
+
+## Section 12.20 — Welcome Audio Must Record Its Price Disclosure
+
+**Problem:** See the correction in Section 12.12. The price-objection gate depends
+on a `price_disclosed` flag read from the coverage ledger, but the welcome audio
+(which discloses the price range) never wrote to the ledger, so the gate never
+opened and objections were silently downgraded.
+
+**Pattern:** Every audio-firing path must write its `_AUDIO_TOPIC_MAP` topics to the
+coverage ledger immediately after `run_bot` + `mark_voice_sent`. Audit ALL firing
+paths for parity — this build had four (keyword-IMHOFF loop, HAIKU_VOZ, VOZ_AGUA_1
+welcome, VOZ_IMHOFF_1 welcome) and only the first two wrote the ledger.
+Make the gate flow-aware: agua reads `estudio_precio`, séptico reads `precio_septico`.
+
+**Verified live (talk 905/906):** price objection after the welcome now correctly
+fires the objection audio because the welcome recorded `estudio_precio`.
+
+---
+
+## Section 12.21 — Stage Machine + Sector Memory Injected Into the Prompt
+
+**Problem:** The agua flow never advanced past `greeting`; nothing told the model the
+customer's town was already captured, so it re-asked "¿en qué pueblo/sector?" three
+times in one conversation. Static post-audio followups (hardcoded strings) made this
+worse — they could not know the sector was on file.
+
+**Pattern:**
+1. `flow_state` carries `stage` (greeting → need_identified → location_captured →
+   price_presented → ... → handoff) AND a `sector` column.
+2. When the price+`[[SECTOR:Prov|Pueblo]]` marker fires: `set_sector()` +
+   `advance_stage("price_presented")`.
+3. Inject BOTH into the LLM system prompt every turn:
+   `ESTADO ACTUAL: etapa=price_presented. UBICACIÓN YA CAPTURADA: <pueblo>. NUNCA
+   vuelvas a preguntar el pueblo o sector — ya lo tienes.`
+4. Advancement-critical audio followups (objection, location, payment) are
+   **LLM-generated with this state injected** (audio still fires; topic injected as
+   "acknowledge in one line, do not repeat, advance"), NOT hardcoded — a fixed string
+   cannot advance a funnel. Keep the hardcoded line as a fail-open fallback.
+
+**Durability:** persist location-type facts by `lead_id` where possible so they
+survive a talk close; `stage`/`sector` keyed by `talk_id` survive as long as Kommo
+reuses the talk (it does for an ongoing thread). Coverage ledger is already lead-keyed.
+
+---
+
+## Section 12.22 — Buy-Signal Intent Routes to Close, Not to an FAQ Audio
+
+**Problem:** "quiero comprar, ¿cuál es el próximo paso?" classified as
+`payment_conditions` and fired the payment audio — the conversation never reached
+name+phone collection or handoff.
+
+**Pattern:**
+- New scope `ready_to_proceed_<flow>` (distinct from `payment_conditions`, which is a
+  QUESTION about how to pay). It is NOT in the audio map, so no audio fires.
+- On detection: inject the collect-name-and-phone instruction, advance the stage.
+- Tolerate split answers (name one turn, phone the next) — acknowledge the name, ask
+  for the missing number, then close + `[[HANDOFF]]`.
+- Validated 8/8 that buy signals and real payment questions separate cleanly.
+
+---
+
+## Section 12.23 — Handoff Silence Driven by Pipeline STAGE
+
+**Problem:** Handoff silence used a grace timer (silent only while a human replied
+within N minutes, else resume). If no human picked up before the window elapsed, the
+bot resumed and replied to the customer's goodnight after a clean handoff.
+
+**Research basis (Kommo docs):** a Salesbot is scoped to a conversation; the native
+"a human owns this" signal is the lead's pipeline STAGE, not a timer.
+
+**Pattern:**
+1. The handoff already moves the lead to the dedicated human stage
+   (`handoff_status_id`, e.g. "Atención humana" 109168423) via `_signal_handoff`.
+2. In the handoff-silence block, read the lead's current `status_id`
+   (`get_lead_status`). If it equals `handoff_status_id`: stay FULLY silent, return —
+   no grace, no resume.
+3. A human dragging the lead to any other stage naturally reactivates the bot.
+4. Keep the grace timer + a `NO_REACTIVAR` tag as fallbacks. Fail SAFE: if the status
+   read errors, fall through to the timer rather than going silent wrongly.
+
+**Verified live (talk 906):** after handoff, the customer's follow-up voice note got
+`in handoff stage (109168423) - staying silent`.
+
+---
+
+## Section 12.24 — Pre-Flow Spam Filter Must Not Substring-Match Names
+
+**Problem:** The layer-1 broadcast-spam filter listed biblical BOOK names ("isaias",
+"juan", "daniel", "samuel", "mateo"...) and substring-matched them. Those are extremely
+common DR FIRST names. A customer named Isaías giving his name+phone at the close had
+his ENTIRE message dropped (silently, before any state write), killing the handoff.
+"amos" also matched inside "vamos".
+
+**Pattern:**
+1. Match spam PHRASES on WORD BOUNDARIES (`\b...\b`), never raw substrings.
+2. Drop bare personal-name tokens entirely — real chain-spam is multi-word religious
+   phrases ("dios te bendiga", "cadena de oración", "reenvía esto"), not a lone name.
+3. Weak single-word cues ("amén", "bendiciones") only count toward spam with
+   chain-message SHAPE (length > 120 AND ≥2 cues).
+4. NEVER run the filter once a lead is engaged (already greeted / in-flow) — an
+   engaged lead is not sending a cold broadcast.
+
+**Rule:** any pre-flow "drop silently" filter is HIGH risk — a false positive is an
+ignored paying customer. Test both directions (legit names pass, real spam rejected)
+before shipping. This build: 18/18 including your own name + all biblical-name
+collisions passing, real chain messages rejected.
+
+---
+
+## Section 12.25 — Pre-Deploy Use-Before-Assignment Guard
+
+**Problem:** A patch referenced `_intents` before assignment on a code path that
+skips the block defining it (a short/closed reply took a bypass path). It passed
+`ast.parse` (grammatically valid) and crashed live with `UnboundLocalError`. Proven
+that pyflakes AND pylint both MISS this exact shape.
+
+**Pattern (`scripts/prompt_guard_uba.py`):** an AST walk that flags any local name
+READ on a line before its first ASSIGNMENT in the same function, treating a
+comprehension's ITERABLE as a real read (the bug shape: `any(i... for i in _intents)`)
+while ignoring comprehension loop targets and except-locals. Fails exit 1 on any
+finding.
+
+**Deploy cycle (every client, every deploy):**
+```
+1. ast.parse syntax check
+2. python3 scripts/prompt_guard_uba.py app/*.py    # UBA guard, blocks on exit 1
+3. python3 -c "from app import worker"             # import smoke test
+4. docker commit → restart → health
+5. git push + update CONTEXT-LOG.md
+```
+
+**Meta-lesson (reinforces the playbook):** a green syntax check and a passing linter
+say nothing about branch-path runtime errors. The bug that reached production was
+found by READING REAL TRANSCRIPTS via the API and matching worker logs by talk_id —
+that method found every flow bug in this session. Pull the thread, diagnose from
+logs, patch, guard, deploy, replay the same scenario live, read the logs.
+

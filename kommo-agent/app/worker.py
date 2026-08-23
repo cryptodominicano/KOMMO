@@ -163,7 +163,6 @@ def _looks_like_closing(text: str) -> bool:
 _AUDIO_TOPIC_MAP = {
     "VOZ_AGUA_1":       ["estudio_proceso", "estudio_precio", "perforacion_tipos"],
     "VOZ_AGUA_2":       ["perforacion_precio"],
-    "VOZ_AGUA_4":       ["deposito_agua", "pago_proceso_agua"],
     "VOZ_AGUA_5":       ["precio_objecion_agua"],
     "VOZ_AGUA_6":       ["ubicacion_empresa"],
     "VOZ_AGUA_7":       ["pago_condiciones_agua"],

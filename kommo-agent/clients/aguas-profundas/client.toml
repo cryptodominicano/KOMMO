@@ -141,7 +141,6 @@ payment_audio_bot_id = 59058   # "Payment-Audio": 1 voice-note step.
 # Keys use single quotes because TOML bare keys cannot contain brackets.
 VOZ_AGUA_1 = 85776   # welcome / intro agua
 VOZ_AGUA_2 = 85778   # precio de perforación
-VOZ_AGUA_4 = 85782   # pago del depósito
 VOZ_AGUA_5 = 85784   # objeción de precio
 VOZ_AGUA_6 = 85788   # ubicación de empresa
 VOZ_AGUA_7 = 85786   # condiciones de pago

@@ -8,6 +8,121 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: August 22, 2026 — 01:30 UTC
+
+### Agua flow simplified — human handoff replaces GPS/linderos/deposit bot steps.
+### VOZ_AGUA_3 removed. Legacy keyword trigger block removed. Haiku is sole classifier.
+
+All changes deployed, committed to cryptodominicano/KOMMO main, container restarted healthy.
+
+---
+
+**1. Agua flow completely redesigned (system.md).**
+GPS pin, satellite photo, linderos, ETAPA 1/2 deposits all removed from the bot.
+The new flow is:
+  1. Welcome + VOZ_AGUA_1
+  2. Ask pueblo/sector
+  3. Confirm province + disclose exact price (RD$45k or RD$50k)
+     Template now includes deposit amounts INFORMATIVELY:
+     "Para iniciar se requiere un depósito de RD$5,000 (estudio topográfico) y luego
+     RD$10,000 para la visita presencial — el equipo le coordina todo."
+  4. Answer any questions (voice audios fire via Haiku intent)
+  5. Ask: "¿Está listo para proceder con el análisis de su propiedad? 😊"
+  6. YES → ask name + phone ("¿me puede dar su nombre completo y un número de
+     teléfono de contacto?") → once received → confirm + [[HANDOFF]]
+  7. NO → "Aquí estaremos cuando estés listo. 😊" — no pressure, no follow-up
+
+**WHY:** Human team handles GPS, linderos, and deposits directly. Bot's job ends
+at a clean handoff with contact data captured. Solves the Facebook lead problem
+(no phone number on file).
+
+**2. Name + phone mandatory before [[HANDOFF]] (system.md).**
+Facebook/Instagram leads have no phone number in Kommo. Bot MUST capture name
+and phone in text before firing [[HANDOFF]], regardless of channel. Verified live:
+bot holds [[HANDOFF]] until both pieces of data are received, then fires.
+
+**3. Deposit amounts mentioned informatively in price disclosure (system.md + KB).**
+RD$5,000 topographic deposit and RD$10,000 presential visit deposit are mentioned
+in the province confirmation message so customer knows what to expect financially.
+No bot action taken — human team coordinates all payments.
+
+**4. VOZ_AGUA_3 removed entirely (worker.py + client.toml + system.md).**
+VOZ_AGUA_3 (bot 85780) was built to explain the GPS/linderos process. That process
+no longer exists in the bot flow. Removed from:
+  - worker.py: coverage topics, AUDIO_BYPASS followup map, Haiku intent mapping,
+    Haiku no-repeat list
+  - client.toml: VOZ_AGUA_3 = 85780 entry
+  - system.md: knowledge note
+Bot 85780 still exists in Kommo UI but is never called.
+
+**5. VOZ_AGUA_3 followup patch (worker.py) — found during live test.**
+After removing VOZ_AGUA_3, its AUDIO_BYPASS followup still said "mándeme la
+ubicación de su terreno". When customer said "¿Cuál es el próximo paso?" via voice,
+Haiku fired the (still-existing-at-that-point) VOZ_AGUA_3 and the stale followup
+text sent. Fixed before full removal.
+
+**6. Legacy keyword trigger block removed — Haiku is sole classifier (worker.py).**
+133 lines of keyword-matching code (`_VOZ_KW` list) that fired VOZ_AGUA_2, 4, 5,
+6, 7, 8 on keyword match were removed. Every agua voice bot already had a Haiku
+intent mapping. Dual-layer caused confusion: Haiku correctly classified "¿por qué
+tanto dinero?" as in_scope_agua (interrogative, not declarative), keyword list also
+missed it — both layers had the same gap. Single source of truth is cleaner and
+more maintainable. Haiku prompt updated to include interrogative rhetorical price
+challenges as price_objection_agua signals.
+
+**7. Price objection detection expanded (haiku.py + worker.py).**
+"¿Por qué tanto dinero?" was classified as in_scope_agua instead of
+price_objection_agua because the Haiku rule said price objections are "declarative"
+only. Updated Haiku prompt: price_objection_agua now includes interrogative
+rhetorical phrases ("¿por qué tanto dinero?", "wow eso está fuerte", "¿no es muy
+caro eso?"). Added same phrases to keyword list (later removed with the whole block).
+
+**8. Flow immutability test confirmed live.**
+Agua flow locked correctly to agua on all test conversations. No séptico re-lock
+observed. Province detection (La Caleta → Santo Domingo → RD$45,000) working
+correctly. [[SECTOR:]] marker emitting and tagging contact with Provincia + Pueblo.
+
+### Live test results (talk=898, WhatsApp)
+- Welcome + VOZ_AGUA_1: fired correctly
+- "La Caleta, Boca Chica" → province Santo Domingo → RD$45,000: correct
+- Price question triggered VOZ_AGUA_5 via keyword loop (pre-removal)
+- Location question triggered VOZ_AGUA_6 via Haiku
+- "¿Por qué tanto dinero?" (voice): MISSED VOZ_AGUA_5 (root cause: interrogative
+  not in declarative-only Haiku rule). Fixed in haiku.py.
+- Second test (talk=899): all flows correct after fixes
+
+### Commits this session (cryptodominicano/KOMMO main)
+- 36da18f: feat: mention deposit amounts informatively in price disclosure
+- 6622a59: feat: simplified agua flow — price+Q&A+proceed prompt+name/phone
+- 4c5fcc3: fix: VOZ_AGUA_3 followup — ask name+phone not location pin
+- 483f6f6/3ed7d6f/9d7ee5c: feat: remove VOZ_AGUA_3 — obsolete with new flow
+- 640d26d/50c6bbd: fix: price objection detection — interrogative phrases
+- 7edeb30: refactor: remove legacy keyword block — Haiku intent is sole classifier
+
+### Architecture principle confirmed
+**Haiku is the single source of truth for voice bot intent classification.**
+No keyword lists, no dual-layer. If Haiku misses an intent, fix the Haiku prompt.
+A keyword list is a dead-end — it can never generalize, it creates maintenance debt,
+and it creates confusion when two layers disagree.
+
+### Updated flow for reference
+Customer → welcome+VOZ_AGUA_1 → pueblo/sector → province+price (with deposit info)
+→ Q&A (Haiku intent → voice bot) → "¿listo para proceder?" → YES: name+phone →
+[[HANDOFF]] to human team (GPS/linderos/deposits) | NO: "Aquí estaremos cuando
+estés listo. 😊"
+
+### Open items carried forward
+- VOZ_AGUA_4 (payment/deposit) still in Haiku mapping but payment is now human-only;
+  consider removing or repurposing
+- Complete end-to-end live test of full flow through to handoff on WhatsApp
+- Daily conversation-review automation: not built
+- Legacy number +1 829-566-7542: wind-down pending
+- VOZ_AGUA_1: 2:01 duration, re-recording pending (target 30-40s)
+
+---
+
+---
+
 ## Session: August 21, 2026 — 23:59 UTC
 
 ### 8-change session: province pricing, welcome images, séptico fixes, flow immutability, hallucination filter.

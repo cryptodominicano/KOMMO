@@ -4,7 +4,7 @@ Single source-of-truth for the Aguas Profundas WhatsApp AI agent. This file live
 "Aguas Profundas" Claude project so every session starts oriented on the live system.
 
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-21 (session Aug 21 — flow immutability, hallucination filter, province pricing).
+Last updated: 2026-08-22 (agua flow simplified, VOZ_AGUA_3 removed, Haiku sole classifier).
 
 ---
 
@@ -12,8 +12,7 @@ Last updated: 2026-08-21 (session Aug 21 — flow immutability, hallucination fi
 
 The live agent runs on **Kommo**, not Botpress. It is a self-hosted **FastAPI service**
 (`kommo-agent`) on the VPS that owns the AI loop in our own code. Kommo is only the
-WhatsApp/Instagram/Facebook transport and CRM. Any doc, repo folder, or memory that describes
-a Botpress bot as the current system is historical.
+WhatsApp/Instagram/Facebook transport and CRM.
 
 Status: **deployed and live on Kommo Pro since 2026-07-20.**
 Health: `GET https://kommo-agent.goldcoastai.pro/health` → `{"ok":true,"subdomain":"aguasprofundas","provider":"openai"}`
@@ -41,9 +40,9 @@ WhatsApp / Instagram / Facebook message
   -> app/main.py: validate origin, dedupe, ack 200, enqueue
   -> app/worker.py (background):
        voice/audio -> transcribe.py (OpenAI Whisper + hallucination filter)
-       location    -> linderos web-app link or handoff
+       location    -> acknowledge + [[HANDOFF]] (human team handles GPS/linderos)
        picture/file-> acknowledge + handoff
-       text        -> keyword match -> voice bot (WhatsApp only)
+       text        -> Haiku intent classifier -> voice bot if intent matched (WhatsApp only)
                    -> RAG (Qdrant aguas_profundas_kb)
                    -> LLM (gpt-4o) with AUDIO_ENVIADO override if audio fired
                    -> send reply
@@ -52,18 +51,16 @@ WhatsApp / Instagram / Facebook message
 
 ---
 
-## 4. Access and key IDs (verified live 2026-08-21)
+## 4. Access and key IDs (verified live 2026-08-22)
 
 | Item | Value |
 |---|---|
 | Kommo subdomain | `aguasprofundas` |
 | Kommo API base | `https://aguasprofundas.kommo.com/api/v4` |
 | Kommo account ID | `36745667` |
-| Kommo amojo_id | `05115415-d76f-43ee-a541-f4cdcad8ba68` |
 | Kommo token | `master.env` → `KOMMO_LONG_LIVED_TOKEN` (expires 2030-01-01) |
 | Pipeline ID | `14130431` |
 | Handoff stage | `Atención humana` / status_id `109168423` |
-| Isaias user_id | `15588735` |
 | Sheyla user_id | `15589135` (handoff owner, 2h SLA) |
 | Active webhook ID | `47409015` — `add_message` only |
 | Service URL | `https://kommo-agent.goldcoastai.pro` (port 8080, uvicorn) |
@@ -75,7 +72,31 @@ WhatsApp / Instagram / Facebook message
 
 ---
 
-## 5. Pipeline stages
+## 5. Agua flow (CURRENT — simplified 2026-08-22)
+
+```
+1. Welcome text + VOZ_AGUA_1 (process, 80-90% success, range RD$45k-50k)
+2. Ask: pueblo/sector of the terrain
+3. Confirm province → disclose EXACT price + deposit info:
+   "Perfecto, [Pueblo] pertenece a la provincia [Provincia]. El estudio completo
+   (topográfico + radiestesia + geohidrológico) tiene un costo de RD$[X]. Para
+   iniciar se requiere un depósito de RD$5,000 (estudio topográfico) y luego
+   RD$10,000 para la visita presencial — el equipo le coordina todo.
+   ¿Tiene alguna pregunta antes de proceder? [[SECTOR:Provincia|Pueblo]]"
+4. Answer questions — Haiku classifies intent → fires voice bot automatically
+5. Ask: "¿Está listo para proceder con el análisis de su propiedad? 😊"
+6. YES → "¿me puede dar su nombre completo y un número de teléfono de contacto?"
+         → once received → "Excelente, [Nombre]. El equipo le contactará en breve.
+         [[HANDOFF]]"
+         CRITICAL: always collect name+phone — Facebook leads have no phone on file
+7. NO  → "Aquí estaremos cuando estés listo. 😊"
+
+Human team handles: GPS pin, satellite photo, linderos, deposits, scheduling.
+```
+
+---
+
+## 6. Pipeline stages
 
 | Status ID | Stage |
 |---|---|
@@ -83,91 +104,61 @@ WhatsApp / Instagram / Facebook message
 | `109168423` | **Atención humana** ← handoff target |
 | `109083027` | Initial contact |
 | `109083031` | Discussions |
-| `109083035` | Decision making |
-| `109083039` | Contract discussion |
 | `142` | Closed - won |
 | `143` | Closed - lost |
 
 ---
 
-## 6. Salesbots (all active, all must have empty Triggers panel)
+## 7. Salesbots (all active, all must have empty Triggers panel)
 
 | ID | Name | Fired by |
 |---|---|---|
 | `55340` | welcome-bot | NOT fired — welcome images removed 2026-08-21 |
 | `55348` | agua-foto | Engine: `[[FOTO_AGUA]]` marker |
-| `55956` | banco-foto | Engine: `[[DEPOSITO]]` marker |
-| `59058` | Payment-Audio | Engine: `[[AUDIO_PAGO]]` marker |
+| `55956` | banco-foto | Engine: `[[DEPOSITO]]` marker (séptico only now) |
+| `59058` | Payment-Audio | Engine: `[[AUDIO_PAGO]]` marker (reserved, not fired) |
 | `76624` | septico-ficha-tecnica | Engine: `[[SEPTICO_FICHA]]` |
-| `76632` | septico-comparativa | Engine: `[[SEPTICO_COMPARATIVA]]` (mid-convo only, NOT on entry) |
+| `76632` | septico-comparativa | Engine: `[[SEPTICO_COMPARATIVA]]` (mid-convo only) |
 | `76634` | septico-funcionamiento | Engine: `[[SEPTICO_FUNCIONAMIENTO]]` / VOZ_IMHOFF_2 pair |
 | `76646` | septico-ventajas | Engine: `[[SEPTICO_VENTAJAS]]` / VOZ_IMHOFF_3 pair |
 | `85776` | VOZ_AGUA_1 | Engine: first water contact (WhatsApp only) |
-| `85778` | VOZ_AGUA_2 | Engine: drilling price keywords |
-| `85780` | VOZ_AGUA_3 | Engine: start process keywords |
-| `85782` | VOZ_AGUA_4 | Engine: payment/deposit keywords |
-| `85784` | VOZ_AGUA_5 | Engine: price objection keywords |
-| `85786` | VOZ_AGUA_7 | Engine: payment conditions keywords |
-| `85788` | VOZ_AGUA_6 | Engine: office location keywords |
-| `85790` | VOZ_AGUA_8 | Engine: call request keywords |
+| `85778` | VOZ_AGUA_2 | Haiku: `drilling_price` intent |
+| `85782` | VOZ_AGUA_4 | Haiku: `payment_agua` intent |
+| `85784` | VOZ_AGUA_5 | Haiku: `price_objection_agua` intent (declarative + interrogative) |
+| `85786` | VOZ_AGUA_7 | Haiku: `payment_conditions` intent |
+| `85788` | VOZ_AGUA_6 | Haiku: `location_agua` intent |
+| `85790` | VOZ_AGUA_8 | Haiku: `call_request` intent |
 | `85800` | VOZ_IMHOFF_1 | Engine: first séptico contact (WhatsApp only) — NO image pair |
-| `85802` | VOZ_IMHOFF_2 | Engine: purchase process keywords + SEPTICO_FUNCIONAMIENTO image |
-| `85804` | VOZ_IMHOFF_3 | Engine: séptico price objection + SEPTICO_VENTAJAS image |
-| `85806` | VOZ_IMHOFF_4 | Engine: location/trust keywords |
+| `85802` | VOZ_IMHOFF_2 | Haiku/keyword: purchase process + SEPTICO_FUNCIONAMIENTO image |
+| `85804` | VOZ_IMHOFF_3 | Haiku/keyword: séptico price objection + SEPTICO_VENTAJAS image |
+| `85806` | VOZ_IMHOFF_4 | Haiku/keyword: location/trust keywords |
 | `85808` | Wellington_Lider_Foto | Engine: after VOZ_IMHOFF_4 sequence |
 
----
-
-## 7. Audio flow summary
-
-Voice bots only fire on WhatsApp (`origin=waba`). Instagram and Facebook get
-text-only responses. One audio per turn, never repeated in same conversation.
-
-After each audio fires, the engine injects `AUDIO_ENVIADO` into the LLM's
-`extra_system` with the exact follow-up one-liner — LLM outputs only that line.
-
-Full keyword lists, transcripts, and follow-up text: `kommo-agent/docs/AUDIO_WORKFLOW.md`
+**REMOVED:** VOZ_AGUA_3 (85780) — was GPS/linderos process explanation. Obsolete.
+Bot still exists in Kommo UI but is never called by the engine.
 
 ---
 
-## 8. Control markers (model emits → engine strips + acts)
+## 8. Voice bot classification — Haiku is the sole classifier
 
-```
-[[HANDOFF]]               → move to Atención humana (109168423), create Sheyla task
-[[FOTO_AGUA]]             → fire bot 55348
-[[SEPTICO_COMPARATIVA]]   → fire bot 76632 (mid-conversation only, NOT on entry)
-[[SEPTICO_FUNCIONAMIENTO]]→ fire bot 76634
-[[SEPTICO_FICHA]]         → fire bot 76624
-[[SEPTICO_VENTAJAS]]      → fire bot 76646
-[[DEPOSITO]]              → fire bot 55956 + send AGUAS_BANK_TEXT
-[[AUDIO_PAGO]]            → fire bot 59058 (ETAPA 1 water only)
-[[LINDEROS_LISTO]]        → send ETAPA 1 deposit info, no handoff
-[[SECTOR:Provincia|Pueblo]]→ tag contact by area
-[[DESC_OFRECIDO]]         → log 5% séptico discount offered
-```
+All agua voice bots (VOZ_AGUA_2, 4, 5, 6, 7, 8) are fired exclusively by Haiku
+intent classification. The legacy keyword trigger block was removed 2026-08-22.
 
----
+**Architecture principle:** If a voice bot is missing on a customer message, fix
+the Haiku prompt — do NOT add a keyword list. Haiku generalizes; keyword lists don't.
 
-## 9. Key rules (never break)
-
-- Never confirm a payment — receipt → acknowledge + `[[HANDOFF]]`
-- Never guarantee water 100% — always "80-90% con el estudio"
-- Never show ETAPA 2 price until client confirms ETAPA 1 study received
-- Never send `[[DEPOSITO]]` off unconfirmed voice transcription
-- Perforación price/deposit is always a human quote → `[[HANDOFF]]`
-- One question per turn, short WhatsApp messages
-- Never give drilling prices in text (VOZ_AGUA_2 audio handles this)
-- Never repeat audio content in text reply
-- Never mention comprobante fiscal unless customer asks directly (rule 4)
-- **FLOW IMMUTABILITY: once agua flow is confirmed, it can never re-lock to séptico**
-- All 32 DR provinces are covered — never handoff on province alone
+Key Haiku intent → bot mappings:
+- `drilling_price` → VOZ_AGUA_2 (never give drilling prices in text)
+- `payment_agua` → VOZ_AGUA_4
+- `price_objection_agua` → VOZ_AGUA_5 (declarative OR interrogative rhetorical price challenge)
+- `location_agua` → VOZ_AGUA_6
+- `payment_conditions` → VOZ_AGUA_7
+- `call_request` → VOZ_AGUA_8
+- `how_to_start` → REMOVED (was VOZ_AGUA_3, now handled by LLM proceed flow)
 
 ---
 
-## 10. Province pricing (agua flow)
-
-Isla discloses the price in the SAME message that confirms the province. Never advance
-without price disclosure.
+## 9. Province pricing (agua flow)
 
 **RD$45,000** (16 provinces): Puerto Plata, Espaillat, Santiago, La Vega, Monseñor Nouel,
 Sánchez Ramírez (Hermanas Mirabal / Salcedo), Duarte, María Trinidad Sánchez, Samaná,
@@ -178,41 +169,66 @@ Elías Piña, San Juan, Bahoruco, Independencia, Barahona, Pedernales, Hato Mayo
 San Pedro de Macorís, La Romana, La Altagracia.
 
 **RD$5,000 surcharge**: difficult terrain access, with prior client approval.
-
-All 32 provinces covered. Foreign/unrecognizable location → `[[HANDOFF]]` only.
+All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 
 ---
 
-## 11. Infrastructure rules
+## 10. Control markers (model emits → engine strips + acts)
 
-- `docker restart` does NOT reload `env_file` — use `docker compose up -d`
-- `docker commit kommo-agent kommo-agent:latest` before any restart
-- infra-mcp drops under load — `docker restart infra-mcp` from VPS SSH
-- Never push to Vercel manually — push to GitHub, let git integration handle it
-- Every Salesbot must have an empty Triggers panel in Kommo UI
-- KB changes require re-ingestion: `docker exec -w /srv kommo-agent python3 scripts/ingest_kb.py`
+```
+[[HANDOFF]]               → move to Atención humana (109168423), create Sheyla task
+[[FOTO_AGUA]]             → fire bot 55348
+[[SEPTICO_COMPARATIVA]]   → fire bot 76632 (mid-conversation only)
+[[SEPTICO_FUNCIONAMIENTO]]→ fire bot 76634
+[[SEPTICO_FICHA]]         → fire bot 76624
+[[SEPTICO_VENTAJAS]]      → fire bot 76646
+[[DEPOSITO]]              → fire bot 55956 + send AGUAS_BANK_TEXT (séptico only)
+[[AUDIO_PAGO]]            → reserved; not fired by bot (deposit human-coordinated)
+[[LINDEROS_LISTO]]        → reserved for human use; bot no longer emits
+[[SECTOR:Provincia|Pueblo]]→ tag contact by area
+[[DESC_OFRECIDO]]         → log 5% séptico discount offered
+```
+
+---
+
+## 11. Key rules (never break)
+
+- Never confirm a payment — receipt → acknowledge + `[[HANDOFF]]`
+- Never guarantee water 100% — always "80-90% con el estudio"
+- Never give drilling prices in text (VOZ_AGUA_2 handles this)
+- Never mention comprobante fiscal unless customer asks directly (rule 4)
+- Never repeat audio content in text reply
+- **FLOW IMMUTABILITY: confirmed agua flow can never re-lock to séptico**
+- **ALWAYS collect name + phone before [[HANDOFF]]** — Facebook leads have no phone
+- All 32 DR provinces covered — never handoff on province alone
+- Haiku is sole intent classifier for voice bots — no keyword lists
 
 ---
 
 ## 12. Whisper hallucination filter
 
-`transcribe.py` rejects transcripts via `_looks_hallucinated()`:
-- Known silence fillers (Gracias, Amara.org, etc.)
-- Repetition loops
-- **Prompt-dump detection**: if transcript contains ≥5 of our PROMPT_HINT domain words
-  (motoconcho, radiestesia, geohidrológico, bauche, jarabacoa, etc.), Whisper echoed
-  our hint — reject. Fires `TranscriptionRejected` → `audio_unclear` message sent.
-  Threshold of 5 prevents false positives on real messages with 1-2 domain words.
+`transcribe.py` rejects via `_looks_hallucinated()`:
+- Known silence fillers, Amara.org artifacts, repetition loops
+- **Prompt-dump detection**: ≥5 domain hint words in transcript = Whisper echoed prompt
+  → `TranscriptionRejected` → `audio_unclear` message to customer
 
 ---
 
-## 13. Open items
+## 13. Infrastructure rules
 
-1. Callback-capture + service-ID flows: seamless combined delivery when customer gives
-   phone number before identifying service (partially fixed in prompt; deeper worker fix needed)
-2. VOZ_AGUA_1: 2:01 duration, re-recording pending (target 30-40s)
-3. Agua flow validation: payment/deposit → banco-foto, GPS pin → linderos still need E2E testing
+- `docker restart` reloads from committed image — always `docker commit` first
+- KB changes require re-ingestion: `docker exec -w /srv kommo-agent python3 scripts/ingest_kb.py`
+- Every Salesbot must have empty Triggers panel in Kommo UI
+- Never push to Vercel manually — push to GitHub
+- infra-mcp drops under load — `docker restart infra-mcp` resolves
+
+---
+
+## 14. Open items
+
+1. VOZ_AGUA_4 (`payment_agua` intent) still mapped — payment is now human-only; consider removing
+2. Complete end-to-end live test: name+phone capture → [[HANDOFF]] confirmed
+3. VOZ_AGUA_1: 2:01 duration, re-recording pending (target 30-40s)
 4. Daily conversation-review automation: not built
 5. Legacy number +1 829-566-7542: wind-down pending
-6. KOMMO repo README: still says "Claude LLM, not deployed" — fix when convenient
-7. Wellington_Lider_Foto (85808): verify image is loaded in Kommo UI
+6. Wellington_Lider_Foto (85808): verify image loaded in Kommo UI

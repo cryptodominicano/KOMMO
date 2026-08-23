@@ -3702,3 +3702,43 @@ Fixes applied:
 Tunnel keepalive config was already correct — no changes needed there.
 Open item: reboot the Windows machine next restart to fully apply the
 PnPCapabilities registry change.
+
+### Audio routing rearchitected — scope-derived, not voz_bots-derived.
+
+Symptom (from live screenshot): after VOZ_AGUA_1 welcome audio, no further
+voice bots fired for the whole agua conversation. Customer asked location,
+drilling price, payment — all got text replies, zero audio.
+
+Root cause: Haiku (gpt-4o-mini) was doing double duty — emitting the scope
+<intencion categoria> block AND a redundant parallel <voz_bots> block. Scope
+classification was reliable; the voz_bots block was not — the model dropped it
+inconsistently (returned <voz_bots/> empty) even when scope was correct. Audio
+routing read the flaky block, so correct-scope turns produced no audio.
+
+Why it regressed: last session we removed keyword triggers on the theory Haiku
+could gauge intent. It CAN — the scope field proves it. The bug was reading the
+wrong output field, not a Haiku capability gap.
+
+Fix (dual-layer, minimal keywords):
+1. haiku.py get_voz_bot_intents() now derives voice bots from the scope field
+   (single source of truth). Iterates all intents → multi-intent works. Const
+   0.9 confidence; real gating (price_disclosed, flow-awareness) stays in worker.
+2. haiku.py correct_scope() — thin deterministic correction for the TWO slang
+   confusions measured to be systematic: (a) drilling-cost questions phrased
+   colloquially ("perforar a como ta", "el hoyo cuanto sale", "abrir el pozo")
+   misread as study-price objections; (b) oblique location asks ("darme una
+   vuelta por alla") misread as greetings. Only overrides when correcting
+   evidence (drill term + cost signal, or visit phrase) is present. Haiku NLU
+   still handles all general slang — no keyword wall.
+3. worker.py wires correct_scope() right after classify().
+
+Tested removing the voz_bots block from the prompt entirely (stage 3): scope
+accuracy DROPPED 12/12 → 10/12. The examples reinforce scope classification, so
+they STAY in the prompt as few-shot — they just no longer drive routing. Reverted.
+
+Validation: 27/27 — clean phrasing, heavy DR slang, price-disclosed gate both
+directions, negative controls (drill term without cost signal stays silent),
+full septico regression (no cross-flow contamination).
+
+Deployed: image committed (ecbb42b7), container restarted healthy, pushed 7fc70e6.
+In-container backups: haiku.py.bak_voz, worker.py.bak_voz.

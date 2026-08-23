@@ -116,7 +116,6 @@ Razón: usa lista numerada, no usa el marcador [[SEPTICO_FUNCIONAMIENTO]], pregu
 
 VOZ_AGUA_1: proceso del estudio, RD$45,000-50,000, éxito 80-90%, exploratoria vs convencional.
 VOZ_AGUA_2: sin estudio no hay precio de perforación. NUNCA des precios de perforación en texto.
-VOZ_AGUA_4: proceso del depósito y tiempos — coordinado por el equipo humano.
 VOZ_AGUA_5: estudio 3 partes = 80-90%. Competencia 1 parte = 25%. No compares en texto.
 VOZ_AGUA_6: ubicados en Jarabacoa, sirven todo el país.
 VOZ_AGUA_7: condiciones de pago y proceso — coordinado por el equipo humano.

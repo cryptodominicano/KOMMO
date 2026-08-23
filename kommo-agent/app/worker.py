@@ -886,7 +886,6 @@ async def handle_message(msg: dict) -> None:
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
-            "VOZ_AGUA_4": "Con mucho gusto le envío los datos del depósito cuando esté listo. 😊 ¿Tiene alguna pregunta sobre el proceso? 🙏",
             "VOZ_AGUA_5": "Entendemos perfectamente. 😊 Cualquier duda adicional, aquí estamos para orientarle. 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
                            if _is_septico_flow else
@@ -971,7 +970,6 @@ async def handle_message(msg: dict) -> None:
             _HAIKU_VOZ_MAP = {
                 # agua bots
                 "drilling_price":          ("VOZ_AGUA_2", _voz_triggers, 0.70),
-                "payment_agua":            ("VOZ_AGUA_4", _voz_triggers, 0.70),
                 "price_objection_agua":    ("VOZ_AGUA_5", _voz_triggers, 0.70),
                 "location_agua":           ("VOZ_AGUA_6", _voz_triggers, 0.65),
                 "payment_conditions":      ("VOZ_AGUA_7", _voz_triggers, 0.65),
@@ -990,7 +988,7 @@ async def handle_message(msg: dict) -> None:
                 _haiku_fired = []
                 # Flow-aware intents that are agua-only
                 _AGUA_ONLY_INTENTS = {
-                    "drilling_price", "payment_agua",
+                    "drilling_price",
                     "price_objection_agua", "payment_conditions", "call_request",
                 }
                 # Intents that are septico-only

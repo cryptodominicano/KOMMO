@@ -478,6 +478,13 @@ async def handle_message(msg: dict) -> None:
                     state.mark_voice_sent(talk_id, _vk1)
                     _voz_fired = _vk1
                     log.info("talk=%s launched VOZ_AGUA_1 %s", talk_id, _voz_triggers[_vk1])
+                    # Coverage ledger: VOZ_AGUA_1 discloses the study price
+                    # range (RD$45,000-50,000) in-audio, so record its topics —
+                    # incl. estudio_precio, which opens the price-objection gate.
+                    _cov_lead_1 = str(entity_id) if entity_id else talk_id
+                    for _topic_1 in _AUDIO_TOPIC_MAP.get(_vk1, []):
+                        state.mark_topic_covered(_cov_lead_1, _topic_1,
+                                                 'audio', source=_vk1)
                 except KommoError as e:
                     log.error("talk=%s VOZ_AGUA_1 failed: %s", talk_id, e)
 
@@ -511,6 +518,13 @@ async def handle_message(msg: dict) -> None:
                     _voz_fired = _vk_i1
                     log.info("talk=%s launched VOZ_IMHOFF_1 %s",
                              talk_id, _imhoff_triggers[_vk_i1])
+                    # Coverage ledger: VOZ_IMHOFF_1 discloses the plant prices
+                    # (RD$70,000 / RD$105,000) in-audio — record its topics,
+                    # incl. precio_septico, which opens the septico price gate.
+                    _cov_lead_i1 = str(entity_id) if entity_id else talk_id
+                    for _topic_i1 in _AUDIO_TOPIC_MAP.get(_vk_i1, []):
+                        state.mark_topic_covered(_cov_lead_i1, _topic_i1,
+                                                 'audio', source=_vk_i1)
                 except KommoError as e:
                     log.error("talk=%s VOZ_IMHOFF_1 sequence failed: %s", talk_id, e)
 
@@ -949,9 +963,15 @@ async def handle_message(msg: dict) -> None:
                 extra = (_coverage_block + "\n\n" + extra).strip()
                 log.debug("talk=%s coverage block injected (%d topics)",
                           talk_id, len(_coverage_block.splitlines()) - 1)
-            # price_disclosed: True if estudio_precio already covered this conversation
+            # price_disclosed: True if the price for the ACTIVE flow was already
+            # disclosed this conversation. Agua discloses via estudio_precio
+            # (VOZ_AGUA_1), septico via precio_septico (VOZ_IMHOFF_1). The gate
+            # must check the flow-appropriate topic, else a septico objection
+            # would be blocked by an agua-only check (and vice versa).
+            _price_topic = ("precio_septico" if _is_septico_flow
+                            else "estudio_precio")
             _price_disclosed = state.get_topic_coverage_count(
-                _cov_lead_id, "estudio_precio"
+                _cov_lead_id, _price_topic
             ) > 0
             _intents = await haiku_pre.classify(
                 text, flow=_flow_label, price_disclosed=_price_disclosed

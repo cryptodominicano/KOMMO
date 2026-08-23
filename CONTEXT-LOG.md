@@ -3823,3 +3823,30 @@ Backups: worker.py.bak_flow, state.py.bak_flow, worker.py.bak_ledger, *.bak_voz.
 NOTE: flow followup LLM-generation quality (VOZ_AGUA_5/6/7 state-aware lines) and
 the end-to-end name→phone→handoff close still need a clean live WhatsApp run to
 confirm — classifier + state mechanics validated, live LLM text not yet observed.
+
+### Handoff silence now driven by pipeline stage (Atención humana).
+
+Follow-up to the talk 904 observation: after a clean handoff, the bot resumed once
+the grace timer elapsed (no human had picked up yet) and replied to the customer's
+goodnight. Benign but not ideal — user wanted full silence once handed off.
+
+Checked Kommo docs: a Salesbot is scoped to a conversation and the native handoff
+signal is the pipeline stage. Our handoff ALREADY moves the lead to "Atención
+humana" (handoff_status_id=109168423, pipeline 14130431) via _signal_handoff —
+the engine just wasn't consulting it for silence.
+
+Fix (Kommo-native, best practice):
+- kommo.py: get_lead_status(lead_id) → reads lead status_id.
+- worker.py: in the is_handed_off block, after the NO_REACTIVAR tag check and
+  BEFORE the grace timer, check the lead's stage. If status_id == handoff_status_id,
+  stay fully silent and return (no grace, no resume). Grace timer + NO_REACTIVAR
+  remain as fallbacks. Fails safe: status read error → falls through to grace.
+
+Behavior now: bot is silent exactly as long as the lead sits in Atención humana.
+A human dragging the lead to any other stage reactivates the bot — intuitive,
+board-visible, matches how Kommo itself models handoff.
+
+First real use of the new pre-deploy guard (prompt_guard_uba.py): PASSED. Full
+deploy cycle followed (syntax + guard + import smoke test → commit → restart →
+health). Deployed image c14ca1a9, healthy. Pushed aef88a9.
+Backups: kommo.py.bak_silence, worker.py.bak_silence.

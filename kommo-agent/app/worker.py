@@ -668,139 +668,6 @@ async def handle_message(msg: dict) -> None:
                          talk_id)
                 return
 
-        # --- VOZ_AGUA_2-8: keyword-triggered, audio-first, no-repeat ─────────────
-        # Use locked flow state — deterministic, never drifts mid-conversation.
-        _tna = _deaccent(text)
-        # --- SECOND MESSAGE AFTER GENERIC GREETING: service confirmation --------
-        # If first contact was a generic greeting (flow unconfirmed), the
-        # second message is the customer picking their service. Detect it,
-        # mark flow confirmed, and fire the correct welcome audio.
-        # No image fires — the welcome image already went out on first contact.
-        _SEPTICO_CONFIRM_WORDS = [
-            "septic", "imhoff", "planta", "modulo", "bano", "fosa", "tanque",
-            "aguas negra", "aguas residual", "aguas gris",
-        ]
-        _AGUA_CONFIRM_WORDS = [
-            "agua", "pozo", "perfor", "estudio", "terreno", "finca",
-            "vena", "hoyo", "pozo", "cisterna",
-        ]
-        _flow_was_generic = (not state.is_flow_confirmed(talk_id)
-                             and not is_first
-                             and _locked_flow == "agua")
-        if _flow_was_generic and entity_id and _is_waba and not _agua_confirmed:
-            _tna_confirm = _deaccent(text)
-            _confirms_septico = any(w in _tna_confirm for w in _SEPTICO_CONFIRM_WORDS)
-            _confirms_agua = any(w in _tna_confirm for w in _AGUA_CONFIRM_WORDS)
-            if _confirms_septico:
-                # Customer chose séptico — re-lock flow and fire IMHOFF_1 audio
-                state.set_flow(talk_id + "_override", "septico")  # note for log
-                state.mark_flow_confirmed(talk_id)
-                _is_septico_flow = True
-                _vk_confirm = "[[VOZ_IMHOFF_1]]"
-                if not state.voice_already_sent(talk_id, _vk_confirm):
-                    _bid_confirm = _imhoff_triggers.get(_vk_confirm)
-                    if _bid_confirm:
-                        try:
-                            await asyncio.sleep(1)
-                            await k.run_bot(int(_bid_confirm), entity_id,
-                                           _entity_type(msg))
-                            state.mark_voice_sent(talk_id, _vk_confirm)
-                            _voz_fired = _vk_confirm
-                            log.info("talk=%s confirmed SEPTICO — fired VOZ_IMHOFF_1",
-                                     talk_id)
-                        except KommoError as e:
-                            log.error("talk=%s VOZ_IMHOFF_1 confirm failed: %s",
-                                      talk_id, e)
-            elif _confirms_agua:
-                # Customer chose agua — confirm flow and fire AGUA_1 audio
-                state.mark_flow_confirmed(talk_id)
-                _vk_confirm_a = "VOZ_AGUA_1"
-                if not state.voice_already_sent(talk_id, _vk_confirm_a):
-                    _bid_confirm_a = _voz_triggers.get(_vk_confirm_a)
-                    if _bid_confirm_a:
-                        try:
-                            await asyncio.sleep(1)
-                            await k.run_bot(int(_bid_confirm_a), entity_id,
-                                           _entity_type(msg))
-                            state.mark_voice_sent(talk_id, _vk_confirm_a)
-                            _voz_fired = _vk_confirm_a
-                            log.info("talk=%s confirmed AGUA — fired VOZ_AGUA_1",
-                                     talk_id)
-                        except KommoError as e:
-                            log.error("talk=%s VOZ_AGUA_1 confirm failed: %s",
-                                      talk_id, e)
-
-        if entity_id and _voz_triggers and not is_first and _is_waba and not _is_septico_flow:
-            _VOZ_KW = [
-                ("VOZ_AGUA_5", ["esta muy caro","muy costoso","es mucho dinero",
-                    "pense que era menos","no tengo ese presupuesto","muy alto",
-                    "muy elevado","no puedo pagar eso","fuera de mi presupuesto",
-                    "demasiado caro","hacen descuento","pueden bajar",
-                    "ese es el mejor precio","no hay oferta","por que cuesta tanto",
-                    "por que tanto dinero","eso es mucho dinero","wow eso esta",
-                    "esta fuerte ese precio","lo voy a pensar","dejame ver",
-                    "esta dificil","muy costoso para mi","no es muy caro",
-                    "eso no es mucho","por que tan caro"]),
-                ("VOZ_AGUA_4", ["quiero pagar","donde deposito","enviame la cuenta",
-                    "voy a pagar","como hago el pago","a que cuenta",
-                    "enviame los datos","donde transfiero","listo para pagar",
-                    "quiero reservar","procedamos","ya tengo todo",
-                    "aqui esta mi ubicacion","ya envie la ubicacion"]),
-                ("VOZ_AGUA_2", ["cuanto cuesta perforar","que cuesta un pozo",
-                    "cuanto vale hacer un pozo","cual es el precio","en cuanto sale",
-                    "cuanto cobran","cuanto cuesta hacer un hoyo",
-                    "cuanto cuesta el pozo","cuanto cuesta sacar agua",
-                    "cual es el costo","que precio tiene","que vale",
-                    "cuanto cuesta encontrar agua","cuanto vale una perforacion",
-                    "cobran por pie","cuanto cuesta por metro",
-                    "cuanto cuesta por pie","como cobran"]),
-                ("VOZ_AGUA_6", ["donde estan ubicados","donde estan",
-                    "donde queda la oficina","tienen oficina","en que ciudad estan",
-                    "donde los encuentro","donde puedo visitarlos",
-                    "puedo pasar por la oficina","donde trabajan",
-                    "en que provincia estan","donde operan","cual es su direccion"]),
-                ("VOZ_AGUA_7", ["como se paga","cuando se paga","se paga antes",
-                    "se paga despues","cuanto hay que adelantar","hay deposito",
-                    "aceptan transferencia","aceptan efectivo","aceptan tarjeta",
-                    "como funcionan los pagos","cuales son las condiciones",
-                    "cual es la forma de pago","que metodos aceptan",
-                    "se paga completo","hay financiamiento",
-                    "puedo pagar en dos partes"]),
-                ("VOZ_AGUA_8", ["puedo llamarlo","lo puedo llamar",
-                    "quiero hablar con usted","quiero hablar con un asesor",
-                    "tiene un numero","me puede llamar","llameme",
-                    "quiero hacerle unas preguntas","prefiero hablar",
-                    "podemos hablar","esta disponible","podemos conversar",
-                    "puede atenderme","tiene unos minutos",
-                    "necesito hablar con alguien","quiero comunicarme directamente",
-                    "le puedo hacer una llamada"]),
-            ]
-            # Collect ALL matched agua voice bots then fire sequentially.
-            # 5s pause between each so customer hears them in order.
-            _agua_to_fire = []
-            for _vk, _kws in _VOZ_KW:
-                if any(kw in _tna for kw in _kws):
-                    if not state.voice_already_sent(talk_id, _vk):
-                        _bid = _voz_triggers.get(_vk)
-                        if _bid:
-                            _agua_to_fire.append((_vk, int(_bid)))
-            for _idx_a, (_vk, _bid) in enumerate(_agua_to_fire):
-                if _idx_a > 0:
-                    await asyncio.sleep(5.0)
-                try:
-                    await k.run_bot(_bid, entity_id, _entity_type(msg))
-                    state.mark_voice_sent(talk_id, _vk)
-                    _voz_fired = _vk  # last fired = followup text source
-                    log.info("talk=%s launched %s bot %s (%d of %d)",
-                             talk_id, _vk, _bid, _idx_a + 1, len(_agua_to_fire))
-                    # Coverage ledger: log all topics this audio covers
-                    _cov_lead = str(entity_id) if entity_id else talk_id
-                    for _topic in _AUDIO_TOPIC_MAP.get(_vk, []):
-                        state.mark_topic_covered(_cov_lead, _topic,
-                                                'audio', source=_vk)
-                except KommoError as e:
-                    log.error("talk=%s %s failed: %s", talk_id, _vk, e)
-
         # --- VOZ_IMHOFF_2-4: séptico keyword-triggered, no-repeat per convo -------
         # VOZ_IMHOFF_4 fires a 3-step sequence: voice → Instagram text → Wellington image.
         if entity_id and _imhoff_triggers and not is_first and _is_waba:
@@ -1167,11 +1034,8 @@ async def handle_message(msg: dict) -> None:
                     _hv_bid = _hv_triggers.get(_hv_key)
                     if not _hv_bid:
                         continue
-                    # Check not already queued by keyword loop
-                    # Safe: these lists may not exist if keyword block condition was False
-                    _kw_fired_keys = [k for k, _ in
-                                      (locals().get('_agua_to_fire', []) if not _is_septico_flow
-                                       else locals().get('_imhoff_to_fire', []))]
+                    # Check not already fired by IMHOFF keyword loop this turn
+                    _kw_fired_keys = [k for k, _ in locals().get('_imhoff_to_fire', [])]
                     if _hv_key in _kw_fired_keys:
                         continue
                     _haiku_fired.append((_hv_key, int(_hv_bid), _hv_intent, _hv_conf))

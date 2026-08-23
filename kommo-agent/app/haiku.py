@@ -125,7 +125,7 @@ AGUA/PERFORACIÓN:
   Señal: frase interrogativa. Ejemplo: 'cuánto cuesta el estudio', 'a cómo', 'qué precio tienen'.
   NO dispara voice bot — el LLM da la información.
 - price_objection_agua: cliente reacciona a un precio ya conocido. SOLO si FLUJO ACTIVO = AGUA Y PRECIO_YA_DIVULGADO=true.
-  Señal: declarativa. Ejemplo: 'ta caro', 'está muy caro', 'competencia cobra menos', 'no tengo presupuesto'.
+  Señal: declarativa O interrogativa retórica que cuestiona el precio. Ejemplo: 'ta caro', 'está muy caro', 'competencia cobra menos', 'no tengo presupuesto', '¿por qué tanto dinero?', '¿por qué cuesta tanto?', '¿eso no es mucho?', '¿no es muy caro eso?', 'wow eso está fuerte'.
 - location_agua: cliente PREGUNTA dónde está la empresa/oficina, en qué ciudad trabajan.
   SOLO cuando el cliente pregunta POR LA EMPRESA, no cuando da su propio pueblo o terreno.
   NUNCA uses este intent cuando el cliente está RESPONDIENDO dónde está su terreno.

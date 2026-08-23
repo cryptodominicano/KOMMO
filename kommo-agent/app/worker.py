@@ -1025,7 +1025,7 @@ async def handle_message(msg: dict) -> None:
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
-            "VOZ_AGUA_3": "Cuando guste, mándeme la ubicación de su terreno y seguimos el proceso desde ahí. 📍",
+            "VOZ_AGUA_3": "¡Perfecto! Para coordinarle con nuestro equipo, ¿me puede dar su nombre completo y un número de teléfono de contacto? 🙏",
             "VOZ_AGUA_4": "Con mucho gusto le envío los datos del depósito cuando esté listo. 😊 ¿Tiene alguna pregunta sobre el proceso? 🙏",
             "VOZ_AGUA_5": "Entendemos perfectamente. 😊 Cualquier duda adicional, aquí estamos para orientarle. 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"

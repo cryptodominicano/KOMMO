@@ -119,8 +119,7 @@ price_inquiry_first NO dispara ningún voice bot — el LLM responde con informa
 
 AGUA/PERFORACIÓN:
 - drilling_price: pregunta por costo de perforar, precio del pozo, cuánto cuesta por pie/metro
-- how_to_start: quiere iniciar el proceso, qué pasos seguir, cómo hacer el estudio
-- payment_agua: quiere pagar, dónde depositar, datos bancarios, listo para reservar
+- payment_agua: quiere saber cómo funciona el pago o el depósito. El audio explica el proceso; el equipo humano coordina los detalles.
 - price_inquiry_first: cliente pregunta el precio por primera vez. SOLO si PRECIO_YA_DIVULGADO=false.
   Señal: frase interrogativa. Ejemplo: 'cuánto cuesta el estudio', 'a cómo', 'qué precio tienen'.
   NO dispara voice bot — el LLM da la información.

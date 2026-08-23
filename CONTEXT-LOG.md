@@ -3742,3 +3742,33 @@ full septico regression (no cross-flow contamination).
 
 Deployed: image committed (ecbb42b7), container restarted healthy, pushed 7fc70e6.
 In-container backups: haiku.py.bak_voz, worker.py.bak_voz.
+
+### Price-objection gate fixed — welcome audio now records price disclosure.
+
+Found during live test right after the routing fix. Price objections still never
+fired VOZ_AGUA_5: the price_disclosed gate stayed shut for the whole conversation.
+
+Root cause (pre-existing, unrelated to routing): VOZ_AGUA_1 and VOZ_IMHOFF_1
+firing paths call mark_voice_sent but never wrote their topics to the coverage
+ledger — unlike the IMHOFF keyword loop and the HAIKU_VOZ path, which both do.
+Confirmed against transcripts (AUDIO_WORKFLOW.md): VOZ_AGUA_1 DOES disclose the
+RD$45-50k study cost in-audio, VOZ_IMHOFF_1 discloses RD$70k/105k. So the topic
+map (estudio_precio -> VOZ_AGUA_1) was correct; the ledger write was just missing.
+Result: estudio_precio never recorded -> price_disclosed always False ->
+price_objection_agua downgraded to in_scope_agua -> no VOZ_AGUA_5.
+
+Second issue: the gate only checked estudio_precio regardless of active flow, so
+a septico objection would be blocked by an agua-only check.
+
+Fix (worker.py):
+1. VOZ_AGUA_1 firing path writes _AUDIO_TOPIC_MAP topics to the ledger after fire.
+2. VOZ_IMHOFF_1 firing path does the same (opens septico price gate).
+3. price_disclosed is now flow-aware: precio_septico in septico, estudio_precio
+   in agua.
+
+Verified LIVE (talk 902, real WhatsApp): Hola -> VOZ_AGUA_1 (records estudio_precio)
+-> "dónde están ubicados" -> VOZ_AGUA_6 -> "¿por qué el precio está tan caro?"
+-> price_disclosed=True -> scope price_objection_agua -> VOZ_AGUA_5 FIRED.
+
+Deployed: image 358280ce, container healthy, pushed 44c38e7.
+Backup: worker.py.bak_ledger. Test lead 19714996 state was reset before the test.

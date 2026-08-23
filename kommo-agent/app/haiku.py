@@ -5,6 +5,7 @@ each classified as one of:
   in_scope_agua       — water study, drilling, location, deposit
   in_scope_septico    — IMHOFF plant, modules, installation, delivery
   qualification_answer — customer answering a question we asked (location, banos, etc)
+  ready_to_proceed_agua — agua buyer signals intent to proceed/buy (advance to close)
   greeting            — Hola, Buenas, dímelo, ¿qué lo que?, ta to
   adjacent_out_of_scope — water when in séptico flow, or séptico when in agua flow
   soft_farewell       — 'Lo voy a pensar', 'Yo le aviso', latent objection disguised as farewell
@@ -59,6 +60,13 @@ in_scope_septico: pregunta sobre planta séptica IMHOFF, módulo 8 o 16,
 qualification_answer: cliente respondiendo una pregunta que le hicimos —
   su pueblo/sector/provincia, cuántos baños tiene, si quiere avanzar,
   confirmación de que escuchó el audio, número de contacto para llamada.
+
+ready_to_proceed_agua: SOLO flujo AGUA. Cliente que EXPRESA INTENCIÓN DE
+  COMPRAR o AVANZAR al siguiente paso — no es una pregunta sobre cómo se paga,
+  es la decisión de proceder. Ejemplos: "quiero comprar", "quiero proceder",
+  "cuál es el próximo paso", "cómo empezamos", "estoy listo", "vamos a hacerlo",
+  "qué necesito para empezar", "cómo procedo". NO confundir con payment_conditions
+  (esa es una PREGUNTA sobre formas/condiciones de pago, no la decisión de avanzar).
 
 greeting: saludo sin contenido de servicio — Hola, Buenas, Buenos días,
   dímelo, ¿qué lo que?, ta to, Hello, Hi, Get Started.

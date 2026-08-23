@@ -911,6 +911,22 @@ async def handle_message(msg: dict) -> None:
             # VOZ_IMHOFF_4: no text followup — Instagram text + Wellington photo handle the close.
             "[[VOZ_IMHOFF_4]]": "",
         }
+        # Advancement-critical bots: their static followup either re-asks for
+        # info already on file (VOZ_AGUA_6 re-asking the sector) or dead-ends a
+        # buy signal. For these, the audio still fires but the followup is
+        # LLM-generated WITH full conversation state (known sector, stage), so it
+        # acknowledges the audio and advances instead of looping. The hardcoded
+        # line in _VOZ_FOLLOWUPS stays only as a fail-open fallback.
+        _STATE_AWARE_FOLLOWUP_BOTS = {
+            "VOZ_AGUA_5", "VOZ_AGUA_6", "VOZ_AGUA_7",
+        }
+        # Human-readable topic of each audio, injected so the LLM acknowledges
+        # what just played in ONE line without repeating its content.
+        _VOZ_AUDIO_TOPIC = {
+            "VOZ_AGUA_5": "la nota de voz sobre por qué el estudio de 3 partes vale la pena (80-90% de éxito)",
+            "VOZ_AGUA_6": "la nota de voz sobre dónde estamos ubicados (Jarabacoa, servimos todo el país)",
+            "VOZ_AGUA_7": "la nota de voz sobre las condiciones y el proceso de pago",
+        }
         # Voice → image pairs: after a voice note fires, send its paired image bot
         # with a 4s pause so the voice note lands before the image.
         # Keyed by the voice bot sentinel; value is the image sentinel to look up
@@ -929,7 +945,8 @@ async def handle_message(msg: dict) -> None:
         # prevent the LLM from contradicting the audio content — extra_system
         # injections are too low-priority and the KB context overrides them.
         _direct_reply = None
-        if _voz_fired and _voz_fired in _VOZ_FOLLOWUPS:
+        if (_voz_fired and _voz_fired in _VOZ_FOLLOWUPS
+                and _voz_fired not in _STATE_AWARE_FOLLOWUP_BOTS):
             _followup = _VOZ_FOLLOWUPS[_voz_fired]
             if _followup:
                 # Hard bypass: send the followup directly, no LLM involved.
@@ -951,8 +968,19 @@ async def handle_message(msg: dict) -> None:
             # R2: detects adjacent_out_of_scope, injects redirect instruction
             _flow_label = "septico" if _is_septico_flow else "agua"
             _current_stage = state.get_stage(talk_id)
+            _known_sector = state.get_sector(talk_id)
+            _sector_line = ""
+            if _known_sector:
+                # Marker payload is 'Provincia|Pueblo' or just 'Pueblo'.
+                _sp = [p.strip() for p in _known_sector.split("|") if p.strip()]
+                _pueblo_known = _sp[-1] if _sp else _known_sector
+                _sector_line = (
+                    f" UBICACIÓN YA CAPTURADA: {_pueblo_known}. "
+                    f"NUNCA vuelvas a preguntar el pueblo o sector — ya lo tienes."
+                )
             _stage_inj = (
-                f"ESTADO ACTUAL: flujo={_flow_label}, etapa={_current_stage}. "
+                f"ESTADO ACTUAL: flujo={_flow_label}, etapa={_current_stage}."
+                f"{_sector_line} "
                 f"Avanza hacia la siguiente etapa en la conversación."
             )
             extra = (_stage_inj + "\n\n" + extra).strip() if extra else _stage_inj
@@ -979,6 +1007,25 @@ async def handle_message(msg: dict) -> None:
             # Deterministic correction for documented slang misreads
             # (drilling-cost vs study-objection, oblique location asks).
             _intents = haiku_pre.correct_scope(_intents, text, _flow_label)
+            # Buy signal in agua flow: route to the close (collect name + phone,
+            # then handoff) rather than any audio or generic answer. Scope
+            # ready_to_proceed_agua is not in _HAIKU_VOZ_MAP, so no audio fires.
+            if (not _is_septico_flow
+                    and any(i.get("scope") == "ready_to_proceed_agua"
+                            for i in _intents)):
+                _proceed_inj = (
+                    "SEÑAL DE COMPRA: el cliente quiere proceder. NO envíes "
+                    "información de pago ni repitas el precio. Pide en UNA línea "
+                    "su nombre completo y un número de teléfono de contacto para "
+                    "coordinar con el equipo. Ejemplo: \"¡Perfecto! Para "
+                    "coordinarle con nuestro equipo, ¿me puede dar su nombre "
+                    "completo y un número de teléfono de contacto? 🙏\" "
+                    "Español dominicano, máximo 2 líneas."
+                )
+                extra = (_proceed_inj + "\n\n" + extra).strip() if extra else _proceed_inj
+                state.advance_stage(talk_id, "price_presented")
+                log.info("talk=%s buy signal (ready_to_proceed_agua) — routing "
+                         "to name+phone collection", talk_id)
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])
@@ -1108,7 +1155,12 @@ async def handle_message(msg: dict) -> None:
             # HAIKU_VOZ AUDIO_BYPASS: if Haiku fired a voice bot this turn,
             # apply the same AUDIO_BYPASS pattern as keyword-fired bots —
             # use the prescribed followup from _VOZ_FOLLOWUPS instead of LLM.
-            if _voz_fired and _voz_fired in _VOZ_FOLLOWUPS:
+            # EXCEPTION: advancement-critical bots generate a state-aware
+            # followup via the LLM (they must not re-ask captured info or
+            # dead-end a buy signal), so they fall through to generation with
+            # an audio-aware injection instead of the hardcoded line.
+            if (_voz_fired and _voz_fired in _VOZ_FOLLOWUPS
+                    and _voz_fired not in _STATE_AWARE_FOLLOWUP_BOTS):
                 _hv_followup = _VOZ_FOLLOWUPS[_voz_fired]
                 if _hv_followup:
                     reply = _hv_followup
@@ -1120,6 +1172,21 @@ async def handle_message(msg: dict) -> None:
                 else:
                     # VOZ_IMHOFF_4 has empty followup — continue to LLM
                     pass
+            elif _voz_fired and _voz_fired in _STATE_AWARE_FOLLOWUP_BOTS:
+                # Audio fired, but the followup must be state-aware. Inject what
+                # the audio just covered so the LLM acknowledges it in one line
+                # without repeating, and advances using the known sector/stage.
+                _topic_desc = _VOZ_AUDIO_TOPIC.get(_voz_fired, "la nota de voz")
+                _audio_inj = (
+                    f"AUDIO_ENVIADO: acabas de enviar {_topic_desc}. "
+                    f"NO repitas su contenido. Reconoce en una línea que la "
+                    f"información va en el audio y AVANZA el proceso con una "
+                    f"sola pregunta. Si la ubicación ya está capturada, NO la "
+                    f"vuelvas a pedir. Máximo 2 líneas, español dominicano."
+                )
+                extra = (_audio_inj + "\n\n" + extra).strip() if extra else _audio_inj
+                log.info("talk=%s HAIKU_VOZ state-aware followup for %s "
+                         "(LLM-generated)", talk_id, _voz_fired)
 
             # Multi-intent: build coverage contract for GPT-4.1
             _multi_prompt = haiku_pre.build_multi_intent_prompt(_intents)
@@ -1257,6 +1324,14 @@ async def handle_message(msg: dict) -> None:
         if _sm:
             _sector = _sm.group(1).strip()
             reply = re.sub(r"\s*\[\[SECTOR:[^\]]+\]\]\s*", " ", reply).strip()
+            # Persist the captured location so later turns never re-ask for it,
+            # and advance the stage — the SECTOR marker rides in the same message
+            # that presents the exact price (per system.md agua step 1).
+            state.set_sector(talk_id, _sector)
+            _old_stg_sec = state.get_stage(talk_id)
+            state.advance_stage(talk_id, "price_presented")
+            if state.get_stage(talk_id) != _old_stg_sec:
+                state.log_stage_transition(talk_id, _old_stg_sec, "price_presented")
         if deposit_requested:
             if not deposit_bot:
                 log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "

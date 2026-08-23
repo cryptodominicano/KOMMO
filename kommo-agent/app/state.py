@@ -100,6 +100,10 @@ def init() -> None:
             c.execute("ALTER TABLE flow_state ADD COLUMN stage_at REAL")
         except Exception:
             pass
+        try:
+            c.execute("ALTER TABLE flow_state ADD COLUMN sector TEXT")
+        except Exception:
+            pass  # column already exists
         c.execute("CREATE TABLE IF NOT EXISTS flow_confirmed ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         # Coverage ledger: tracks which sales topics covered per lead
@@ -648,6 +652,31 @@ def log_stage_transition(talk_id: str, old_stage: str, new_stage: str) -> None:
     import logging as _log
     _log.getLogger("state").info(
         "talk=%s qualification: %s → %s", talk_id, old_stage, new_stage)
+
+
+def set_sector(talk_id: str, sector: str) -> None:
+    """Persist the captured pueblo/provincia so later turns (incl. audio
+    followups) know the location is on file and never re-ask for it.
+    Stored as the raw marker payload, e.g. 'Puerto Plata|Puerto Plata'."""
+    import time as _t
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE flow_state SET sector=? WHERE talk_id=?",
+            (sector, str(talk_id)))
+        if cur.rowcount == 0:
+            c.execute(
+                "INSERT OR IGNORE INTO flow_state "
+                "(talk_id, flow, sector, at) VALUES (?, ?, ?, ?)",
+                (str(talk_id), "agua", sector, _t.time()))
+
+
+def get_sector(talk_id: str) -> str | None:
+    """Return the captured sector marker payload, or None if not yet captured."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT sector FROM flow_state WHERE talk_id=?",
+            (str(talk_id),)).fetchone()
+        return (row[0] or None) if row else None
 
 
 def is_flow_confirmed(talk_id: str) -> bool:

@@ -1,12 +1,20 @@
 # The Gold Coast WhatsApp AI Agent — Build Playbook
 
 **This is the reusable master reference for building a WhatsApp AI sales/service
-agent for any client on Kommo.** Aguas Profundas was the first build; this
-document is everything that generalises. The `CONTEXT-LOG.md` has the
-chronological story with the dead ends; this file is the distilled, forward-
-looking "how to build the next one." Read this before starting a client.
+agent for ANY business on Kommo — water studies, real estate, clinics, retail,
+legal, home services, whatever the client sells.** The engine and every pattern
+here are business-agnostic. Aguas Profundas RD (well-water studies + septic
+tanks) was the first build and is used throughout as the worked EXAMPLE, but the
+example is never the rule — §0.5 tells you how to map any business onto it, and
+the appendix is a fill-in-the-blanks worksheet you complete before writing code.
+
+`CONTEXT-LOG.md` has the chronological story with the dead ends; this file is the
+distilled, forward-looking "how to build the next one." Read this before starting
+a client.
 
 Every rule here was paid for. Where a rule cost us a live failure, it says so.
+Where an example uses water/septic vocabulary, read it as a placeholder for your
+client's equivalent (see the translation table in §0.5).
 
 ---
 
@@ -42,6 +50,52 @@ the *first real voice note still failed*, on a Kommo re-encoding detail nothing
 but a real Kommo attachment could have surfaced. No client goes live until real
 text, voice, photo, and a GPS pin have all run through the production container
 and been read in the logs.
+
+---
+
+## 0.5 The domain abstraction — map ANY business onto this template
+
+Everything in this playbook is written around ONE reusable shape: a **qualify →
+inform → handle objections → close → hand off** sales conversation. The water
+build is just one instance of it. Before you build, translate the client's
+business into these generic roles. If a role doesn't exist for a client, it's
+simply unused — the engine degrades gracefully.
+
+| Generic role (what the engine cares about) | Aguas Profundas example | Your client |
+|---|---|---|
+| **Service line(s)** — the distinct things sold, each with its own flow | water study (agua) / septic tank (séptico) | _fill in_ |
+| **Qualifying fact** — the one input that unlocks a price/recommendation | pueblo/sector → province → price tier | _fill in_ |
+| **Price/recommendation rule** — deterministic mapping from the qualifying fact | province → RD$45k or RD$50k | _fill in_ |
+| **Welcome asset** — first-contact intro (text and/or voice) that discloses the headline offer + price range | VOZ_AGUA_1 (audio) | _fill in_ |
+| **Informational assets** — pre-recorded answers to the common questions/objections, fired by intent | VOZ_AGUA_2 (drilling price), _5 (objection), _6 (location), _7 (payment), _8 (call) | _fill in_ |
+| **Objection asset** — the one that reframes value when they say "too expensive" | VOZ_AGUA_5 | _fill in_ |
+| **Buy signal** — phrases that mean "I'm ready, what's next" | "quiero comprar, cuál es el próximo paso" | _fill in_ |
+| **Close data** — what you must collect before handing to a human | full name + phone | _fill in_ |
+| **Deposit/payment step** — if the bot ever sends payment/bank data (deterministic, gated) | séptico [[DEPOSITO]] → bank Salesbot | _fill in (often: none, human-handled)_ |
+| **Handoff triggers** — when a human must take over | quote request, guarantee/refund question, GPS pin, anything off-KB | _fill in_ |
+| **Handoff stage** — the Kommo pipeline stage that means "a human owns this" | "Atención humana" | _fill in_ |
+| **Scope lock (ALCANCE)** — the one-line domain the agent will NOT step outside | water/drilling/septic only | _fill in_ |
+
+**How the generic engine maps to these roles:**
+- Each **service line** is a `flow` locked per conversation (`flow_state`), so agua
+  assets never fire in a séptico conversation and vice versa. A single-service
+  client just has one flow.
+- The **qualifying fact** is captured, persisted (`sector` column / equivalent),
+  advanced on the **stage machine**, and injected into the prompt every turn so the
+  model never re-asks it (§3.6).
+- **Assets** (voice notes, images, brochures) are Kommo Salesbots fired from code
+  by the classifier's SCOPE (§3.6/§12.18), never by the model emitting a second
+  block, never by a keyword wall.
+- The **objection asset** is state-gated on price disclosure (§3.6).
+- The **buy signal** is its own intent that routes to **close data** collection, not
+  to an FAQ asset (§3.6).
+- **Handoff** moves the lead to the **handoff stage**; the bot goes silent while the
+  lead sits there (§3.6).
+
+Fill in the right-hand column of the table above (the worksheet in the Appendix
+expands it) and the rest of this document tells you how to wire each row. Nothing
+in `app/` changes per client — only the client pack (`clients/<id>/`) and the
+Kommo setup.
 
 ---
 
@@ -532,3 +586,93 @@ before each client; Meta changes these.
 - Automating a step **removes whatever human judgement used to sit there.** The
   bank-details handoff replaced a human gatekeeper with a deterministic trigger;
   that is a feature and a risk in the same breath. Decide it deliberately.
+
+
+---
+
+## Appendix A — New-client onboarding worksheet
+
+Copy this block, fill every field, and keep it in `clients/<id>/BRIEF.md`. Do NOT
+write a system prompt or build a Salesbot until this is complete — an unfilled row
+here is a bug you'll find live instead of now. This is the single artifact that
+turns "the template" into "this client."
+
+### A1. Business & compliance basics
+- Client legal name / brand:
+- What they actually sell (must be a real product/service — see §4 AI-provider ban):
+- Scope lock (ALCANCE) — one sentence, the ONLY domain the agent serves:
+- Languages / dialect / slang register (e.g. DR Spanish; reply-language rule):
+- AI disclosure line (truthful, used when a customer asks if it's a bot):
+- WABA billing partner audited & clean? (§2 — do this FIRST):
+- Kommo plan = Pro or higher + Chats API message package sized to ad volume?
+
+### A2. Service lines (repeat per line)
+- Service line name / internal flow id:
+- Qualifying fact that unlocks a price/recommendation:
+- Price/recommendation RULE (deterministic mapping — put in KB, not prompt):
+- Any tiers / surcharges / edge cases:
+
+### A3. Assets (Salesbots) — list each, with the intent that fires it
+- Welcome asset (first contact; discloses headline offer + price range):
+- Per common question/objection: {intent → asset}:
+- Objection ("too expensive") asset — state-gated on price disclosure:
+- Any image/brochure/technical-sheet assets + the marker that fires them:
+- Voice notes: human voice, 10–30s each, "Convert to voice" set, no text/buttons?
+
+### A4. Flow & close
+- Buy-signal phrases (map to `ready_to_proceed_<flow>`):
+- Close data to collect before handoff (e.g. name + phone + address?):
+- Deposit/payment step: does the BOT ever send bank/payment data? (default: NO,
+  human-handled). If yes: which marker, which cooldown, what's the blast radius?
+- Stage machine stages for this client (greeting → … → handoff):
+
+### A5. Handoff
+- Handoff triggers (quote requests, guarantees/refunds, off-KB, GPS pin, …):
+- Handoff pipeline stage id ("a human owns this" — bot goes silent while here):
+- Who gets the handoff task (responsible Kommo user)? Internal note wording?
+- Re-engagement TEMPLATE approved for out-of-24h-window follow-up? (§4)
+
+### A6. Channels & assets hosting
+- Channels: WhatsApp / Instagram / Facebook (origin allow-list)?
+- Meta Business Suite automations (Instant reply / Away / FAQ) turned OFF? (§3.5)
+- Image assets hosted (jsDelivr/CDN) and referenced in client.toml?
+
+### A7. Knowledge base
+- KB sources (brochures, price lists, FAQs) — chunked on H2, RULES stated explicitly?
+- Per-client Qdrant collection name (1536-dim Cosine)?
+- Any secret (bank details, cédula) lives ONLY in the Salesbot image, never the KB/repo?
+
+### A8. Go-live (the §7 checklist, per client)
+- [ ] WABA billing clean; OTP done; number Connected
+- [ ] All Salesbots built, **triggers empty**, ids wired into client.toml
+- [ ] KB ingested; collection point count verified
+- [ ] Webhook registered with path secret
+- [ ] Deploy gate passed: syntax → `scripts/prompt_guard_uba.py` → import smoke test
+- [ ] LIVE: text ✓ voice ✓ photo ✓ location ✓ objection-with-gate ✓ buy-signal → close ✓ handoff → silence ✓ — all read in logs
+- [ ] LLM provider data-sharing OFF; key owned by agency/client
+- [ ] Re-engagement template approved
+- [ ] Uptime Kuma on /health; TPSP clause in the contract
+
+---
+
+## Appendix B — What is client-agnostic vs client-specific
+
+A one-glance reminder so nothing client-specific leaks into `app/`.
+
+**NEVER changes per client (the engine, `app/`):** webhook handling, dedupe, the
+background-task pattern, retry/backoff, the scope→bot routing mechanism
+(`get_voz_bot_intents`), `correct_scope` framework, the stage machine, the
+price-disclosure gate mechanism, coverage-ledger writes, stage-based handoff
+silence, the spam-filter framework, `sniff_ext` voice handling, the
+prompt-injection guards, and the deploy guard. If you're editing `app/` for a
+client, stop — it belongs in the client pack.
+
+**ALWAYS per client (the client pack `clients/<id>/` + Kommo UI):** `system.md`
+(persona, flows, scope lock, verbatim money blocks), `kb/*.md`, `client.toml`
+(channel origins, messages, behavior tunables, Salesbot ids, asset urls, the
+handoff stage id, price topic keys), the Salesbots themselves, the Qdrant
+collection, and the filled worksheet (Appendix A). The `correct_scope` slang rules
+and the classifier's intent taxonomy are engine-level but their VOCABULARY (which
+words mean "drill cost" for this client) is tuned from that client's real
+transcripts — add a rule only for a MEASURED systematic misread (§3.6/§12.19).
+

@@ -41,6 +41,14 @@ _HALLUCINATIONS = {
     "vaina, tiguere,",  # prompt leakage fragments
 }
 
+# Whisper training-data artifact substrings — sites/phrases it hallucinates on
+# silence (verbatim from its subtitle-heavy training set). Matched as substrings.
+_HALLUCINATION_SUBSTRINGS = {
+    "alimmenta.com", "amara.org", "www.", "http://", "https://",
+    "más información www", "mas informacion www", "subtítulos", "subtitulos",
+    "subscribe", "suscríbete", "gracias por ver",
+}
+
 # Prompt-dump detection: if 5+ domain hint words appear, Whisper echoed our prompt.
 _PROMPT_DUMP_WORDS = [
     "vaina", "tiguere", "motoconcho", "diache", "colmado", "guagua",
@@ -95,11 +103,23 @@ class TranscriptionRejected(Exception):
     """Audio was unusable — ask the client to resend rather than guess."""
 
 
+_URL_RE = re.compile(r"(https?://|www\.|\b\w[\w-]*\.(?:com|org|net|io|co)\b)", re.I)
+
+
 def _looks_hallucinated(text: str) -> bool:
     if _is_prompt_dump(text):
         return True
     norm = re.sub(r"\s+", " ", text.strip().lower())
     if norm in _HALLUCINATIONS:
+        return True
+    # Known training-data artifact substrings (alimmenta.com, subtitle credits…).
+    if any(sub in norm for sub in _HALLUCINATION_SUBSTRINGS):
+        return True
+    # A URL in a VOICE-NOTE transcript is almost always a Whisper silence
+    # hallucination — customers don't dictate web addresses. Reject when a URL
+    # appears in a short transcript (a long genuine message merely mentioning a
+    # site in passing is spared).
+    if _URL_RE.search(norm) and len(norm.split()) <= 8:
         return True
     # Short filler with no domain signal
     if len(norm) < 12 and not re.search(r"\d", norm):

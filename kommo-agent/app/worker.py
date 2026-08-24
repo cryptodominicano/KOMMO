@@ -559,6 +559,13 @@ async def handle_message(msg: dict) -> None:
                     )
                     log.info("talk=%s agua welcome text + sector question sent "
                              "(VOZ_AGUA_1 deferred to post-price)", talk_id)
+                    # First contact is COMPLETE for this turn: the welcome text
+                    # already asked for the pueblo/sector. Return so the LLM does
+                    # NOT also generate a reply this turn — otherwise it produces a
+                    # SECOND location question ("¡Perfecto! ¿en qué pueblo...?").
+                    # (Mirrors how the audio-bypass path used to suppress the LLM
+                    # turn when VOZ_AGUA_1 fired here.)
+                    return
                 except KommoError as e:
                     log.error("talk=%s agua welcome text failed: %s", talk_id, e)
 

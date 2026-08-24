@@ -403,18 +403,42 @@ against logs. These generalise to any client with a qualify -> price -> close fl
   comprehension loop targets and except-locals. It failed the bug fixture and passed
   the clean engine; it has since gated every deploy.
 
+- **DEPLOY FROM SOURCE VIA `docker compose build`. NEVER `docker commit`.** This
+  cost a live incident (Aug 2026). The Dockerfile `COPY`s `app/ clients/ scripts/`
+  into the image at build time — the git repo is the source of truth, the image is
+  rebuilt from it. `docker commit` snapshots a running container's writable layer
+  into a *different* tag (`kommo-agent:latest`) than the one compose builds and runs
+  (`kommo-agent-kommo-agent:latest`). So every `docker commit` + `docker restart`
+  worked ONLY because restart reuses the live container's writable layer — the
+  moment anyone ran `docker compose up -d` (e.g. for an `.env` change), compose
+  recreated from ITS image and silently discarded every committed change. Symptoms:
+  the container boots with old code, or `ImportError` for files that "were there."
+  If you ever see that, the fix is to rebuild from source (below), not re-commit.
+
 **Deploy cycle (use this exact order every time):**
 ```
+# --- validate (inside container or on the clone) ---
 1. python3 -c "import ast; ast.parse(open('app/worker.py').read())"      # syntax
-2. python3 scripts/prompt_guard_uba.py app/worker.py app/haiku.py app/state.py app/kommo.py   # UBA guard, exit 1 blocks
+2. python3 scripts/prompt_guard_uba.py app/worker.py app/haiku.py app/state.py app/kommo.py  # UBA guard, exit 1 blocks
 3. python3 -c "from app import worker"                                    # import smoke test
-4. docker commit kommo-agent kommo-agent:latest
-5. docker restart kommo-agent && sleep 8 && curl -s .../health
-6. copy changed files to the clone, git commit + push, update CONTEXT-LOG.md
+# --- publish source of truth ---
+4. copy changed files into the repo clone, git commit + push, update CONTEXT-LOG.md
+# --- rebuild the image from source ON THE HOST (compose build context is host-side) ---
+5. cd /root/kommo-agent   # NOT a git checkout — it's the build context (compose + .env + a copy of the source)
+   # sync latest source into the build context (clone to /tmp, copy app/ clients/ scripts/ Dockerfile requirements.txt over)
+   docker compose build
+   docker compose up -d
+6. docker exec kommo-agent curl -s http://localhost:8080/health   # verify
+   docker exec kommo-agent python3 -c "from app.config import settings; print(settings.whisper_model_openai)"  # verify env/config
 ```
-KB changes require a separate re-ingest. `docker restart` does NOT reload env_file
-(use `docker compose up -d` for env changes); a plain code change is fine on
-commit+restart because uvicorn caches modules at startup.
+Notes: `/root/kommo-agent` is the HOST build context and is NOT itself a git repo —
+sync the repo source into it before `docker compose build` (a proper end-state is to
+make it a real git checkout so deploy = `git pull && docker compose build && up -d`).
+`docker compose build && up -d` is host-only (needs the host build context + daemon);
+it cannot be driven through infra-mcp. `.env` changes ALSO require `docker compose up -d`
+(a plain `docker restart` does NOT reload env_file). KB changes require a separate
+re-ingest. Only reach for `docker restart` for a fast in-container hotfix you will
+immediately also push + rebuild — never as the deploy itself.
 
 - **Read real transcripts via the API to find flow bugs — every fix in 3.6 came
   from `GET /talks/{id}/messages` + matching the worker logs by talk_id, not from

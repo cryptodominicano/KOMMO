@@ -3872,3 +3872,50 @@ new KB, same engine) inherits every pattern from this session:
 
 Engine code, guard, and these docs are all pushed to main. The playbook + spec are
 now the authoritative "build the next one" reference.
+
+### Voice-note anti-hallucination hardening + escalation ladder (Aug 23-24, 2026).
+
+Audit of a day of real traffic (15 genuine customer talks, 907-921) found the
+Whisper hallucination filter false-rejecting legitimate voice notes: 2 of 9 real
+voice notes rejected because Whisper echoed our own prompt hint back verbatim on
+low-quality audio (the transcript WAS our slang+domain glossary), which the
+5+-hint-word "prompt-dump" filter then rejected. Research (Advanced Research report,
+this session) confirmed the mechanism and the fixes.
+
+Changes (research-backed, zero-hallucination policy):
+- config.py + .env: model gpt-4o-mini-transcribe -> whisper-1. The gpt-4o-*-transcribe
+  models have a documented, still-open bug of echoing the prompt verbatim on Spanish
+  non-speech audio, and lack verbose_json. whisper-1 exposes no_speech_prob/avg_logprob
+  /compression_ratio and does not echo.
+- transcribe.py: PROMPT_HINT cut from a dialect-sentence + slang + domain wall to a
+  short DOMAIN-ONLY glossary (161 chars) — the style sentence was what got echoed.
+  response_format=verbose_json; reject on API signals (no_speech_prob>0.6 & avg_logprob
+  <-1; avg_logprob<-1.2; compression_ratio>2.4). Prompt-echo detector rewritten to match
+  the hint's comma-LIST STRUCTURE, never a domain-word count — real customers using
+  "pozo/perforación/estudio" are no longer rejected (verified).
+- state.py: audio_fail counter (incr_audio_fail / reset_audio_fail).
+- worker.py: _handle_audio_fail escalation ladder — 1st incomprehensible audio asks to
+  REPEAT, 2nd asks to TYPE it, 3rd HANDS OFF to a human. Reset on any good transcription.
+- client.toml: audio_retry_1 / audio_retry_2 / audio_handoff.
+(Silero VAD pre-gate deferred to phase 2 — verbose_json signals + short prompt closed
+the gap without adding onnxruntime/torch to the image.)
+
+### DEPLOY INCIDENT + PERMANENT FIX: docker commit was writing to the wrong image tag.
+All session, `docker commit kommo-agent kommo-agent:latest` was the deploy step — but
+compose builds/runs `kommo-agent-kommo-agent:latest`, a DIFFERENT tag. Every commit +
+`docker restart` worked ONLY because restart reuses the live container's writable layer.
+When `docker compose up -d` was run for the whisper-1 .env change, compose recreated from
+its own (stale) image and DISCARDED all committed code — container booted with no app
+files, ImportError on haiku. Recovered by retagging the good image, then did the PROPER
+fix: rebuilt the compose image from repo source via `docker compose build` on the host.
+Root cause: `docker commit` is an anti-pattern; the Dockerfile COPYs app/clients/scripts,
+so the repo is the source of truth and the image must be rebuilt from it.
+Deploy cycle in CLAUDE.md + playbook §3.7 corrected to build-from-source. NOTE:
+/root/kommo-agent is the host build context, NOT a git checkout — sync source in before
+build (tidy end-state: make it a real checkout). compose build/up is host-only.
+
+Deployed: rebuilt image kommo-agent-kommo-agent:latest from source, whisper-1 active,
+healthy, all audio changes verified live. Pushed 4114cfd (code). Backups:
+transcribe.py.bak_halluc, worker.py.bak_halluc, state.py.bak_halluc.
+Open: VPS still shows "System restart required" (unattended upgrades) — reboot in a quiet
+window, which also completes the earlier NIC power-management fix.

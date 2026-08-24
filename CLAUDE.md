@@ -230,14 +230,14 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 
 ## 13. Infrastructure rules
 
-- `docker restart` reloads from committed image — always `docker commit` first
+- **DEPLOY FROM SOURCE: `docker compose build && docker compose up -d` on the host. NEVER `docker commit`** — the Dockerfile COPYs app/clients/scripts; the repo is the source of truth. `docker commit` writes to tag `kommo-agent:latest` but compose builds/runs `kommo-agent-kommo-agent:latest` (a DIFFERENT tag), so commits are silently discarded on the next `compose up` (live incident, Aug 2026)
 - KB changes require re-ingestion: `docker exec -w /srv kommo-agent python3 scripts/ingest_kb.py`
 - Every Salesbot must have empty Triggers panel in Kommo UI
 - Never push to Vercel manually — push to GitHub
 - infra-mcp drops under load — `docker restart infra-mcp` resolves
-- **Deploy cycle: syntax check → `scripts/prompt_guard_uba.py` (UBA guard, blocks on exit 1) →
-  import smoke test → `docker commit` → restart → health → push + update CONTEXT-LOG**
-- `docker restart` does NOT reload env_file — use `docker compose up -d` for env changes
+- **Deploy cycle: syntax check → `scripts/prompt_guard_uba.py` (UBA guard, blocks on exit 1) → import smoke test → git commit + push → on host: sync source into /root/kommo-agent build context → `docker compose build` → `docker compose up -d` → health → update CONTEXT-LOG**
+- `/root/kommo-agent` is the host build context, NOT a git checkout — sync repo source into it before building. compose build/up is host-only (can't be driven through infra-mcp)
+- `.env` changes ALSO require `docker compose up -d` (plain `docker restart` does NOT reload env_file). `docker restart` is only a fast in-container hotfix you must immediately also push + rebuild
 
 ---
 

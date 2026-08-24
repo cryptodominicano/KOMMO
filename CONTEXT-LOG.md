@@ -4002,3 +4002,30 @@ algún detalle más? 🙏"
 Deploy gate + UBA guard passed. Pushed cf40944. Backup: worker.py.bak_trust.
 PENDING: live test — agua trust question fires the Wellington photo + good text;
 price objection shows the exact approved line.
+
+### Seguimiento (nurture) stage + premature-handoff gate (Aug 24).
+
+Product question from a live lead (talk 948): a soft close ("lo voy a pensar")
+should NOT go to human handoff, and that lead was sitting in Atención humana.
+Investigation showed two separate things.
+
+(1) The soft close itself was handled correctly — MINITS graceful hold, no handoff
+(the "aquí estaremos cuando esté listo" reply). But those warm-not-ready leads had
+nowhere to go. Best practice: a dedicated nurture stage. Created Kommo stage
+"Seguimiento" (id 110761119, pipeline 14130431, sort 70, plain name — emoji save
+blank). The graceful-hold branch now moves the lead there (Kommo pipeline move only,
+NOT the forward-only internal STAGES funnel — Seguimiento is a pause). Guard: never
+moves a lead already in Atención humana (real handoff outranks nurture).
+
+(2) The Atención humana placement came EARLIER, at the price step, not the soft
+close. Root cause: the model appended [[HANDOFF]] on a messy location spelling
+("Maria tridad Riosan juan") even though it resolved San Juan and gave the price.
+Dual-layer fix: (a) code gate — if a reply carries a [[SECTOR:]] price marker,
+suppress any co-occurring [[HANDOFF]] (a priced lead is never a handoff moment);
+(b) system.md — unrecognizable-location handoff only when NO price is given, and
+never handoff+price in the same message.
+
+config: seguimiento_status_id = 110761119. Deploy gate + UBA guard passed. Pushed
+f21ff08. Backup: worker.py.bak_seguimiento.
+PENDING live test: (a) soft close moves lead to Seguimiento, not Atención humana;
+(b) a messy-but-resolvable location gets priced with NO handoff.

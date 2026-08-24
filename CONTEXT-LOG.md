@@ -4088,3 +4088,17 @@ tracing PATCH payloads and observing the position dependency.
 
 Diagnostic note: added and then REMOVED a LEAD_PATCH_TRACE in kommo.py _req
 (restored from kommo.py.bak_trace, container healthy). Not committed.
+
+### Engine-driven pipeline progression wired (Aug 24).
+
+With the acceptance mis-routing fixed, the engine now drives the active funnel so the
+board reflects the conversation. Helper _advance_pipeline_stage moves a lead FORWARD
+through [Initial contact -> Discussions] only, with guards: forward-only, Incoming->
+Initial contact entry only, and NEVER touches a lead already in a terminal/parked
+stage (Atención humana / Seguimiento / No interesado / Closed). Wired: agua welcome ->
+Initial contact (idempotent with Kommo acceptance); price step -> Discussions. Buy
+signal + name/phone stay in Discussions (client deleted Decision making + Contract
+discussion as not meaningful). config gained incoming/initial_contact/discussions ids.
+Pushed be0f40d. Backup worker.py.bak_pipeline.
+PENDING live test: basic convo flows Incoming -> Initial contact -> Discussions and
+never touches Atención humana; handoff/soft/hard closes still land in their stages.

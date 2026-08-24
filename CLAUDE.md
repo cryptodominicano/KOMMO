@@ -102,6 +102,26 @@ Human team handles: GPS pin, satellite photo, linderos, deposits, scheduling.
 
 ## 6. Pipeline stages
 
+Engine-driven pipeline progression (2026-08-24). Kommo Incoming-leads acceptance
+routes to the ADJACENT stage by pipeline ORDER, so Initial contact must stay
+directly right of Incoming leads. The engine then advances the active funnel:
+
+| Status ID | Stage | Set by |
+|---|---|---|
+| 109083023 | Incoming leads | (entry) |
+| 109083027 | Initial contact | engine on welcome + Kommo acceptance |
+| 109083031 | Discussions | engine at price step (also buy signal + name/phone) |
+| 109168423 | Atención humana | engine on real handoff only |
+| 110761119 | Seguimiento | engine on soft close |
+| 110761539 | No interesado | engine on hard close |
+| 142 | Closed - won | (deposit paid) |
+| 143 | Closed - lost | (manual) |
+
+Decision making + Contract discussion were deleted (not meaningful for the water
+flow). Active funnel the engine advances = [Initial contact, Discussions]; terminal
+stages are never auto-overridden.
+
+
 | Status ID | Stage |
 |---|---|
 | `109083023` | Incoming leads (unsorted) |

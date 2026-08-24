@@ -982,7 +982,7 @@ async def handle_message(msg: dict) -> None:
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
-            "VOZ_AGUA_5": "Le entiendo, y se lo dejo por escrito por si el audio no le llegó bien: somos de las únicas compañías que hacen el estudio completo y confiable, para que no pierda dinero en una perforación sin resultado. ¿Le gustaría que le explique algún detalle más? 🙏",
+            "VOZ_AGUA_5": "¿Le gustaría que le explique algún detalle más sobre el valor del estudio? 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
                            if _is_septico_flow else
                            "Con mucho gusto le cotizamos. 😊 ¿En qué pueblo o sector desea realizar el estudio? 🙏"),

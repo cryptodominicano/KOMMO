@@ -72,17 +72,21 @@ WhatsApp / Instagram / Facebook message
 
 ---
 
-## 5. Agua flow (CURRENT — simplified 2026-08-22)
+## 5. Agua flow (CURRENT — VOZ_AGUA_1 moved post-price 2026-08-24)
 
 ```
-1. Welcome text + VOZ_AGUA_1 (process, 80-90% success, range RD$45k-50k)
-2. Ask: pueblo/sector of the terrain
+1. Welcome — TEXT ONLY. Greeting + asks pueblo/sector in the same text.
+   (VOZ_AGUA_1 does NOT fire here anymore.)
+2. Customer gives location.
 3. Confirm province → disclose EXACT price + deposit info:
    "Perfecto, [Pueblo] pertenece a la provincia [Provincia]. El estudio completo
    (topográfico + radiestesia + geohidrológico) tiene un costo de RD$[X]. Para
    iniciar se requiere un depósito de RD$5,000 (estudio topográfico) y luego
    RD$10,000 para la visita presencial — el equipo le coordina todo.
    ¿Tiene alguna pregunta antes de proceder? [[SECTOR:Provincia|Pueblo]]"
+   → system fires VOZ_AGUA_1 RIGHT AFTER this price text (reinforces price,
+     writes estudio_precio to the ledger = opens the price-objection gate).
+     No followup (location already captured; price text already invited questions).
 4. Answer questions — Haiku classifies intent → fires voice bot automatically
 5. Ask: "¿Está listo para proceder con el análisis de su propiedad? 😊"
 6. YES → "¿me puede dar su nombre completo y un número de teléfono de contacto?"

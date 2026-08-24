@@ -3946,3 +3946,33 @@ Every fix from the whole Aug 23-24 session confirmed working together, live.
 Docs updated: COMMERCIAL_GRADE_SPEC §12.26 (voice-note anti-hallucination +
 escalation, full pattern + research), playbook §3.6 (concise reusable version) +
 capability-matrix row.
+
+### Agua flow reorder: VOZ_AGUA_1 welcome audio moved to AFTER the price (Aug 24).
+
+Product decision: first contact should be text-only asking pueblo/sector; give the
+price; THEN send the welcome audio VOZ_AGUA_1; then Q&A. Previously VOZ_AGUA_1 fired
+at first contact (welcome text + audio immediately).
+
+Past-context subtlety that shaped the fix: the pueblo/sector question was NOT in the
+welcome text — it lived in VOZ_AGUA_1's AUDIO_BYPASS followup (worker.py ~line 981).
+So moving the audio required (a) folding the sector question into the welcome text,
+and (b) firing VOZ_AGUA_1 post-price with NO followup — otherwise it would re-ask the
+sector we already captured (the exact repeated-sector bug fixed earlier this session).
+
+worker.py:
+- Welcome block (~544): text-only, now includes "¿En qué pueblo o sector...?"; the
+  VOZ_AGUA_1 run_bot + ledger write removed from first contact.
+- SECTOR block (~1411): sets _fire_voz1_after_price = True after advance to
+  price_presented.
+- After k.send_message(reply) (~1530): fires VOZ_AGUA_1 post-price, writes
+  estudio_precio to the coverage ledger (price gate still opens on the same turn, so
+  a next-message objection still finds it open), guarded by voice_already_sent, no
+  followup. Used locals().get('_fire_voz1_after_price') to avoid branch-scoped UBA —
+  prompt_guard_uba.py PASSED.
+system.md: agua step 1 notes the system sends VOZ_AGUA_1 right after the price.
+
+Deploy gate passed (syntax + UBA guard + import smoke). Pushed e268f39. Restarted to
+load code into the running process; permanent deploy via docker compose build on host.
+Backups: worker.py.bak_voz1move, system.md.bak_voz1move.
+PENDING: live test a fresh agua conversation — confirm welcome is text-only with the
+sector question, VOZ_AGUA_1 lands AFTER the price, and the sector is NOT re-asked.

@@ -982,7 +982,7 @@ async def handle_message(msg: dict) -> None:
         _VOZ_FOLLOWUPS = {
             "VOZ_AGUA_1": "¿En qué pueblo o sector está el terreno donde desea hacer el estudio? 🙏",
             "VOZ_AGUA_2": "¿Tiene alguna otra consulta sobre el proceso? Con gusto le oriento. 🙏",
-            "VOZ_AGUA_5": "Entendemos perfectamente. 😊 Cualquier duda adicional, aquí estamos para orientarle. 🙏",
+            "VOZ_AGUA_5": "Le entiendo, y se lo dejo por escrito por si el audio no le llegó bien: somos de las únicas compañías que hacen el estudio completo y confiable, para que no pierda dinero en una perforación sin resultado. ¿Le gustaría que le explique algún detalle más? 🙏",
             "VOZ_AGUA_6": ("Cualquier consulta que tenga, aquí estamos. 🙏 ¿Desea avanzar?"
                            if _is_septico_flow else
                            "Con mucho gusto le cotizamos. 😊 ¿En qué pueblo o sector desea realizar el estudio? 🙏"),
@@ -1001,12 +1001,14 @@ async def handle_message(msg: dict) -> None:
         # acknowledges the audio and advances instead of looping. The hardcoded
         # line in _VOZ_FOLLOWUPS stays only as a fail-open fallback.
         _STATE_AWARE_FOLLOWUP_BOTS = {
-            "VOZ_AGUA_5", "VOZ_AGUA_6", "VOZ_AGUA_7",
+            # VOZ_AGUA_5 removed 2026-08-24: the price-objection followup is now a
+            # fixed client-approved line (in _VOZ_FOLLOWUPS), not LLM-generated, so
+            # the text reliably complements the audio with the exact approved wording.
+            "VOZ_AGUA_6", "VOZ_AGUA_7",
         }
         # Human-readable topic of each audio, injected so the LLM acknowledges
         # what just played in ONE line without repeating its content.
         _VOZ_AUDIO_TOPIC = {
-            "VOZ_AGUA_5": "la nota de voz sobre por qué el estudio de 3 partes vale la pena (80-90% de éxito)",
             "VOZ_AGUA_6": "la nota de voz sobre dónde estamos ubicados (Jarabacoa, servimos todo el país)",
             "VOZ_AGUA_7": "la nota de voz sobre las condiciones y el proceso de pago",
         }
@@ -1109,6 +1111,28 @@ async def handle_message(msg: dict) -> None:
                 state.advance_stage(talk_id, "price_presented")
                 log.info("talk=%s buy signal (ready_to_proceed_agua) — routing "
                          "to name+phone collection", talk_id)
+            # Trust/credibility question in AGUA flow: the séptico trust audio
+            # (VOZ_IMHOFF_4) is factory/product-framed and does NOT fit water
+            # studies, so it is intentionally NOT fired here. Instead: inject a
+            # trust-specific instruction so the LLM's TEXT covers the key points,
+            # and fire the "quién es Wellington" photo (bot 85808) after the reply.
+            _fire_wellington_photo = False
+            if (not _is_septico_flow
+                    and any(i.get("scope") == "trust_question" for i in _intents)):
+                _trust_inj = (
+                    "PREGUNTA DE CONFIANZA: el cliente quiere saber si somos una "
+                    "empresa real y confiable. Responde en texto, cálido y breve "
+                    "(máximo 3 líneas, español dominicano), cubriendo: somos una "
+                    "empresa formal y registrada; con gusto le compartimos el "
+                    "registro mercantil si lo desea; el señor Wellington Valenzuela "
+                    "(dueño) está disponible para atenderle directamente; y puede "
+                    "ver trabajos y testimonios en Instagram @aguasprofundas_rd. "
+                    "Cierra invitando a avanzar con UNA pregunta. Sin marcadores."
+                )
+                extra = (_trust_inj + "\n\n" + extra).strip() if extra else _trust_inj
+                _fire_wellington_photo = True
+                log.info("talk=%s trust_question (agua) — text reply + Wellington "
+                         "photo, no septico audio", talk_id)
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])
@@ -1535,6 +1559,21 @@ async def handle_message(msg: dict) -> None:
             if locals().get('_haiku_voz_fired'):
                 await asyncio.sleep(2.0)
             await k.send_message(talk_id, reply)
+            # Trust question (agua): fire the "quién es Wellington" photo after the
+            # trust text so the customer sees the owner. Guarded once per convo.
+            if (locals().get('_fire_wellington_photo')
+                    and entity_id and _is_waba):
+                _wphoto = (client_pack.pack().get("salesbot", {})
+                           .get("wellington_lider_foto_bot_id", 0))
+                if _wphoto and not state.voice_already_sent(talk_id, "WELLINGTON_FOTO"):
+                    try:
+                        await asyncio.sleep(2.0)
+                        await k.run_bot(int(_wphoto), entity_id, _entity_type(msg))
+                        state.mark_voice_sent(talk_id, "WELLINGTON_FOTO")
+                        log.info("talk=%s fired Wellington photo %s (trust)",
+                                 talk_id, _wphoto)
+                    except KommoError as e:
+                        log.error("talk=%s Wellington photo failed: %s", talk_id, e)
             # NEW ORDER: VOZ_AGUA_1 fires right AFTER the price text (flagged at
             # the [[SECTOR]] step). It reinforces the price the customer just read
             # and records estudio_precio in the ledger (opens the price-objection

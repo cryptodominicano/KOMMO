@@ -1361,6 +1361,12 @@ async def handle_message(msg: dict) -> None:
                     ).strip()
                     log.info("talk=%s soft_farewell — graceful hold (probe already sent)",
                              talk_id)
+                    # CRM hygiene: a confirmed soft close ("lo voy a pensar", "le
+                    # aviso") is a warm-but-not-ready lead, NOT a human-handoff.
+                    # Move it to the Seguimiento (nurture) stage so it leaves the
+                    # active/human queue and a human can follow up on a cadence.
+                    # Never move a lead already handed off to a human.
+                    _move_to_seguimiento = True
 
             # Adjacent out-of-scope: inject one-turn redirect
             if haiku_pre.has_adjacent_out_of_scope(_intents):
@@ -1386,6 +1392,19 @@ async def handle_message(msg: dict) -> None:
 
         # Model signals handoff with a sentinel; the pause is enforced here.
         handoff = marker in reply
+        # PREMATURE-HANDOFF GATE: if this same message ALSO discloses the price
+        # (carries a [[SECTOR:...]] marker), the location was successfully
+        # resolved and priced — that is NOT a handoff moment. The model sometimes
+        # appends [[HANDOFF]] on messy/ambiguous location spellings (e.g. "Maria
+        # tridad Riosan juan") even though it correctly resolved the province and
+        # gave the price. Suppress the handoff here so a priced lead is never sent
+        # to Atención humana before name+phone. The legitimate agua handoff fires
+        # only AFTER name+phone (system.md agua step), or for foreign/truly
+        # unrecognizable locations where NO price is given (no SECTOR marker).
+        if handoff and "[[SECTOR:" in reply:
+            handoff = False
+            log.info("talk=%s premature-handoff SUPPRESSED — price disclosed "
+                     "(SECTOR marker present)", talk_id)
         reply = reply.replace(marker, "").strip()
 
         # IMAGE WORKAROUND: send_message is text-only, but a Salesbot can attach
@@ -1559,6 +1578,30 @@ async def handle_message(msg: dict) -> None:
             if locals().get('_haiku_voz_fired'):
                 await asyncio.sleep(2.0)
             await k.send_message(talk_id, reply)
+            # Soft close: move the lead to Seguimiento (nurture) — warm, not ready,
+            # not a human handoff. Guard: skip if already in the human stage (a
+            # real handoff outranks a nurture move).
+            if locals().get('_move_to_seguimiento') and entity_id:
+                _seg_id = (client_pack.pack().get("kommo", {})
+                           .get("seguimiento_status_id"))
+                _ho_id = (client_pack.pack().get("kommo", {})
+                          .get("handoff_status_id"))
+                if _seg_id:
+                    try:
+                        _cur = await k.get_lead_status(int(entity_id))
+                        if _cur is None or int(_cur) != int(_ho_id or 0):
+                            # Kommo pipeline move only. NOT the internal STAGES
+                            # machine — that is a forward-only funnel (greeting →
+                            # ... → handoff); Seguimiento is a PAUSE, not funnel
+                            # progress, so it lives only on the Kommo board.
+                            await k.update_lead(int(entity_id), status_id=int(_seg_id))
+                            log.info("talk=%s soft close — moved to Seguimiento %s",
+                                     talk_id, _seg_id)
+                        else:
+                            log.info("talk=%s soft close — lead in human stage, "
+                                     "NOT moving to Seguimiento", talk_id)
+                    except Exception as _e:
+                        log.warning("talk=%s Seguimiento move failed: %s", talk_id, _e)
             # Trust question (agua): fire the "quién es Wellington" photo after the
             # trust text so the customer sees the owner. Guarded once per convo.
             if (locals().get('_fire_wellington_photo')

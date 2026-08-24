@@ -3976,3 +3976,29 @@ load code into the running process; permanent deploy via docker compose build on
 Backups: worker.py.bak_voz1move, system.md.bak_voz1move.
 PENDING: live test a fresh agua conversation — confirm welcome is text-only with the
 sector question, VOZ_AGUA_1 lands AFTER the price, and the sector is NOT re-asked.
+
+### Agua trust-question handling + fixed VOZ_AGUA_5 followup wording (Aug 24).
+
+Live test talk 950 surfaced two issues, both fixed.
+
+(1) "¿Cómo sé que son un negocio real?" in the AGUA flow got no audio and a weak
+text reply. Cause: trust_question maps only to the séptico audio [[VOZ_IMHOFF_4]]
+(in _SEPTICO_ONLY_INTENTS), which the agua flow-guard correctly skips — but nothing
+replaced it. Product decision: do NOT fire VOZ_IMHOFF_4 in agua (its audio is
+factory/product-framed: factory-direct pricing, registro mercantil, not water-study
+appropriate). Fix: new agua trust branch injects an LLM instruction so the TEXT
+covers registered company + registro mercantil on request + Wellington reachable +
+Instagram @aguasprofundas_rd testimonials, and fires the Wellington photo (85808)
+after the reply. Guarded once per convo via voice_sent key "WELLINGTON_FOTO".
+
+(2) VOZ_AGUA_5 (price objection) followup wording replaced with the client-approved
+fixed line and removed from _STATE_AWARE_FOLLOWUP_BOTS so it's no longer LLM-
+generated — the text now reliably complements the audio with the exact approved
+wording: "Le entiendo, y se lo dejo por escrito por si el audio no le llegó bien:
+somos de las únicas compañías que hacen el estudio completo y confiable, para que
+no pierda dinero en una perforación sin resultado. ¿Le gustaría que le explique
+algún detalle más? 🙏"
+
+Deploy gate + UBA guard passed. Pushed cf40944. Backup: worker.py.bak_trust.
+PENDING: live test — agua trust question fires the Wellington photo + good text;
+price objection shows the exact approved line.

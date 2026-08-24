@@ -388,6 +388,25 @@ against logs. These generalise to any client with a qualify -> price -> close fl
   ignored paying customer. Test it in both directions (legit names pass, real spam
   rejected) before shipping.
 
+- **Voice notes hallucinate on silence — filter in layers and NEVER act on a
+  guess.** Any client taking WhatsApp voice notes hits this. Hosted Whisper emits
+  confident filler on silent/low-energy audio. Layered fix (all proven live):
+  use `whisper-1` not `gpt-4o-transcribe` (the latter echoes the prompt on Spanish
+  silence); keep a SHORT domain-only prompt hint (a long style sentence is what
+  gets echoed); request `verbose_json` and reject on `no_speech_prob`/`avg_logprob`
+  /`compression_ratio`. **Key lesson: confidence gates cannot catch a CONFIDENT
+  hallucination** — a training-data artifact ("Más información www.alimmenta.com")
+  passes every logprob gate, reaches the LLM, gets a real answer, and (worst)
+  RESETS any audio-retry counter. So pair the confidence gates with a content
+  blocklist: known artifact substrings + a URL detector (a web address in a short
+  voice-note transcript is a hallucination — customers don't dictate URLs). Make
+  the prompt-echo detector match the hint's comma-LIST STRUCTURE, never a
+  domain-word count, or you reject real customers saying "pozo, perforación."
+- **Graceful audio escalation, never a dead-end.** A per-conversation fail counter:
+  1st incomprehensible audio → ask to repeat; 2nd → ask to type it; 3rd → hand off
+  to a human. Reset on any good transcription. (Full pattern + research in
+  COMMERCIAL_GRADE_SPEC §12.26.)
+
 ## 3.7 Deploy discipline and the static guard (added Aug 2026)
 
 - **`ast.parse` is a syntax check, not a bug check — and neither pyflakes nor pylint
@@ -591,6 +610,7 @@ before each client; Meta changes these.
 | Stage-based handoff silence | lead in human stage -> bot fully silent; move out = reactivate | ✅ live |
 | Name-safe spam filter | word-boundary phrases + engaged-lead bypass (no name false-drop) | ✅ live |
 | Pre-deploy UBA guard | AST use-before-assignment guard gates every deploy | ✅ live |
+| Voice-note anti-hallucination | whisper-1 + verbose_json gates + artifact/URL blocklist + retry→type→human ladder | ✅ live |
 
 ---
 

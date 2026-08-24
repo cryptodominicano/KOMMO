@@ -1187,6 +1187,66 @@ collisions passing, real chain messages rejected.
 
 ---
 
+## Section 12.26 — Voice-Note Anti-Hallucination + Graceful Escalation
+
+**Problem:** On silent/low-energy WhatsApp voice notes (common — customers tap
+record by accident, or in a noisy colmado), hosted Whisper HALLUCINATES confident
+filler and the agent acts on it as real intent. Three distinct live failures:
+(1) the model echoed our own long prompt hint back verbatim; (2) a confident
+training-data artifact ("Más información www.alimmenta.com", "Subtítulos por la
+comunidad de Amara.org") passed every confidence gate and reached the LLM, which
+answered "Excelente pregunta…" to nonsense AND reset the escalation counter;
+(3) generic filler ("gracias por ver el video").
+
+**Root-cause hierarchy (research-backed — OpenAI cookbook, AGH ICASSP 2025,
+openai/whisper + whisper.cpp silence-hallucination threads):**
+Whisper was trained on 680k h of weakly-labeled internet/subtitle audio, so
+non-speech segments map to fluent text. Hosted APIs do NOT expose the local
+levers (no_speech_threshold, VAD, condition_on_previous_text), so the fix is
+client-side + response-filtering.
+
+**Pattern (layers, cheapest first — this is a zero-hallucination policy: NEVER
+pass a guessed transcript downstream):**
+1. **Model choice.** Use `whisper-1` (or Groq `whisper-large-v3`), NOT
+   `gpt-4o[-mini]-transcribe` — the gpt-4o transcribe models have a documented,
+   open bug of echoing the prompt verbatim on non-speech audio, WORSE in Spanish,
+   and don't support `verbose_json`.
+2. **Short prompt hint.** A long dialect/style sentence is exactly what gets
+   echoed on silence. Keep only a short DOMAIN-only glossary (rare nouns the model
+   can't guess). Delete style sentences.
+3. **Confidence gate (verbose_json).** Request `response_format=verbose_json` and
+   reject on the API's own signals: `no_speech_prob>0.6 & avg_logprob<-1` (no
+   speech), `avg_logprob<-1.2` (very low confidence), `compression_ratio>2.4`
+   (repetition/loop).
+4. **THE KEY LESSON — confidence gates cannot catch a CONFIDENT hallucination.**
+   A training-data artifact is emitted with HIGH confidence, so it sails past
+   every logprob/no_speech gate. You MUST pair the confidence gates with a
+   content blocklist: (a) known artifact substrings (alimmenta.com, amara.org,
+   subtitle credits, "más información www"); (b) a URL detector — a web address
+   in a SHORT voice-note transcript is almost always a hallucination, real
+   customers don't dictate URLs (scope to short transcripts so a long genuine
+   message mentioning a site is spared).
+5. **Precise prompt-echo detector.** Match the hint's comma-LIST STRUCTURE (many
+   hint phrases in a comma list), NEVER a domain-word count — a real customer
+   saying "quiero un pozo, perforación, estudio" must pass.
+6. **VAD pre-gate (deferred phase 2).** Silero VAD before the API call is the
+   research's top structural fix; skipped here because layers 1-5 closed the gap
+   without adding onnxruntime/torch to the image. Add it if hallucinations persist.
+
+**Graceful escalation ladder (never dead-end on bad audio):** a per-conversation
+`audio_fail` counter drives: 1st incomprehensible audio → ask to REPEAT; 2nd →
+ask to TYPE it instead; 3rd → HAND OFF to a human. Reset the counter on any good
+transcription. CRITICAL: a hallucination that slips through and is treated as a
+real message ALSO resets the counter — which is why layer 4 (catching confident
+hallucinations) is what makes the ladder actually advance.
+
+**Verified live (talk 924):** empty audio → "repeat" (fail #1); Amara.org
+hallucination → CAUGHT by the blocklist → "type it" (fail #2, ladder advanced
+correctly instead of resetting); customer switched to text → full flow →
+name+phone → handoff. All in one conversation.
+
+---
+
 ## Section 12.25 — Pre-Deploy Use-Before-Assignment Guard
 
 **Problem:** A patch referenced `_intents` before assignment on a code path that

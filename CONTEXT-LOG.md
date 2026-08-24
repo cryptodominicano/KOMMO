@@ -3919,3 +3919,30 @@ healthy, all audio changes verified live. Pushed 4114cfd (code). Backups:
 transcribe.py.bak_halluc, worker.py.bak_halluc, state.py.bak_halluc.
 Open: VPS still shows "System restart required" (unattended upgrades) — reboot in a quiet
 window, which also completes the earlier NIC power-management fix.
+
+### Voice-note URL/artifact hallucination fix + escalation validated live (Aug 24).
+
+Live test of the escalation ladder (talk 922) exposed a leak: a silent audio
+produced the Whisper artifact "Más información www.alimmenta.com", which passed
+the verbose_json confidence gates (Whisper hallucinated it with HIGH confidence —
+the hard case) and every exact-match filter, reached the LLM ("Excelente
+pregunta…"), AND reset the audio_fail counter so the ladder never advanced.
+
+Fix (transcribe.py, pushed 7403b5b): added (1) a URL detector — a web address in
+a SHORT voice-note transcript is a hallucination (customers don't dictate URLs);
+(2) a substring blocklist of known artifacts (alimmenta.com, amara.org, subtitle
+credits, "más información www"). 10/10 test: leak caught, real notes incl.
+name+phone pass. Rebuilt from source (docker compose build) — NOT docker commit.
+
+Re-test (talk 924) — FULL end-to-end validation in one conversation:
+- empty audio → "repeat" (audio_fail #1)
+- Amara.org hallucination → CAUGHT by blocklist → "type it" (audio_fail #2 —
+  ladder advanced correctly instead of resetting; the exact bug from talk 922)
+- customer switched to text → Puerto Plata (sector+stage) → location audio
+  (VOZ_AGUA_6) → price objection (VOZ_AGUA_5, gate open) → buy signal → name+phone
+  ("Isaias Perez, 610…" passed the fixed spam filter) → handoff to Atención humana.
+Every fix from the whole Aug 23-24 session confirmed working together, live.
+
+Docs updated: COMMERCIAL_GRADE_SPEC §12.26 (voice-note anti-hallucination +
+escalation, full pattern + research), playbook §3.6 (concise reusable version) +
+capability-matrix row.

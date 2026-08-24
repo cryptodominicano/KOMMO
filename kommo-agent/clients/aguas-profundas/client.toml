@@ -19,6 +19,9 @@ origin    = "waba"
 origins   = ["waba", "instagram_business", "messenger", "fbmessenger", "facebook"]
 # Handoff visibility: on handoff the lead moves to this pipeline stage so the
 # Kommo board shows who is waiting on a human. Created 2026-07-18.
+incoming_status_id = 109083023   # "Incoming leads" (acceptance entry stage)
+initial_contact_status_id = 109083027   # "Initial contact" — welcome sent (acceptance also routes here)
+discussions_status_id = 109083031   # "Discussions" — price disclosed + Q&A + buy signal
 handoff_status_id = 109168423   # "Atención humana" in pipeline 14130431
 seguimiento_status_id = 110761119   # "Seguimiento" — warm-but-not-ready leads (soft close)
 no_interesado_status_id = 110761539   # "No interesado" — hard close (explicit no)

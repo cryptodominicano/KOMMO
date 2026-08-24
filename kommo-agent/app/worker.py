@@ -59,6 +59,61 @@ async def _handle_audio_fail(k: KommoClient, msg: dict, talk_id: str) -> None:
         log.info("talk=%s audio_fail #%d -> handoff", talk_id, n)
 
 
+# Active-funnel order for engine-driven pipeline progression. ONLY the forward
+# working stages the engine advances a lead through. Terminal/parked stages
+# (Atención humana, Seguimiento, No interesado, Closed) are deliberately NOT in
+# this list — the engine never auto-advances a lead that has reached one of them,
+# so a real handoff, a soft/hard close, a won deal, or a manual human move is
+# never overwritten by ordinary conversation progress.
+_ACTIVE_FUNNEL = ["initial_contact_status_id", "discussions_status_id"]
+
+
+async def _advance_pipeline_stage(k: KommoClient, entity_id, target_cfg_key: str,
+                                  talk_id: str) -> None:
+    """Move a Kommo lead FORWARD to an active funnel stage, best-effort.
+
+    Guards: (1) target must be an active funnel stage; (2) never move backward
+    within the funnel; (3) never move a lead that is already at or past the
+    funnel (i.e. currently in a terminal/parked stage) — that lead has been
+    handed off, closed, or manually placed, and ordinary progress must not yank
+    it back. Kommo pipeline move only; the internal state.STAGES funnel is
+    separate and untouched here.
+    """
+    if not entity_id:
+        return
+    pack = client_pack.pack().get("kommo", {})
+    target_id = pack.get(target_cfg_key)
+    if not target_id:
+        return
+    # Resolve the active-funnel ids in order for the backward-move guard.
+    funnel_ids = [pack.get(k2) for k2 in _ACTIVE_FUNNEL]
+    funnel_ids = [int(x) for x in funnel_ids if x]
+    try:
+        cur = await k.get_lead_status(int(entity_id))
+    except Exception as _e:
+        log.warning("talk=%s pipeline: could not read current stage: %s", talk_id, _e)
+        return
+    tid = int(target_id)
+    # Guard: if the lead is NOT currently in the active funnel (it's in Incoming,
+    # a terminal stage, or anywhere else), only allow the move when the target is
+    # the FIRST funnel stage (initial_contact) AND the lead is in Incoming — i.e.
+    # a normal entry. Otherwise leave it alone (terminal/parked stays put).
+    if cur is not None and cur not in funnel_ids:
+        # Allow Incoming -> initial_contact only; block everything else.
+        _incoming = client_pack.pack().get("kommo", {}).get("incoming_status_id")
+        if not (_incoming and int(cur) == int(_incoming) and tid == funnel_ids[0]):
+            return
+    # Guard: never move backward within the funnel.
+    if cur is not None and cur in funnel_ids and tid in funnel_ids:
+        if funnel_ids.index(tid) <= funnel_ids.index(int(cur)):
+            return
+    try:
+        await k.update_lead(int(entity_id), status_id=tid)
+        log.info("talk=%s pipeline -> %s (%s)", talk_id, tid, target_cfg_key)
+    except Exception as _e:
+        log.warning("talk=%s pipeline move to %s failed: %s", talk_id, tid, _e)
+
+
 async def _signal_handoff(k: KommoClient, msg: dict, talk_id: str, reason: str) -> None:
     """Make a handoff VISIBLE to humans in Kommo, once per episode.
 
@@ -565,6 +620,12 @@ async def handle_message(msg: dict) -> None:
                     # SECOND location question ("¡Perfecto! ¿en qué pueblo...?").
                     # (Mirrors how the audio-bypass path used to suppress the LLM
                     # turn when VOZ_AGUA_1 fired here.)
+                    # Engine-driven pipeline: welcome sent -> Initial contact.
+                    # (Kommo acceptance also routes Incoming -> Initial contact;
+                    # this is idempotent and guarded, so it is harmless overlap
+                    # and keeps the engine authoritative if acceptance changes.)
+                    await _advance_pipeline_stage(k, entity_id,
+                                                  "initial_contact_status_id", talk_id)
                     return
                 except KommoError as e:
                     log.error("talk=%s agua welcome text failed: %s", talk_id, e)
@@ -1666,6 +1727,10 @@ async def handle_message(msg: dict) -> None:
                     except KommoError as e:
                         log.error("talk=%s VOZ_AGUA_1 post-price failed: %s",
                                   talk_id, e)
+                # Engine-driven pipeline: price disclosed -> Discussions. Guarded
+                # (forward-only, never overrides terminal/parked stages).
+                await _advance_pipeline_stage(k, entity_id,
+                                              "discussions_status_id", talk_id)
             # Non-WhatsApp delivery warning: Kommo returns 202 Accepted but
             # Instagram/Facebook may silently fail (expired OAuth token, comment
             # vs DM mismatch, 24h window). Per Kommo docs: if delivery errors

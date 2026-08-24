@@ -4029,3 +4029,30 @@ config: seguimiento_status_id = 110761119. Deploy gate + UBA guard passed. Pushe
 f21ff08. Backup: worker.py.bak_seguimiento.
 PENDING live test: (a) soft close moves lead to Seguimiento, not Atención humana;
 (b) a messy-but-resolvable location gets priced with NO handoff.
+
+### 'No interesado' stage for hard closes; soft/hard close stage moves (Aug 24).
+
+Follow-up to the Seguimiento work. Live test (talk 954) revealed the soft-close
+move never fired: the test message mixed price_objection + soft_farewell (fired the
+MINITS probe, not the graceful-hold move), then the next message was a HARD no
+("no estoy interesado"), which did a graceful close but left the lead in Atención
+humana. Per product decision, hard closes get their OWN stage.
+
+- Kommo: created 'No interesado' (id 110761539, pipeline 14130431, sort 80). NOTE:
+  Kommo rejects arbitrary status colors (NotSupportedChoice) — must use a palette
+  color; #ffc8c8 worked.
+- worker.py: hard_no branch now moves the lead to No interesado (guarded: never
+  overrides a lead already in Atención humana). Soft-close → Seguimiento unchanged
+  (fires on the 2nd soft farewell / graceful-hold branch).
+- config: no_interesado_status_id = 110761539.
+
+Testing note for a clean soft-close → Seguimiento: send TWO plain soft closes in a
+row ("lo voy a pensar" then "gracias, le aviso"), no objection or hard-no mixed in.
+First = probe, second = graceful hold + Seguimiento move.
+
+Separately observed (NOT yet fixed): "Maria tridad Riosan juan" classified as
+in_scope_agua, not resolved to San Juan / priced that turn — the premature-handoff
+gate is correct but the messy-spelling→province resolution is an LLM classification
+miss worth a future look.
+
+Deploy gate + UBA guard passed. Pushed 4292b42.

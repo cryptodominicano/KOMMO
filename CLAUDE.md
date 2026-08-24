@@ -109,6 +109,7 @@ Human team handles: GPS pin, satellite photo, linderos, deposits, scheduling.
 | `109083027` | Initial contact |
 | `109083031` | Discussions |
 | `110761119` | **Seguimiento** ← soft-close / nurture (warm, not ready) |
+| `110761539` | **No interesado** ← hard close (explicit no) |
 | `142` | Closed - won |
 | `143` | Closed - lost |
 

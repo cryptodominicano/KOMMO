@@ -35,8 +35,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     whisper_model_groq: str = "whisper-large-v3"
     # whisper-1 = Whisper large-v2. gpt-4o-transcribe / gpt-4o-mini-transcribe are newer
-    # and more accurate for accented Spanish + domain jargon. A/B test on a real voice note.
-    whisper_model_openai: str = "gpt-4o-mini-transcribe"
+    # whisper-1: chosen over gpt-4o-*-transcribe, which have a documented,
+    # still-open bug of ECHOING the prompt verbatim on non-speech audio (worse in
+    # Spanish) and do NOT support verbose_json (no no_speech_prob/avg_logprob to
+    # gate on). whisper-1 exposes those signals and does not echo the prompt.
+    whisper_model_openai: str = "whisper-1"
     # Hallucination guards
     min_audio_bytes: int = 2000        # reject near-empty audio
     min_transcript_chars: int = 2

@@ -38,6 +38,27 @@ def _entity_type(msg: dict) -> str:
     return t if t.endswith("s") else t + "s"
 
 
+async def _handle_audio_fail(k: KommoClient, msg: dict, talk_id: str) -> None:
+    """Graceful escalation for incomprehensible voice notes (zero-hallucination
+    policy: we NEVER guess intent from a bad transcript). Ladder by consecutive
+    fail count in this conversation:
+      1st  -> ask them to repeat the voice note (natural language).
+      2nd  -> ask them to TYPE it instead (audio still not understood).
+      3rd+ -> hand off to a human, since audio keeps failing.
+    A successful transcription elsewhere calls state.reset_audio_fail()."""
+    n = state.incr_audio_fail(talk_id)
+    if n <= 1:
+        await k.send_message(talk_id, client_pack.msg("audio_retry_1"))
+        log.info("talk=%s audio_fail #%d -> ask to repeat", talk_id, n)
+    elif n == 2:
+        await k.send_message(talk_id, client_pack.msg("audio_retry_2"))
+        log.info("talk=%s audio_fail #%d -> ask to type", talk_id, n)
+    else:
+        await k.send_message(talk_id, client_pack.msg("audio_handoff"))
+        await _signal_handoff(k, msg, talk_id, "audio_incomprehensible")
+        log.info("talk=%s audio_fail #%d -> handoff", talk_id, n)
+
+
 async def _signal_handoff(k: KommoClient, msg: dict, talk_id: str, reason: str) -> None:
     """Make a handoff VISIBLE to humans in Kommo, once per episode.
 
@@ -210,30 +231,71 @@ async def handle_message(msg: dict) -> None:
     _raw_text = (msg.get("text") or "").strip()
     _rtl = _raw_text.lower()
 
-    # Layer 1: Known broadcast/spam content patterns
-    _SPAM_PATTERNS = [
-        # Biblical books (with and without space after — catches "mateo24" and "mateo ")
-        "mateo", "marcos", "lucas", "juan", "hechos", "romanos",
-        "corintios", "galatas", "efesios", "filipenses", "colosenses",
-        "tesalonicenses", "timoteo", "tito", "filemon", "hebreos",
-        "santiago", "pedro", "judas", "apocalipsis", "genesis",
-        "exodo", "levitico", "numeros", "deuteronomio", "josue",
-        "jueces", "samuel", "reyes", "cronicas", "esdras", "nehemias",
-        "esther", "salmos", "salmo", "proverbios", "eclesiastes",
-        "isaias", "jeremias", "ezequiel", "daniel", "oseas", "joel",
-        "amos", "abdias", "jonas", "miqueas", "nahum", "habacuc",
-        "sofonias", "hageo", "zacarias", "malaquias",
-        # Common broadcast phrases
-        "jesucristo", "dios te bendiga", "bendiciones", "amén", "amen",
-        "el senor", "el señor", "cristo", "jesus regresa", "dios es",
-        "buenos dias que dios", "que dios te", "dios les bendiga",
-        "forward this", "comparte este", "reenvía esto", "reenvia esto",
-        "cadena de oracion", "oración del dia", "oracion del dia",
+    # Layer 1: forwarded religious/broadcast chain-message detection.
+    #
+    # DESIGN (revised): the previous version listed bare biblical BOOK names
+    # ("isaias", "juan", "daniel", "samuel"...) and substring-matched them.
+    # In the DR those are extremely common FIRST NAMES, so a customer named
+    # Isaías / Juan / Daniel giving their name got their message silently
+    # DROPPED (the whole reason a real handoff went dead). Substring matching
+    # also fired "amos" inside "vamos", "tito" inside other words, etc.
+    #
+    # Real chain-message spam is identified by RELIGIOUS PHRASES (multi-word),
+    # not by a lone name token. So layer 1 now:
+    #   1) matches PHRASES on WORD BOUNDARIES (never inside another word),
+    #   2) never runs once a lead is engaged (past greeting / in-flow),
+    #   3) requires a chain-message shape (length) for weaker single-word cues.
+    # This preserves spam-catching while never dropping a legitimate customer.
+    _SPAM_PHRASES = [
+        "dios te bendiga", "dios les bendiga", "dios le bendiga",
+        "que dios te", "que dios les", "buenos dias que dios",
+        "cadena de oracion", "cadena de oración",
+        "oracion del dia", "oración del dia",
+        "jesus regresa", "jesús regresa", "cristo viene",
+        "comparte este mensaje", "reenvia esto", "reenvía esto",
+        "reenvia este", "reenvía este", "forward this message",
+        "comparte a", "envia a", "envía a",
+        "amen y amen", "amén y amén",
     ]
-    if any(p in _rtl for p in _SPAM_PATTERNS):
-        log.info("talk=%s msg=%s scope-rejected (layer1: religious/broadcast spam)",
-                 talk_id, msg_id)
-        return
+    # Weaker single-word religious cues — only count toward spam when the
+    # message ALSO has chain-message length (a real customer saying "amén"
+    # in a short reply is not spam; a 200-char forward with it is).
+    _SPAM_SOFT_WORDS = [
+        "jesucristo", "aleluya", "hallelujah", "bendiciones",
+        "cadena", "devocional", "salmo",
+    ]
+
+    import re as _re_spam
+
+    def _word_present(word: str, text: str) -> bool:
+        # Word-boundary match so "amos" never fires inside "vamos", and a
+        # name like "isaias" is never matched as a bare-substring at all.
+        return _re_spam.search(r"\b" + _re_spam.escape(word) + r"\b", text) is not None
+
+    # Only apply the spam filter to NOT-yet-engaged conversations. An engaged
+    # lead (already greeted / in the flow) is by definition not sending a
+    # cold broadcast, so their messages (incl. name+phone) always pass.
+    _sg_engaged = False
+    try:
+        from .state import _conn as _sg_conn
+        with _sg_conn() as _sg_cc:
+            _sg_engaged = _sg_cc.execute(
+                "SELECT 1 FROM greeted WHERE talk_id=?", (str(talk_id),)
+            ).fetchone() is not None
+    except Exception:
+        _sg_engaged = False
+
+    if not _sg_engaged:
+        _phrase_hit = any(_word_present(p, _rtl) if " " not in p else (p in _rtl)
+                          for p in _SPAM_PHRASES)
+        _soft_hits = sum(1 for w in _SPAM_SOFT_WORDS if _word_present(w, _rtl))
+        # Chain-message shape: long AND multiple soft religious cues, OR any
+        # explicit forwarded-chain phrase.
+        _looks_like_chain = _phrase_hit or (len(_raw_text) > 120 and _soft_hits >= 2)
+        if _looks_like_chain:
+            log.info("talk=%s msg=%s scope-rejected (layer1: forwarded "
+                     "religious/broadcast chain message)", talk_id, msg_id)
+            return
 
     # Layer 2: First-contact intent check.
     # Only applies to the very first message in a NEW talk (not in state yet).
@@ -599,15 +661,17 @@ async def handle_message(msg: dict) -> None:
                         break
             if not link:
                 log.warning("talk=%s voice note without attachment link", talk_id)
-                await k.send_message(talk_id, client_pack.msg("audio_unclear"))
+                await _handle_audio_fail(k, msg, talk_id)
                 return
             try:
                 text = await transcribe(await download_audio(link))
                 log.info("talk=%s transcript=%r", talk_id, text)
+                state.reset_audio_fail(talk_id)   # good audio -> clear the ladder
             except TranscriptionRejected as e:
-                # Whisper invents filler on silence. Never guess intent - ask again.
+                # Whisper invents filler on silence. Never guess intent — escalate
+                # gracefully (repeat -> type -> human) instead of passing a guess.
                 log.info("talk=%s transcription rejected (%s)", talk_id, e)
-                await k.send_message(talk_id, client_pack.msg("audio_unclear"))
+                await _handle_audio_fail(k, msg, talk_id)
                 return
             # Re-evaluate flow lock for audio first-contact messages.
             # Flow was locked before transcription using empty text — now

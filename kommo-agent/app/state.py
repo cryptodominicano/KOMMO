@@ -104,6 +104,10 @@ def init() -> None:
             c.execute("ALTER TABLE flow_state ADD COLUMN sector TEXT")
         except Exception:
             pass  # column already exists
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS audio_fail ("
+            "talk_id TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, "
+            "at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS flow_confirmed ("
                   "talk_id TEXT PRIMARY KEY, at REAL)")
         # Coverage ledger: tracks which sales topics covered per lead
@@ -677,6 +681,28 @@ def get_sector(talk_id: str) -> str | None:
             "SELECT sector FROM flow_state WHERE talk_id=?",
             (str(talk_id),)).fetchone()
         return (row[0] or None) if row else None
+
+
+def incr_audio_fail(talk_id: str) -> int:
+    """Increment and return the count of CONSECUTIVE incomprehensible voice notes
+    in this conversation. Drives the escalation ladder (repeat -> type it -> human).
+    Reset by reset_audio_fail() on any successful transcription."""
+    import time as _t
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO audio_fail (talk_id, count, at) VALUES (?, 1, ?) "
+            "ON CONFLICT(talk_id) DO UPDATE SET count=count+1, at=?",
+            (str(talk_id), _t.time(), _t.time()))
+        row = c.execute(
+            "SELECT count FROM audio_fail WHERE talk_id=?", (str(talk_id),)
+        ).fetchone()
+        return int(row[0]) if row else 1
+
+
+def reset_audio_fail(talk_id: str) -> None:
+    """Clear the consecutive-audio-fail counter (a good transcription came through)."""
+    with _conn() as c:
+        c.execute("DELETE FROM audio_fail WHERE talk_id=?", (str(talk_id),))
 
 
 def is_flow_confirmed(talk_id: str) -> bool:

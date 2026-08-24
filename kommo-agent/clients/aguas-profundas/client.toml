@@ -37,6 +37,10 @@ Con eso identificamos sus linderos y las posibles venas de agua para recomendarl
 Mientras tanto, ¿tiene alguna otra pregunta? Con gusto le respondo. 🙏"""
 
 audio_unclear = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Podría repetirla o escribirme el mensaje?"
+# Escalation ladder for consecutive incomprehensible voice notes (see worker _handle_audio_fail)
+audio_retry_1 = "Disculpe, no logré escuchar bien su nota de voz 🙏 ¿Me la puede repetir, por favor?"
+audio_retry_2 = "Todavía no logro entender bien el audio 🙏 ¿Me lo puede escribir por texto? Así le atiendo mejor. 😊"
+audio_handoff = "Gracias por su paciencia 🙏 Voy a pasar su caso a un compañero del equipo para atenderle personalmente. Le contactará en breve. 😊"
 
 # Sent verbatim when the customer sends a photo/file (typically a deposit
 # receipt - "envíe el comprobante"). Handled in CODE, never by the model:

@@ -17,18 +17,16 @@ from .config import settings
 # Domain vocabulary — end-weighted per OpenAI prompting cookbook.
 # Research: put highest-value terms at END of prompt (last 224 tokens weighted most).
 # Structure: dialect sentence first (style biasing), then slang, then domain vocab.
+# Short DOMAIN-ONLY glossary. Research (OpenAI cookbook; whisper.cpp #2286;
+# AGH ICASSP 2025 non-speech-hallucination study) is clear that a LONG prompt —
+# especially a stylistic dialect sentence — is exactly what Whisper echoes back
+# verbatim on silent/low-energy audio, causing false rejects. We keep ONLY the
+# rare technical nouns the model can't guess, and no style sentence, so the
+# echo surface is minimal. Kept well under Whisper's 224-token limit.
 PROMPT_HINT = (
-    # Dialect style sentence — sets Caribbean Spanish register
-    "Conversación en español dominicano, tono informal. "
-    "Diache, esa vaina ta' to', mi hermano. "
-    # DR slang glossary — lexical biasing for high-miss terms
-    "vaina, tíguere, motoconcho, ta to, tá to, diache, colmado, guagua, "
-    "un chin, jevi, cuartos, concho, dique, por fa, "
-    # Domain vocabulary — Aguas Profundas specific
-    "Aguas Profundas, pozo, perforación, estudio de agua, radiestesia, "
-    "geohidrológico, topográfico, aforo, caudal, bomba, séptico, IMHOFF, "
-    "planta de tratamiento, módulo, baños, RD$, linderos, terreno, "
-    "depósito, comprobante, bauche, Jarabacoa."
+    "pozo, perforación, estudio de agua, radiestesia, geohidrológico, "
+    "topográfico, aforo, caudal, séptico, IMHOFF, planta de tratamiento, "
+    "módulo, linderos, Jarabacoa."
 )
 
 # Common Whisper hallucinations on silence (es/en).
@@ -53,9 +51,27 @@ _PROMPT_DUMP_WORDS = [
 
 
 def _is_prompt_dump(text):
-    norm = text.lower()
-    hits = sum(1 for w in _PROMPT_DUMP_WORDS if w in norm)
-    return hits >= 5
+    """True only when the transcript is the PROMPT HINT echoed back (Whisper's
+    silence failure), NOT when a real customer merely uses domain words.
+    Signal: the transcript reproduces the hint's comma-separated glossary
+    structure — many of the hint's own tokens, in a list, with little else."""
+    norm = re.sub(r"\s+", " ", text.strip().lower())
+    hint_tokens = {t.strip() for t in re.split(r"[,\.]", PROMPT_HINT.lower()) if t.strip()}
+    # How many of the hint's exact glossary phrases appear in the transcript
+    phrase_hits = sum(1 for t in hint_tokens if t and t in norm)
+    # Echo shape: lots of commas (a list, not a sentence) AND the transcript is
+    # mostly made of hint phrases.
+    comma_count = norm.count(",")
+    words = norm.split()
+    # Reject only when it looks like the glossary itself: >=6 hint phrases echoed
+    # AND it reads as a comma list (>=4 commas), i.e. not a normal spoken reply.
+    if phrase_hits >= 6 and comma_count >= 4:
+        return True
+    # Or: the transcript is almost entirely hint phrases (a short echo fragment
+    # like "radiestesia, geohidrológico, topográfico, aforo, caudal").
+    if phrase_hits >= 4 and comma_count >= 3 and len(words) < 20:
+        return True
+    return False
 
 # Repetition detection — hallucinated loops
 _REPETITION_RE = re.compile(r'(.{10,}?)\1{2,}', re.DOTALL)
@@ -185,14 +201,41 @@ async def transcribe(audio: bytes, filename: str | None = None,
             url,
             headers={"Authorization": f"Bearer {key}"},
             files={"file": (filename, audio)},
+            # verbose_json exposes segment no_speech_prob / avg_logprob /
+            # compression_ratio — the strongest hosted-API signals for "this was
+            # not real speech." Whisper-family models (whisper-1, whisper-large-v3)
+            # support it; the gpt-4o-*-transcribe models do NOT and additionally
+            # echo the prompt on Spanish silence, so we avoid them for this client.
             data={"model": model, "language": "es", "prompt": PROMPT_HINT,
-                  "response_format": "json", "temperature": "0"},
+                  "response_format": "verbose_json", "temperature": "0"},
         )
         r.raise_for_status()
-        text = (r.json().get("text") or "").strip()
+        _resp = r.json()
+        text = (_resp.get("text") or "").strip()
 
     if len(text) < settings.min_transcript_chars:
         raise TranscriptionRejected("empty transcript")
+    # API confidence signals (verbose_json). Zero-hallucination policy: when the
+    # model itself signals no-speech / very-low-confidence / looping, reject and
+    # let the escalation ask the customer to repeat — never pass a guess downstream.
+    _seg = _resp.get("segments") or []
+    if _seg:
+        _ns = [s.get("no_speech_prob", 0.0) for s in _seg]
+        _lp = [s.get("avg_logprob", 0.0) for s in _seg]
+        _cr = [s.get("compression_ratio", 0.0) for s in _seg]
+        _max_ns = max(_ns) if _ns else 0.0
+        _min_lp = min(_lp) if _lp else 0.0
+        _max_cr = max(_cr) if _cr else 0.0
+        # OpenAI-documented heuristics: no-speech when no_speech_prob high AND
+        # avg_logprob < -1; compression_ratio > 2.4 = repetition/looping.
+        if _max_ns > 0.6 and _min_lp < -1.0:
+            raise TranscriptionRejected(
+                f"no-speech signal (no_speech_prob={_max_ns:.2f}, "
+                f"avg_logprob={_min_lp:.2f})")
+        if _min_lp < -1.2:
+            raise TranscriptionRejected(f"very low confidence (avg_logprob={_min_lp:.2f})")
+        if _max_cr > 2.4:
+            raise TranscriptionRejected(f"repetition/loop (compression_ratio={_max_cr:.2f})")
     if _looks_hallucinated(text):
         raise TranscriptionRejected(f"hallucination filter tripped: {text!r}")
     if _suspicious_transcript(text, len(audio)):

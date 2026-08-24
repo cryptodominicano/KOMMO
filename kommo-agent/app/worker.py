@@ -541,31 +541,26 @@ async def handle_message(msg: dict) -> None:
             # (BSP/Meta guidance: avoid stacking 3+ media in <2s)
             if is_first:
                 await asyncio.sleep(1.5)
+            # NEW ORDER (2026-08): the welcome is TEXT-ONLY and asks for the
+            # location. VOZ_AGUA_1 no longer fires here — it fires AFTER the price
+            # is disclosed at the [[SECTOR]] step (see the price-send block). The
+            # welcome text now carries the pueblo/sector question itself (which
+            # used to live in VOZ_AGUA_1's audio followup).
             _vk1 = "VOZ_AGUA_1"
             if not state.voice_already_sent(talk_id, _vk1):
                 try:
-                    # Welcome text before audio — same pattern as séptico
                     await asyncio.sleep(1.0)
                     await k.send_message(
                         talk_id,
                         "¡Bienvenido! 😊 Con gusto le orientamos sobre "
-                        "nuestros estudios de agua y perforación de pozos."
+                        "nuestros estudios de agua y perforación de pozos.\n\n"
+                        "¿En qué pueblo o sector está el terreno donde desea "
+                        "hacer el estudio? 🙏"
                     )
-                    log.info("talk=%s agua welcome text sent", talk_id)
-                    await asyncio.sleep(1.5)
-                    await k.run_bot(int(_voz_triggers[_vk1]), entity_id, _entity_type(msg))
-                    state.mark_voice_sent(talk_id, _vk1)
-                    _voz_fired = _vk1
-                    log.info("talk=%s launched VOZ_AGUA_1 %s", talk_id, _voz_triggers[_vk1])
-                    # Coverage ledger: VOZ_AGUA_1 discloses the study price
-                    # range (RD$45,000-50,000) in-audio, so record its topics —
-                    # incl. estudio_precio, which opens the price-objection gate.
-                    _cov_lead_1 = str(entity_id) if entity_id else talk_id
-                    for _topic_1 in _AUDIO_TOPIC_MAP.get(_vk1, []):
-                        state.mark_topic_covered(_cov_lead_1, _topic_1,
-                                                 'audio', source=_vk1)
+                    log.info("talk=%s agua welcome text + sector question sent "
+                             "(VOZ_AGUA_1 deferred to post-price)", talk_id)
                 except KommoError as e:
-                    log.error("talk=%s VOZ_AGUA_1 failed: %s", talk_id, e)
+                    log.error("talk=%s agua welcome text failed: %s", talk_id, e)
 
         # --- Séptico first contact: image → welcome text → audio ---
         # Correct sequence per client approval (2026-08-15):
@@ -1413,6 +1408,11 @@ async def handle_message(msg: dict) -> None:
             state.advance_stage(talk_id, "price_presented")
             if state.get_stage(talk_id) != _old_stg_sec:
                 state.log_stage_transition(talk_id, _old_stg_sec, "price_presented")
+            # NEW ORDER: fire VOZ_AGUA_1 AFTER this price reply is sent (the audio
+            # reinforces the price the customer just read). Flag it here; the
+            # actual run_bot happens right after k.send_message(reply) below so
+            # the audio lands after the price text, not before.
+            _fire_voz1_after_price = True
         if deposit_requested:
             if not deposit_bot:
                 log.error("talk=%s DEPOSIT MESSAGE SENT BUT deposit_bot_id IS 0 - "
@@ -1528,6 +1528,32 @@ async def handle_message(msg: dict) -> None:
             if locals().get('_haiku_voz_fired'):
                 await asyncio.sleep(2.0)
             await k.send_message(talk_id, reply)
+            # NEW ORDER: VOZ_AGUA_1 fires right AFTER the price text (flagged at
+            # the [[SECTOR]] step). It reinforces the price the customer just read
+            # and records estudio_precio in the ledger (opens the price-objection
+            # gate). No followup — the price text already ended with "¿Tiene
+            # alguna pregunta?", and the location is already captured, so we must
+            # NOT re-ask for it. Guarded by voice_already_sent (fires once).
+            if (locals().get('_fire_voz1_after_price')
+                    and not _is_septico_flow
+                    and entity_id and _is_waba):
+                _vk1p = "VOZ_AGUA_1"
+                if (not state.voice_already_sent(talk_id, _vk1p)
+                        and _voz_triggers.get(_vk1p)):
+                    try:
+                        await asyncio.sleep(1.5)
+                        await k.run_bot(int(_voz_triggers[_vk1p]), entity_id,
+                                        _entity_type(msg))
+                        state.mark_voice_sent(talk_id, _vk1p)
+                        log.info("talk=%s launched VOZ_AGUA_1 %s (post-price)",
+                                 talk_id, _voz_triggers[_vk1p])
+                        _cov_lead_1p = str(entity_id) if entity_id else talk_id
+                        for _topic_1p in _AUDIO_TOPIC_MAP.get(_vk1p, []):
+                            state.mark_topic_covered(_cov_lead_1p, _topic_1p,
+                                                     'audio', source=_vk1p)
+                    except KommoError as e:
+                        log.error("talk=%s VOZ_AGUA_1 post-price failed: %s",
+                                  talk_id, e)
             # Non-WhatsApp delivery warning: Kommo returns 202 Accepted but
             # Instagram/Facebook may silently fail (expired OAuth token, comment
             # vs DM mismatch, 24h window). Per Kommo docs: if delivery errors

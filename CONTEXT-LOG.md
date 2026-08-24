@@ -4056,3 +4056,35 @@ gate is correct but the messy-spelling→province resolution is an LLM classific
 miss worth a future look.
 
 Deploy gate + UBA guard passed. Pushed 4292b42.
+
+### ROOT CAUSE FOUND: Incoming-leads acceptance routes to the ADJACENT stage by pipeline order (Aug 24).
+
+The "every lead lands in Atención humana at the price step" mystery is solved, and
+it was NOT a trigger, Salesbot, AI Agent, or our engine. Proven with a temporary
+LEAD_PATCH_TRACE in kommo.py _req: at the price step the engine sends ONLY
+{'name': 'WhatsApp - <Town>, <Province>'} — no status_id. Yet Kommo fired
+lead_status_changed + entity_responsible_changed at the same instant (created_by 0).
+
+The cause: Kommo's **Incoming leads acceptance** moves an accepted lead to the
+**next stage immediately to its RIGHT in the pipeline order**, and assigns a
+responsible user. Atención humana was positioned right after Incoming leads, so
+every accepted lead (accepted the moment our engine first edits it, e.g. the name
+PATCH at the price step) was routed straight into Atención humana. The responsible-
+assignment + stage-move pair with created_by 0 is the signature of this acceptance,
+NOT a handoff.
+
+FIX (Kommo UI, done by Isaias): reorder the pipeline so **Initial contact sits
+immediately to the right of Incoming leads**. Accepted leads now land in Initial
+contact. Board order is now: Incoming leads → Initial contact → Discussions →
+Atención humana → Seguimiento → No interesado → Closed won/lost.
+
+LESSON (applies to every future client): in Kommo, the Incoming-leads stage's
+acceptance routes to the ADJACENT stage by left-to-right position — it is NOT
+configured by a visible trigger and does NOT appear on the Digital Pipeline board.
+When onboarding a new account, order the pipeline so the FIRST real working stage
+(e.g. Initial contact) is directly right of Incoming leads, and never place a
+terminal/handoff stage there. This is not clearly documented; it was found by
+tracing PATCH payloads and observing the position dependency.
+
+Diagnostic note: added and then REMOVED a LEAD_PATCH_TRACE in kommo.py _req
+(restored from kommo.py.bak_trace, container healthy). Not committed.

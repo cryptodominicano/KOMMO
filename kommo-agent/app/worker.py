@@ -1315,6 +1315,10 @@ async def handle_message(msg: dict) -> None:
                     + ("\n\n" + extra if extra else "")
                 ).strip()
                 log.info("talk=%s hard_no detected — graceful close", talk_id)
+                # CRM hygiene: an explicit "no me interesa" is a hard close. Move
+                # it to the "No interesado" stage so it leaves the active queue and
+                # is kept for record / long-term re-engagement (NOT Atención humana).
+                _move_to_no_interesado = True
 
             elif haiku_pre.is_soft_farewell(_intents):
                 # Soft farewell / latent objection — MINITS framework.
@@ -1602,6 +1606,25 @@ async def handle_message(msg: dict) -> None:
                                      "NOT moving to Seguimiento", talk_id)
                     except Exception as _e:
                         log.warning("talk=%s Seguimiento move failed: %s", talk_id, _e)
+            # Hard close ("no me interesa"): move to "No interesado" stage. Same
+            # guard — never override a real human handoff.
+            if locals().get('_move_to_no_interesado') and entity_id:
+                _ni_id = (client_pack.pack().get("kommo", {})
+                          .get("no_interesado_status_id"))
+                _ho_id2 = (client_pack.pack().get("kommo", {})
+                           .get("handoff_status_id"))
+                if _ni_id:
+                    try:
+                        _cur2 = await k.get_lead_status(int(entity_id))
+                        if _cur2 is None or int(_cur2) != int(_ho_id2 or 0):
+                            await k.update_lead(int(entity_id), status_id=int(_ni_id))
+                            log.info("talk=%s hard close — moved to No interesado %s",
+                                     talk_id, _ni_id)
+                        else:
+                            log.info("talk=%s hard close — lead in human stage, "
+                                     "NOT moving", talk_id)
+                    except Exception as _e:
+                        log.warning("talk=%s No interesado move failed: %s", talk_id, _e)
             # Trust question (agua): fire the "quién es Wellington" photo after the
             # trust text so the customer sees the owner. Guarded once per convo.
             if (locals().get('_fire_wellington_photo')

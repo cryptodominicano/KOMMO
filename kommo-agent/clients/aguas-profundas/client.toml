@@ -21,6 +21,7 @@ origins   = ["waba", "instagram_business", "messenger", "fbmessenger", "facebook
 # Kommo board shows who is waiting on a human. Created 2026-07-18.
 handoff_status_id = 109168423   # "Atención humana" in pipeline 14130431
 seguimiento_status_id = 110761119   # "Seguimiento" — warm-but-not-ready leads (soft close)
+no_interesado_status_id = 110761539   # "No interesado" — hard close (explicit no)
 
 [messages]
 # Sent verbatim when a GPS pin arrives. Handled in code, never by the model,

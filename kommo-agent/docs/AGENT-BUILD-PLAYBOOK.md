@@ -216,6 +216,31 @@ Core engine pieces and why they are the way they are:
   including the welcome and deposit flows — no code fixes it, only the plan does.
   A **successful send returns `202 Accepted`** (not 200); watch for that in logs.
   Inbound `GET /talks/{id}/messages` is free of that quota; use it for history.
+- **Incoming-leads acceptance routes to the ADJACENT stage by pipeline ORDER**
+  (found Aug 2026, cost hours). When a lead in the "Incoming leads" (type-1) stage
+  is accepted — which happens automatically the moment your integration first
+  EDITS the lead (e.g. a name PATCH) — Kommo moves it to the stage **immediately to
+  its right in the pipeline order** AND assigns a responsible user. This is NOT a
+  visible trigger, does NOT appear on the Digital Pipeline board, and is NOT in the
+  docs. Symptom: every lead lands in whatever stage sits second, attributed to your
+  integration's display name with `created_by: 0`, even though your code never sent
+  a `status_id`. We proved it by tracing PATCH payloads (engine sent name-only) while
+  Kommo fired `lead_status_changed` + `entity_responsible_changed` at the same instant.
+  **Rule: order the pipeline so the FIRST real working stage (e.g. "Initial contact")
+  sits directly right of "Incoming leads." NEVER put a handoff/terminal stage there.**
+  The `responsible-assignment + stage-move` pair with `created_by: 0` is the signature
+  of this acceptance, not of a handoff.
+- **Kommo rejects arbitrary status colors** (`400 NotSupportedChoice` on `color`).
+  New pipeline statuses must use a color from Kommo's fixed palette. `#ffc8c8`
+  (muted red) and `#fff000` (yellow) are known-good; a hand-picked hex like
+  `#f3beb8` fails. Create the stage, read back the accepted color, move on.
+- **"<Client> AI Agent" in the lead history is YOUR integration's display name**,
+  not Kommo's native AI Agent product. Actions your API token takes (PATCH, tag,
+  stage move) are all attributed to it with `created_by: 0`. Do not mistake this
+  for a separate bot — check the Digital Pipeline (Leads → Automate), the Bots
+  list (Automations → Bots, triggers column), and Settings → AI agent to confirm
+  what is/ isn't configured before blaming an external mover. Usually it is the
+  acceptance-adjacency rule above or your own engine.
 
 ---
 
@@ -295,6 +320,64 @@ These generalise to any client. All were proven live.
   reply / Away message / FAQ" (Business Suite -> Inbox -> Automations) fire OUTSIDE
   your agent and will double-reply ("we'll respond shortly" then the agent answers).
   Turn them off, or the client's own Meta settings fight the agent.
+
+- **The engine owns the pipeline; bots and automations never move stages.** Best
+  practice (proven Aug 2026): ONE owner drives lead stages so the board mirrors the
+  real conversation. Define an ACTIVE FUNNEL of forward working stages (e.g. Initial
+  contact -> Discussions) and a small helper that moves the Kommo lead forward at
+  each conversation transition. Guards are essential: forward-only within the funnel;
+  allow only Incoming -> first-funnel-stage as entry; and NEVER move a lead already
+  in a terminal/parked stage (handoff, nurture, closed) — a real handoff, a soft/hard
+  close, a won deal, or a manual human placement must never be yanked back by ordinary
+  progress. Keep this SEPARATE from the internal SQLite stage machine (that funnel is
+  forward-only and includes handoff; the Kommo move is its own concern). Salesbots
+  deliver media only; no `change_status` steps.
+
+- **Dedicated nurture + rejection stages, not the human queue.** A soft close ("I'll
+  think about it") and a hard close ("not interested") are NOT human-handoff. Give
+  each its own pipeline stage (e.g. "Seguimiento" for warm-not-ready, "No interesado"
+  for explicit no) and move the lead there so the human queue (Atención humana) holds
+  only genuine handoffs. Guard every nurture/close move so it never overrides a lead
+  already handed off to a human.
+
+- **Welcome audio AFTER the price, not at first contact.** For an audio-first flow,
+  a first-contact voice note that front-loads the pitch lands before the customer has
+  said what they want. Better: first contact is TEXT-ONLY and asks the qualifying
+  question (pueblo/sector); once the customer answers and the price is disclosed, THEN
+  fire the welcome/intro audio to reinforce it. Subtlety: if the qualifying question
+  used to live in that audio's followup, fold it into the welcome text, and fire the
+  post-price audio with NO followup (the location is already known — a followup would
+  re-ask it).
+
+- **Fixed line vs LLM-generated followup — choose per criticality.** After an audio
+  fires, the accompanying text can be (a) a fixed client-approved line, or (b) LLM-
+  generated with a state-aware instruction. Use a FIXED line whenever the client cares
+  about exact wording (objection handling, trust, price framing) — an LLM followup
+  drifts. Use the state-aware LLM version only where the reply must adapt to captured
+  state (e.g. acknowledging an audio while advancing with the known sector). Moving a
+  bot between the two is a one-line change (add/remove it from the state-aware set).
+
+- **Never hedge that the audio may have failed.** Text that says "in case the audio
+  didn't reach you..." undermines confidence and clients hate it. If a customer re-asks
+  something an audio covered, answer it directly and warmly — do not mention the audio
+  at all. Put the hedge phrase and its variants in the prompt's FORBIDDEN list so the
+  LLM never regenerates it. (This phrasing hid in TWO places for us: a bot followup
+  and a system-prompt reconfirm template — grep the whole client pack, not just code.)
+
+- **Cross-line trust questions need a same-line answer.** "Are you a real business?"
+  can classify as a trust intent mapped to the WRONG product line's audio (e.g. a
+  factory/product-framed séptico audio in a water-study flow). Don't fire the mismatched
+  audio. Instead inject a line-appropriate trust instruction (registered company,
+  business registration on request, owner reachable, social proof) and optionally fire
+  an owner/credibility PHOTO. Trust content is business-level, but the framing must
+  match the active line.
+
+- **A price/qualification message must never also hand off.** If the same reply both
+  discloses a price (carries the location/price marker) and emits a handoff marker,
+  suppress the handoff in code — a priced lead is not a handoff moment. Dual-layer it:
+  a prompt rule (never handoff + price together; handoff only when NO price is given)
+  plus a code gate. This stops the model hedging a handoff on messy-but-resolvable
+  input (a garbled town spelling it still resolves and prices correctly).
 
 ## 3.6 Flow-state, intent routing, and silence (added Aug 2026, all proven live)
 
@@ -611,6 +694,11 @@ before each client; Meta changes these.
 | Name-safe spam filter | word-boundary phrases + engaged-lead bypass (no name false-drop) | ✅ live |
 | Pre-deploy UBA guard | AST use-before-assignment guard gates every deploy | ✅ live |
 | Voice-note anti-hallucination | whisper-1 + verbose_json gates + artifact/URL blocklist + retry→type→human ladder | ✅ live |
+| Engine-driven pipeline progression | helper moves lead Incoming→Initial contact→Discussions; forward-only, terminal-safe guards | ✅ live |
+| Soft/hard close nurture stages | soft close → Seguimiento, hard close → No interesado (not the human queue) | ✅ live |
+| Welcome audio after price | first contact text-only asks location; intro audio fires post-price | ✅ live |
+| Cross-line trust handling | agua trust → line-appropriate text + owner photo, not the séptico audio | ✅ live |
+| No handoff+price in one message | code gate suppresses handoff when a price marker is present | ✅ live |
 
 ---
 
@@ -630,6 +718,18 @@ before each client; Meta changes these.
 - Automating a step **removes whatever human judgement used to sit there.** The
   bank-details handoff replaced a human gatekeeper with a deterministic trigger;
   that is a feature and a risk in the same breath. Decide it deliberately.
+- **Trace the payload before blaming an external system.** A "who is moving my
+  leads?" hunt (Aug 2026) burned several rounds on wrong guesses — a Salesbot, a
+  Digital Pipeline trigger, Kommo's native AI Agent — each ruled out by a screenshot.
+  What actually cracked it was a one-line temporary trace logging every `PATCH /leads`
+  body: it proved the engine sent name-only, so the mover was Kommo's own acceptance-
+  adjacency rule. Add the trace on move ONE, not after five theories. The pairing of
+  `lead_status_changed` + `entity_responsible_changed` at `created_by: 0` is a
+  fingerprint worth memorizing (it means Kommo-side acceptance, not your code).
+- **Read the client's own UI signal.** The fix here (reorder the pipeline so the
+  first working stage sits right of Incoming leads) came from the CLIENT noticing the
+  left-to-right position dependency, not from the docs — which never state it. When a
+  platform behaves positionally, believe the board layout over the documentation.
 
 
 ---
@@ -670,11 +770,19 @@ turns "the template" into "this client."
   human-handled). If yes: which marker, which cooldown, what's the blast radius?
 - Stage machine stages for this client (greeting → … → handoff):
 
-### A5. Handoff
+### A5. Handoff & pipeline
 - Handoff triggers (quote requests, guarantees/refunds, off-KB, GPS pin, …):
 - Handoff pipeline stage id ("a human owns this" — bot goes silent while here):
 - Who gets the handoff task (responsible Kommo user)? Internal note wording?
 - Re-engagement TEMPLATE approved for out-of-24h-window follow-up? (§4)
+- **Pipeline ORDER set so the first working stage sits directly right of Incoming
+  leads?** (§3 acceptance-adjacency landmine — a terminal stage there dumps every
+  lead into it.) Record the stage ids the engine drives:
+  - incoming_status_id / initial_contact_status_id / discussions_status_id
+  - handoff_status_id (Atención humana) / seguimiento_status_id (soft close) /
+    no_interesado_status_id (hard close) / won / lost
+- Active funnel the engine advances (forward-only), e.g. [Initial contact, Discussions]:
+- Soft-close stage (nurture) and hard-close stage (rejection) created, palette color?
 
 ### A6. Channels & assets hosting
 - Channels: WhatsApp / Instagram / Facebook (origin allow-list)?

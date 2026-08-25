@@ -1265,8 +1265,10 @@ finding.
 1. ast.parse syntax check
 2. python3 scripts/prompt_guard_uba.py app/*.py    # UBA guard, blocks on exit 1
 3. python3 -c "from app import worker"             # import smoke test
-4. docker commit → restart → health
-5. git push + update CONTEXT-LOG.md
+4. git commit + push (source of truth)
+5. ON HOST: git clone → cp app/clients/scripts into build context →
+   docker compose build && docker compose up -d   # NEVER docker commit (see 12.27)
+6. health check + update CONTEXT-LOG.md
 ```
 
 **Meta-lesson (reinforces the playbook):** a green syntax check and a passing linter
@@ -1275,3 +1277,98 @@ found by READING REAL TRANSCRIPTS via the API and matching worker logs by talk_i
 that method found every flow bug in this session. Pull the thread, diagnose from
 logs, patch, guard, deploy, replay the same scenario live, read the logs.
 
+
+---
+
+## Section 12.27 — Engine Owns the Pipeline; Kommo Acceptance Routes by Adjacency
+
+**Problem (cost hours to diagnose):** ~19 of 20 leads landed in "Atención humana"
+at the price step, attributed to "<Client> AI Agent" with `created_by: 0`, even
+though the engine's PATCH sent name-only. Ruled out (with evidence): Digital
+Pipeline board (empty), all Salesbots (triggers empty), Kommo native AI Agent (not
+created), engine code (a temporary `LEAD_PATCH_TRACE` in `kommo.py._req` proved
+name-only PATCH).
+
+**Root cause:** Kommo's **Incoming-leads acceptance** moves an accepted lead to the
+stage **immediately to its right in the pipeline ORDER** and assigns a responsible
+user. Acceptance fires the moment the integration first edits the lead (our name
+PATCH at the price step). "Atención humana" was positioned second, so every lead
+went there. Not a trigger, not on the board, not documented. The
+`lead_status_changed + entity_responsible_changed` pair at `created_by: 0` is the
+signature of this acceptance.
+
+**Fix (two parts):**
+1. **Kommo UI:** order the pipeline so the first working stage ("Initial contact")
+   sits directly right of "Incoming leads." Never place a terminal/handoff stage there.
+2. **Engine owns progression.** `_advance_pipeline_stage(k, entity_id, target_cfg_key,
+   talk_id)` moves the lead forward through an ACTIVE FUNNEL only
+   (`["initial_contact_status_id", "discussions_status_id"]`). Guards: forward-only
+   within the funnel; only Incoming → first-funnel-stage as entry; NEVER touch a lead
+   already in a terminal/parked stage (handoff, Seguimiento, No interesado, closed).
+   Wired: agua welcome → Initial contact (idempotent with acceptance); price step →
+   Discussions. Kommo pipeline move only — SEPARATE from the internal `state.STAGES`
+   funnel (which is forward-only and includes `handoff`).
+
+**Meta-lesson:** trace the PATCH payload on move one, not after five theories. Believe
+positional UI behavior over docs when a platform acts positionally.
+
+---
+
+## Section 12.28 — Soft-Close and Hard-Close Nurture Stages
+
+**Problem:** soft closes ("lo voy a pensar") and hard closes ("no me interesa") had
+nowhere to go, so they either sat in the active pipeline or (worse) in the human
+queue, making the Atención humana SLA meaningless.
+
+**Pattern:** two dedicated pipeline stages — "Seguimiento" (warm, not ready) and
+"No interesado" (explicit no). The MINITS graceful-hold branch (2nd soft farewell)
+moves the lead to Seguimiento; the hard_no branch moves it to No interesado. Both
+GUARDED: never move a lead already in Atención humana (a real handoff outranks a
+nurture/rejection move). Kommo pipeline move only.
+
+**Gotchas:** (a) Kommo rejects arbitrary status colors — `400 NotSupportedChoice`;
+use a palette color (`#ffc8c8`, `#fff000` known-good). (b) A clean soft-close →
+Seguimiento needs TWO plain soft farewells (first = MINITS probe, second = hold +
+move); a message mixing objection+farewell only fires the probe.
+
+---
+
+## Section 12.29 — Welcome Audio After Price; No "Audio May Have Failed" Hedge
+
+**Welcome-after-price:** for an audio-first flow, first contact is TEXT-ONLY and asks
+the qualifying question. The welcome/intro audio fires AFTER the price is disclosed
+(reinforces it, and records the price disclosure in the coverage ledger — opening the
+price-objection gate). Subtlety: the qualifying question that used to live in the
+audio's followup must be folded into the welcome text, and the post-price audio fires
+with NO followup (location already known → a followup would re-ask it). Also: the
+welcome path must `return` after sending, or the LLM generates a duplicate question.
+
+**No audio hedge:** never say "se lo dejo por escrito por si el audio no le llegó
+bien" or any variant implying the audio failed — it undermines confidence and the
+client rejected it. If a customer re-asks an audio-covered topic, answer directly and
+warmly, no mention of the audio. Put the phrase + variants in FRASES PROHIBIDAS. It
+hid in TWO places (a bot followup line AND a system-prompt reconfirm template) — grep
+the WHOLE client pack, not just code.
+
+**Fixed line vs LLM followup:** use a FIXED client-approved line when wording matters
+(objection, trust, price framing); use the state-aware LLM followup only where the
+reply must adapt to captured state. Toggle by adding/removing the bot from the
+state-aware set.
+
+---
+
+## Section 12.30 — Cross-Line Trust Question; No Handoff + Price in One Message
+
+**Cross-line trust:** "are you a real business?" can classify as a trust intent that
+maps to the WRONG line's audio (e.g. a factory/product-framed séptico audio in a
+water-study flow, which the flow-guard then correctly skips → no audio + weak reply).
+Fix: in the mismatched flow, inject a line-appropriate trust instruction (registered
+company, business registration on request, owner reachable, social proof) and fire an
+owner/credibility PHOTO — do NOT fire the other line's audio.
+
+**No handoff + price together:** if a reply both discloses a price (carries the
+`[[SECTOR:]]`/price marker) and emits `[[HANDOFF]]`, suppress the handoff in code — a
+priced lead is not a handoff moment. Dual-layer: prompt rule (never handoff when a
+price is given; handoff only when the location is truly unresolvable) + code gate.
+Stops the model hedging a handoff on messy-but-resolvable input (a garbled town it
+still resolves and prices).

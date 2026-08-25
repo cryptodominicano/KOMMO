@@ -4102,3 +4102,32 @@ discussion as not meaningful). config gained incoming/initial_contact/discussion
 Pushed be0f40d. Backup worker.py.bak_pipeline.
 PENDING live test: basic convo flows Incoming -> Initial contact -> Discussions and
 never touches Atención humana; handoff/soft/hard closes still land in their stages.
+
+### Observability built in: TURN_TRACE + KOMMO_TRACE (Aug 24).
+
+Directly answers "can these agents be built with debugging in mind" — yes, and the
+Aug-24 lead-mover hunt is exactly why. Two additive, defensive layers (no behavior
+change; trace functions never raise):
+
+1. app/turntrace.py — per-turn decision summary (contextvars, asyncio-safe).
+   reset(talk_id) at handler entry, add(event) at key decision points, emit() in the
+   finally block. ONE greppable line per turn, always on:
+   "talk=<id> TURN_TRACE: intents=... | voz=... | stage->... | close=... | handoff=..."
+   Wired at 10 points: intent classification, each VOZ fire, VOZ_AGUA_1 post-price,
+   trust branch, MINITS probe/hold, Seguimiento/No interesado moves, pipeline stage
+   moves, agent handoff. Grep one convo end-to-end: docker logs kommo-agent | grep TURN_TRACE
+
+2. kommo._req KOMMO_TRACE (config flag, default OFF) — logs every WRITE (POST/PATCH/
+   DELETE/PUT) with method + path + body. This is the permanent version of the
+   ad-hoc LEAD_PATCH_TRACE that cracked the lead-mover mystery. Enable for a live
+   investigation via .env KOMMO_TRACE=true (needs docker compose up -d to reload
+   env_file), then turn it back off. GET reads skipped.
+
+Research basis (searched Aug 2026): LLM agents fail non-deterministically, so
+structured per-request tracing (prompt, response, tools, retrieval, cost) is the
+standard fix. Heavy platforms (Langfuse/OpenObserve/Phoenix, self-hosted, OTel) are
+the next step for "why did the model answer that" + eval loops; but today's bug was
+an EXTERNAL system reacting to our writes, which the lightweight outbound-write
+trace catches for near-zero cost. Built the lightweight layer first, deliberately.
+
+Pushed ac17a5f. Backups: worker.py.bak_trace2, kommo.py.bak_trace2, config.py.bak_trace2.

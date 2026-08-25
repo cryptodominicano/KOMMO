@@ -36,9 +36,18 @@ class KommoClient:
                 "POST", "PATCH", "DELETE", "PUT"):
             try:
                 import logging as _lg
+                # PII/secret safety (per OTel GenAI guidance: message content
+                # holds names/accounts and must not be captured by default).
+                # send_message bodies carry the bank text + customer-facing replies
+                # with names — log ONLY that a message was sent, never its text.
+                # Everything else (leads/tasks/contacts/bots — the CRM state
+                # changes we actually debug) logs its full body.
+                if "/send_message" in path or "/notes" in path:
+                    _body = "<redacted: message/note text>"
+                else:
+                    _body = kw.get("json")
                 _lg.getLogger("kommo").info(
-                    "KOMMO_WRITE %s %s body=%s", method.upper(), path,
-                    kw.get("json"))
+                    "KOMMO_WRITE %s %s body=%s", method.upper(), path, _body)
             except Exception:
                 pass
         r = await self._client.request(method, path, **kw)

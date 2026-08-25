@@ -36,13 +36,17 @@ class KommoClient:
                 "POST", "PATCH", "DELETE", "PUT"):
             try:
                 import logging as _lg
-                # PII/secret safety (per OTel GenAI guidance: message content
-                # holds names/accounts and must not be captured by default).
-                # send_message bodies carry the bank text + customer-facing replies
-                # with names — log ONLY that a message was sent, never its text.
-                # Everything else (leads/tasks/contacts/bots — the CRM state
-                # changes we actually debug) logs its full body.
-                if "/send_message" in path or "/notes" in path:
+                # Content handling is market-aware (kommo_trace_redact_content,
+                # default False). In the DR, bank account numbers + cédulas are
+                # routinely shared with customers for transfers, so message bodies
+                # are NOT treated as sensitive-in-logs and full bodies aid debugging.
+                # For regulated markets (US/EU) set the flag True to redact outbound
+                # message/note text (per OTel GenAI content-capture guidance).
+                # NOTE: this is separate from the hard rule that bank details never
+                # enter the PUBLIC git repo / prompt / KB (prompt-injection + public
+                # repo), which is enforced by the client-pack grep test regardless.
+                if (getattr(settings, "kommo_trace_redact_content", False)
+                        and ("/send_message" in path or "/notes" in path)):
                     _body = "<redacted: message/note text>"
                 else:
                     _body = kw.get("json")

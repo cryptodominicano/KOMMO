@@ -551,6 +551,51 @@ immediately also push + rebuild — never as the deploy itself.
   Kommo keeps the talk open (it reuses the talk_id); lead-keyed state survives even
   a talk close.
 
+## 3.8 Observability built in (added Aug 2026, 2026 best-practice aligned)
+
+Agents fail non-deterministically, so ordinary logs aren't enough — the standard fix
+(OpenTelemetry GenAI guidance) is structured per-request tracing correlated by an id.
+Build it in from day one so the next "who moved my lead / why did it say that" is a
+grep, not a multi-hour hunt (that hunt is exactly what motivated this — see §9).
+
+Two lightweight layers in the engine (`app/turntrace.py`), both additive and
+defensive (a trace bug must never break a reply):
+
+- **TURN_TRACE — always on, one line per turn.** A contextvars accumulator
+  (asyncio-safe): `reset(talk_id)` at handler entry, `add(event)` at each key
+  decision, `emit()` in the `finally` block. Produces one greppable summary:
+  `talk=<id> TURN_TRACE: intents=... | voz=... | stage->... | close=... | handoff=...`.
+  Grep one conversation end-to-end: `docker logs kommo-agent | grep TURN_TRACE`.
+  Correlate by the same `talk_id` that prefixes every other log line.
+
+- **KOMMO_TRACE — opt-in, off by default.** An env flag; when on, `kommo._req`
+  logs every WRITE (POST/PATCH/DELETE/PUT) with method, path, and body. This is the
+  permanent version of the ad-hoc trace that cracked the acceptance-adjacency
+  mystery (it proved the engine's PATCH was name-only). Reads (GET) skipped. Enable
+  for a live investigation (`.env KOMMO_TRACE=true` + `docker compose up -d`), then off.
+
+**Content capture is market-aware, not a blanket rule.** OTel GenAI guidance keeps
+message CONTENT out of default telemetry because in most markets it holds regulated
+PII. But content sensitivity is per-market: **in the Dominican Republic, bank account
+numbers and cédulas are routinely shared with customers for transfers (small
+businesses use transfers to avoid card fees), so they are NOT sensitive-in-logs
+there**, and logging the actual reply text aids debugging. So redaction is a FLAG
+(`kommo_trace_redact_content`, default False = DR norm); set it True for regulated
+markets (US/EU) to redact outbound `/send_message` and `/notes` bodies. This is
+SEPARATE from — and does not relax — the hard rule that bank details never enter the
+PUBLIC git repo, prompt, or KB (prompt-injection + public-repo reasons), which the
+client-pack grep test enforces on every run regardless. Local debug logs on a
+root-only VPS are a different threat model from a public repo.
+
+**When to add the heavy layer.** Full OpenTelemetry with `gen_ai.*` semantic
+conventions + nested spans + token/cost tracking (self-hosted Langfuse, OpenObserve,
+or Arize Phoenix) is the next step when you want cross-conversation trace trees,
+cost dashboards, and eval loops. Not before: as of 2026 the GenAI conventions are
+still experimental (attribute names can change), and for a single self-hosted service
+structured logging with id correlation is the recommended start. Building the
+lightweight layer first with `talk_id` correlation makes that migration additive,
+not a rewrite (point an OTel collector at the engine, adopt the conventions).
+
 ## 4. Meta compliance (these can cost the client their WABA)
 
 Source: WhatsApp Business Solution Terms + Business Messaging Policy. Re-read
@@ -749,6 +794,11 @@ turns "the template" into "this client."
 - AI disclosure line (truthful, used when a customer asks if it's a bot):
 - WABA billing partner audited & clean? (§2 — do this FIRST):
 - Kommo plan = Pro or higher + Chats API message package sized to ad volume?
+- Observability (§3.8): TURN_TRACE is always on. KOMMO_TRACE off by default.
+  **Content redaction (`kommo_trace_redact_content`): market call.** DR/LatAm where
+  account numbers + cédulas are shared for transfers → leave False (log bodies).
+  US/EU or any regulated market → set True. (Public-repo bank-detail rule stands
+  regardless — §5.)
 
 ### A2. Service lines (repeat per line)
 - Service line name / internal flow id:

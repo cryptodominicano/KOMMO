@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # with method, path, and body. OFF by default (verbose). Toggle in .env
     # as KOMMO_TRACE=true for a live investigation, then turn it back off.
     kommo_trace: bool = False
+    # Redact message/note bodies in KOMMO_TRACE. Default False: in the DR
+    # bank account numbers + cédulas are routinely shared with customers for
+    # transfers (fee avoidance), so they are NOT sensitive-in-logs here, and
+    # seeing the actual reply text aids debugging. Set True for regulated
+    # markets (US/EU) where outbound message content is protected PII.
+    kommo_trace_redact_content: bool = False
     # Hallucination guards
     min_audio_bytes: int = 2000        # reject near-empty audio
     min_transcript_chars: int = 2

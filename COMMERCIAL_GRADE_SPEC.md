@@ -1372,3 +1372,44 @@ priced lead is not a handoff moment. Dual-layer: prompt rule (never handoff when
 price is given; handoff only when the location is truly unresolvable) + code gate.
 Stops the model hedging a handoff on messy-but-resolvable input (a garbled town it
 still resolves and prices).
+
+---
+
+## Section 12.31 — Built-In Observability (TURN_TRACE + KOMMO_TRACE)
+
+**Why:** agents fail non-deterministically; ordinary logs aren't enough. 2026 best
+practice (OpenTelemetry GenAI guidance) is structured per-request tracing correlated
+by an id. The Aug-24 "who moved my lead" hunt (§12.27) — hours lost, cracked only by
+an ad-hoc PATCH trace — is the motivating failure. Build tracing in from day one.
+
+**Two layers (`app/turntrace.py`), additive + defensive (never raise):**
+
+1. **TURN_TRACE — always on.** contextvars accumulator (asyncio-safe):
+   `reset(talk_id)` at handler entry, `add(event)` at key decisions, `emit()` in
+   `finally`. One greppable line per turn:
+   `talk=<id> TURN_TRACE: intents=... | voz=... | stage->... | close=... | handoff=...`
+   Wired at 10 points (intent classification, each VOZ fire, VOZ_AGUA_1 post-price,
+   trust branch, MINITS probe/hold, Seguimiento/No interesado moves, pipeline stage
+   moves, agent handoff). Grep a convo: `docker logs kommo-agent | grep TURN_TRACE`.
+
+2. **KOMMO_TRACE — opt-in, default OFF** (`config.kommo_trace`). When on, `kommo._req`
+   logs every WRITE (POST/PATCH/DELETE/PUT) with method + path + body. Permanent form
+   of the trace that proved the engine sent name-only. GET reads skipped. Enable via
+   `.env KOMMO_TRACE=true` + `docker compose up -d`, then off.
+
+**Content capture is MARKET-AWARE, not a blanket redaction.** OTel guidance keeps
+message content out of default telemetry because it usually holds regulated PII —
+BUT sensitivity is per-market. **In the DR, bank account numbers and cédulas are
+routinely shared with customers for bank transfers (fee avoidance), so they are NOT
+sensitive-in-logs there**, and logging the real reply text aids debugging. Redaction
+is therefore a FLAG (`kommo_trace_redact_content`, default False = DR norm); set True
+for regulated markets to redact `/send_message` and `/notes` bodies. SEPARATE from
+the hard rule that bank details never enter the PUBLIC git repo / prompt / KB
+(prompt-injection + public-repo; §5), enforced by the pack grep test regardless.
+Local debug logs on a root-only VPS ≠ a public repo.
+
+**Heavy layer later:** full OTel `gen_ai.*` spans + token/cost + eval loops
+(self-hosted Langfuse / OpenObserve / Phoenix) when cross-conversation trace trees
+and cost dashboards are wanted. Not sooner — 2026 GenAI conventions are still
+experimental. The lightweight `talk_id`-correlated layer makes that migration
+additive, not a rewrite.

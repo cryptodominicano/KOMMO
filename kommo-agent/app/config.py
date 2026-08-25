@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Spanish) and do NOT support verbose_json (no no_speech_prob/avg_logprob to
     # gate on). whisper-1 exposes those signals and does not echo the prompt.
     whisper_model_openai: str = "whisper-1"
+    # Observability: when true, kommo._req logs every write (POST/PATCH/DELETE)
+    # with method, path, and body. OFF by default (verbose). Toggle in .env
+    # as KOMMO_TRACE=true for a live investigation, then turn it back off.
+    kommo_trace: bool = False
     # Hallucination guards
     min_audio_bytes: int = 2000        # reject near-empty audio
     min_transcript_chars: int = 2

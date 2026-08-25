@@ -27,6 +27,20 @@ class KommoClient:
         await self._client.aclose()
 
     async def _req(self, method: str, path: str, **kw) -> Any:
+        # Observability (KOMMO_TRACE, default OFF): log every WRITE with its body.
+        # This is the exact trace that cracked the Aug-24 lead-mover mystery — a
+        # PATCH /leads that carried only {'name': ...} proved the engine was not
+        # moving the lead. Reads (GET) are skipped (high-volume, low-value).
+        # Never raises: a trace bug must not break a Kommo call.
+        if getattr(settings, "kommo_trace", False) and method.upper() in (
+                "POST", "PATCH", "DELETE", "PUT"):
+            try:
+                import logging as _lg
+                _lg.getLogger("kommo").info(
+                    "KOMMO_WRITE %s %s body=%s", method.upper(), path,
+                    kw.get("json"))
+            except Exception:
+                pass
         r = await self._client.request(method, path, **kw)
         if r.status_code == 204:
             return None

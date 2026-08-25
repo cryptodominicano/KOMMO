@@ -11,6 +11,7 @@ import unicodedata
 import time
 from . import rag, agent, state, client as client_pack
 from . import haiku as haiku_pre
+from . import turntrace as trace
 
 # Per-talk reply locks: prevents double-reply race condition when two
 # messages arrive within the debounce window. Only one reply can be
@@ -110,6 +111,7 @@ async def _advance_pipeline_stage(k: KommoClient, entity_id, target_cfg_key: str
     try:
         await k.update_lead(int(entity_id), status_id=tid)
         log.info("talk=%s pipeline -> %s (%s)", talk_id, tid, target_cfg_key)
+        trace.add("stage->" + str(target_cfg_key).replace("_status_id", ""))
     except Exception as _e:
         log.warning("talk=%s pipeline move to %s failed: %s", talk_id, tid, _e)
 
@@ -251,6 +253,7 @@ _AUDIO_TOPIC_MAP = {
 
 async def handle_message(msg: dict) -> None:
     talk_id = str(msg.get("talk_id") or "")
+    trace.reset(talk_id)
     msg_id = str(msg.get("id") or "")
     mtype = (msg.get("message_type") or "text").lower()
     text = (msg.get("text") or "").strip()
@@ -1192,8 +1195,11 @@ async def handle_message(msg: dict) -> None:
                 )
                 extra = (_trust_inj + "\n\n" + extra).strip() if extra else _trust_inj
                 _fire_wellington_photo = True
+                trace.add("trust_agua->text+wellington_photo")
                 log.info("talk=%s trust_question (agua) — text reply + Wellington "
                          "photo, no septico audio", talk_id)
+            trace.add("intents=" + (",".join(
+                i.get("scope", "?") for i in _intents) or "none"))
             log.info("talk=%s haiku intents: %s", talk_id,
                      [{"scope": i["scope"], "text": i["text"][:40]}
                       for i in _intents])
@@ -1283,6 +1289,7 @@ async def handle_message(msg: dict) -> None:
                         state.mark_voice_sent(talk_id, _hv_key)
                         _voz_fired = _hv_key
                         _haiku_voz_fired = True
+                        trace.add("voz=" + str(_hv_key))
                         log.info("talk=%s HAIKU_VOZ: fired %s (intent=%s conf=%.2f)",
                                  talk_id, _hv_key, _hv_intent, _hv_conf)
                         # Coverage ledger
@@ -1407,6 +1414,7 @@ async def handle_message(msg: dict) -> None:
                         str(entity_id) if entity_id else talk_id,
                         "soft_farewell_probe", "text"
                     )
+                    trace.add("soft_farewell=probe")
                     log.info("talk=%s soft_farewell — MINITS probe injected (first)",
                              talk_id)
                 else:
@@ -1424,6 +1432,7 @@ async def handle_message(msg: dict) -> None:
                         "Cálido, breve, sin presión. NO preguntes nada más."
                         + ("\n\n" + extra if extra else "")
                     ).strip()
+                    trace.add("soft_farewell=graceful_hold")
                     log.info("talk=%s soft_farewell — graceful hold (probe already sent)",
                              talk_id)
                     # CRM hygiene: a confirmed soft close ("lo voy a pensar", "le
@@ -1660,6 +1669,7 @@ async def handle_message(msg: dict) -> None:
                             # ... → handoff); Seguimiento is a PAUSE, not funnel
                             # progress, so it lives only on the Kommo board.
                             await k.update_lead(int(entity_id), status_id=int(_seg_id))
+                            trace.add("close=soft->Seguimiento")
                             log.info("talk=%s soft close — moved to Seguimiento %s",
                                      talk_id, _seg_id)
                         else:
@@ -1679,6 +1689,7 @@ async def handle_message(msg: dict) -> None:
                         _cur2 = await k.get_lead_status(int(entity_id))
                         if _cur2 is None or int(_cur2) != int(_ho_id2 or 0):
                             await k.update_lead(int(entity_id), status_id=int(_ni_id))
+                            trace.add("close=hard->NoInteresado")
                             log.info("talk=%s hard close — moved to No interesado %s",
                                      talk_id, _ni_id)
                         else:
@@ -1718,6 +1729,7 @@ async def handle_message(msg: dict) -> None:
                         await k.run_bot(int(_voz_triggers[_vk1p]), entity_id,
                                         _entity_type(msg))
                         state.mark_voice_sent(talk_id, _vk1p)
+                        trace.add("voz=VOZ_AGUA_1(post-price)")
                         log.info("talk=%s launched VOZ_AGUA_1 %s (post-price)",
                                  talk_id, _voz_triggers[_vk1p])
                         _cov_lead_1p = str(entity_id) if entity_id else talk_id
@@ -1851,6 +1863,7 @@ async def handle_message(msg: dict) -> None:
             state.log_stage_transition(talk_id, _old_stg3, "handoff")
             state.mark_handoff(talk_id, "agent_requested")
             await _signal_handoff(k, msg, talk_id, "agent_requested")
+            trace.add("handoff=agent_requested")
             log.info("talk=%s handed off by agent (stage: %s → handoff)",
                      talk_id, _old_stg3)
 
@@ -1924,4 +1937,5 @@ async def handle_message(msg: dict) -> None:
     except Exception:
         log.exception("talk=%s unhandled error", talk_id)
     finally:
+        trace.emit()
         await k.aclose()

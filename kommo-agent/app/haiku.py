@@ -1,4 +1,4 @@
-"""Haiku 4.5 pre-processor — intent extraction + scope classification.
+"""Intent pre-processor (OpenAI gpt-4o-mini, not Claude Haiku despite the module name) — intent extraction + scope classification.
 
 Runs before the main GPT-4.1 call. Returns a structured list of intents,
 each classified as one of:

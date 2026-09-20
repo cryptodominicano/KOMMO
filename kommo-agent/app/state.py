@@ -722,3 +722,52 @@ def mark_flow_confirmed(talk_id: str) -> None:
         c.execute(
             "INSERT OR IGNORE INTO flow_confirmed (talk_id, at) VALUES (?, ?)",
             (str(talk_id), _t.time()))
+
+
+def prune(retain_days: int = 30) -> dict:
+    """Delete dead rows from the time-keyed state tables so state.db never grows
+    without bound. Conservative by design: a WhatsApp conversation untouched for
+    retain_days is dead, and a genuinely new inbound always gets a fresh talk_id,
+    so removing old rows cannot resurrect a live conversation. scheduled_nudges
+    terminal rows (sent/cancelled/superseded/expired) are pure residue and pruned
+    at 7 days; pending nudges are never touched. Returns {table: rows_deleted}
+    for logging. Never raises."""
+    import time as _t
+    cutoff = _t.time() - retain_days * 86400
+    nudge_cutoff = _t.time() - 7 * 86400
+    counts: dict = {}
+    try:
+        with _conn() as c:
+            for tbl in ("greeted", "last_inbound", "voice_sent", "flow_state",
+                        "handoff", "notified", "first_seen", "deposit_sent",
+                        "discount_offered", "audio_fail", "awaiting_linderos",
+                        "linderos_sent", "flow_confirmed"):
+                try:
+                    cur = c.execute("DELETE FROM " + tbl + " WHERE at < ?", (cutoff,))
+                    if cur.rowcount:
+                        counts[tbl] = cur.rowcount
+                except Exception:
+                    pass
+            try:
+                cur = c.execute(
+                    "DELETE FROM covered_topics "
+                    "WHERE covered_at < datetime(?, 'unixepoch')", (cutoff,))
+                if cur.rowcount:
+                    counts["covered_topics"] = cur.rowcount
+            except Exception:
+                pass
+            try:
+                cur = c.execute(
+                    "DELETE FROM scheduled_nudges "
+                    "WHERE status != 'pending' AND created_at < ?", (nudge_cutoff,))
+                if cur.rowcount:
+                    counts["scheduled_nudges"] = cur.rowcount
+            except Exception:
+                pass
+            try:
+                c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return counts

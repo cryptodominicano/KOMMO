@@ -15,7 +15,6 @@ from .config import settings
 from . import state, client as client_pack
 from .worker import handle_message
 from .kommo import KommoClient, KommoError
-from . import linderos
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
@@ -128,7 +127,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="kommo-agent", version="1.0.0", lifespan=lifespan)
-app.include_router(linderos.router)   # /linderos, /api/linderos, /linderos/img/*
 
 _KEY_RE = re.compile(r"(\w+)|\[(\w*)\]")
 

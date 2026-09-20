@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     kommo_whatsapp_origin: str = "waba"
 
     # --- LLM ---
-    # provider: "openai" (current) or "anthropic". Prompt is model-agnostic;
-    # switching is a one-line change.
+    # provider: "openai" (current) or "anthropic". Prompt is model-agnostic, but
+    # switching to "anthropic" also requires ANTHROPIC_API_KEY in the environment
+    # (not set today), so it is config plus a key, not literally a one-line change.
     llm_provider: str = "openai"
     openai_model: str = "gpt-4.1"
     anthropic_api_key: str = ""

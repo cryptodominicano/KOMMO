@@ -585,52 +585,69 @@ async def handle_message(msg: dict) -> None:
         _sb = client_pack.pack().get("salesbot", {})
         _voz_triggers = _sb.get("voz_agua_triggers", {})
         _imhoff_triggers = _sb.get("voz_imhoff_triggers", {})
-        # VOZ_AGUA_1: only fire when agua flow is explicitly confirmed.
-        # Generic greeting (no keywords) → hold audio, show menu instead.
+        # Agua first contact: welcome flyer image + Wellington's verbatim
+        # welcome (which carries the full pitch) + a town qualifier. VOZ_AGUA_1
+        # audio is RETIRED — the welcome text duplicates it. Channel-agnostic now
+        # (no audio to gate), so it runs on WhatsApp, Instagram and Facebook.
+        # Generic greeting (no keywords) → hold and show the menu instead.
         _agua_flow_confirmed = (
             is_first and not _septico_first and not from_water_ad
             and (_has_agua_kw or state.is_flow_confirmed(talk_id))
         )
-        if (_agua_flow_confirmed
-                and entity_id and _is_waba
-                and _voz_triggers.get("VOZ_AGUA_1")):
-            # Pacing: 1.5s after welcome image before voice fires
-            # (BSP/Meta guidance: avoid stacking 3+ media in <2s)
-            if is_first:
+        if _agua_flow_confirmed and entity_id:
+            try:
+                # 1) Welcome flyer image (best-effort; supported on all channels).
+                if welcome_bot:
+                    try:
+                        await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
+                    except KommoError as _we:
+                        log.warning("talk=%s welcome image failed (non-critical): %s",
+                                    talk_id, _we)
+                # 2) Wellington's verbatim welcome (full pitch: 3 studies, 80-90%,
+                #    ~RD$45,000, convencional/exploratoria). Sent from code so the
+                #    approved copy is never paraphrased.
                 await asyncio.sleep(1.5)
-            # NEW ORDER (2026-08): the welcome is TEXT-ONLY and asks for the
-            # location. VOZ_AGUA_1 no longer fires here — it fires AFTER the price
-            # is disclosed at the [[SECTOR]] step (see the price-send block). The
-            # welcome text now carries the pueblo/sector question itself (which
-            # used to live in VOZ_AGUA_1's audio followup).
-            _vk1 = "VOZ_AGUA_1"
-            if not state.voice_already_sent(talk_id, _vk1):
-                try:
-                    await asyncio.sleep(1.0)
-                    await k.send_message(
-                        talk_id,
-                        "¡Bienvenido! 😊 Con gusto le orientamos sobre "
-                        "nuestros estudios de agua y perforación de pozos.\n\n"
-                        "¿En qué pueblo o sector está el terreno donde desea "
-                        "hacer el estudio? 🙏"
-                    )
-                    log.info("talk=%s agua welcome text + sector question sent "
-                             "(VOZ_AGUA_1 deferred to post-price)", talk_id)
-                    # First contact is COMPLETE for this turn: the welcome text
-                    # already asked for the pueblo/sector. Return so the LLM does
-                    # NOT also generate a reply this turn — otherwise it produces a
-                    # SECOND location question ("¡Perfecto! ¿en qué pueblo...?").
-                    # (Mirrors how the audio-bypass path used to suppress the LLM
-                    # turn when VOZ_AGUA_1 fired here.)
-                    # Engine-driven pipeline: welcome sent -> Initial contact.
-                    # (Kommo acceptance also routes Incoming -> Initial contact;
-                    # this is idempotent and guarded, so it is harmless overlap
-                    # and keeps the engine authoritative if acceptance changes.)
-                    await _advance_pipeline_stage(k, entity_id,
-                                                  "initial_contact_status_id", talk_id)
-                    return
-                except KommoError as e:
-                    log.error("talk=%s agua welcome text failed: %s", talk_id, e)
+                await k.send_message(
+                    talk_id,
+                    "Hola, le saluda Wellington, de Aguas Profundas. Le orientar\u00e9 "
+                    "y acompa\u00f1ar\u00e9 en todo el proceso de b\u00fasqueda de agua.\n\n"
+                    "Aunque nadie puede garantizar agua al 100%, nuestra evaluaci\u00f3n "
+                    "integral ofrece entre un 80% y 90% de probabilidad de \u00e9xito, "
+                    "combinando:\n\n"
+                    "1. Estudio topogr\u00e1fico\n"
+                    "2. Radiestesia\n"
+                    "3. Estudio geohidrol\u00f3gico\n\n"
+                    "No todos los estudios son iguales; algunas ofertas son "
+                    "incompletas o utilizan un solo m\u00e9todo. Nuestro proceso combina "
+                    "los tres an\u00e1lisis para recomendar el punto m\u00e1s favorable, "
+                    "reducir riesgos y hacer su inversi\u00f3n m\u00e1s eficiente.\n\n"
+                    "El costo aproximado, por la distancia, es de RD$45,000 e "
+                    "incluye los tres estudios. Seg\u00fan los resultados, tambi\u00e9n "
+                    "ofrecemos perforaci\u00f3n convencional o exploratoria.\n\n"
+                    "Quedo disponible para cualquier pregunta o para agendar."
+                )
+                # 3) Town qualifier as its own message — the funnel-advancing close.
+                #    The bot needs the town for the exact per-province price.
+                await asyncio.sleep(1.0)
+                await k.send_message(
+                    talk_id,
+                    "Para darle el costo exacto seg\u00fan su zona, \u00bfen qu\u00e9 pueblo o "
+                    "sector est\u00e1 el terreno? \U0001f64f"
+                )
+                # Record what the welcome covered so the LLM does not repeat it,
+                # AND open the price-objection gate (estudio_precio): Wellington's
+                # welcome states the price, so an objection now is valid. VOZ_AGUA_1
+                # used to record these; retired, so we record them here. Idempotent.
+                _cov_lead_w = str(entity_id)
+                for _tw in ("estudio_proceso", "estudio_precio", "perforacion_tipos"):
+                    state.mark_topic_covered(_cov_lead_w, _tw, "text", source="welcome")
+                log.info("talk=%s agua welcome (image + Wellington text + town "
+                         "qualifier) sent; VOZ_AGUA_1 retired", talk_id)
+                await _advance_pipeline_stage(k, entity_id,
+                                              "initial_contact_status_id", talk_id)
+                return
+            except KommoError as e:
+                log.error("talk=%s agua welcome failed: %s", talk_id, e)
 
         # --- Séptico first contact: image → welcome text → audio ---
         # Correct sequence per client approval (2026-08-15):
@@ -1711,33 +1728,19 @@ async def handle_message(msg: dict) -> None:
                                  talk_id, _wphoto)
                     except KommoError as e:
                         log.error("talk=%s Wellington photo failed: %s", talk_id, e)
-            # NEW ORDER: VOZ_AGUA_1 fires right AFTER the price text (flagged at
-            # the [[SECTOR]] step). It reinforces the price the customer just read
-            # and records estudio_precio in the ledger (opens the price-objection
-            # gate). No followup — the price text already ended with "¿Tiene
-            # alguna pregunta?", and the location is already captured, so we must
-            # NOT re-ask for it. Guarded by voice_already_sent (fires once).
+            # VOZ_AGUA_1 RETIRED: Wellington's welcome text carries the pitch,
+            # so no post-price audio. estudio_precio is recorded at the welcome
+            # step (the welcome discloses the price), so the price-objection gate
+            # is already open here. We still (idempotently) record it and advance
+            # the pipeline to Discussions when the exact province price is given.
             if (locals().get('_fire_voz1_after_price')
                     and not _is_septico_flow
-                    and entity_id and _is_waba):
-                _vk1p = "VOZ_AGUA_1"
-                if (not state.voice_already_sent(talk_id, _vk1p)
-                        and _voz_triggers.get(_vk1p)):
-                    try:
-                        await asyncio.sleep(1.5)
-                        await k.run_bot(int(_voz_triggers[_vk1p]), entity_id,
-                                        _entity_type(msg))
-                        state.mark_voice_sent(talk_id, _vk1p)
-                        trace.add("voz=VOZ_AGUA_1(post-price)")
-                        log.info("talk=%s launched VOZ_AGUA_1 %s (post-price)",
-                                 talk_id, _voz_triggers[_vk1p])
-                        _cov_lead_1p = str(entity_id) if entity_id else talk_id
-                        for _topic_1p in _AUDIO_TOPIC_MAP.get(_vk1p, []):
-                            state.mark_topic_covered(_cov_lead_1p, _topic_1p,
-                                                     'audio', source=_vk1p)
-                    except KommoError as e:
-                        log.error("talk=%s VOZ_AGUA_1 post-price failed: %s",
-                                  talk_id, e)
+                    and entity_id):
+                _cov_lead_1p = str(entity_id)
+                if not state.get_topic_coverage_count(_cov_lead_1p, "estudio_precio"):
+                    state.mark_topic_covered(_cov_lead_1p, "estudio_precio",
+                                             "text", source="province_price")
+                    trace.add("estudio_precio=recorded(text)")
                 # Engine-driven pipeline: price disclosed -> Discussions. Guarded
                 # (forward-only, never overrides terminal/parked stages).
                 await _advance_pipeline_stage(k, entity_id,

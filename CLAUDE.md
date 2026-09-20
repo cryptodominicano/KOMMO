@@ -287,8 +287,9 @@ fixes (see section 13, hotfix-must-be-followed-by-rebuild).
    #1 risk. Tier 2 dead code rides with it: internal linderos machinery
    (awaiting_linderos, linderos_first, the [[LINDEROS_LISTO]] media branch, the
    [[AUDIO_PAGO]] strip, the [linderos] block in client.toml).
-2. Confirm Uptime Kuma is watching /health; a silent container death currently pages
-   no one.
+2. (RESOLVED 2026-09-20) Uptime Kuma monitor "Kommo Agent" (id 10) watches /health,
+   status UP, and alerts by email to Isaias on failure. Optional enhancement: add a
+   second channel (SMS/Telegram/push) so an outage is caught even if email is missed.
 3. Drop customer voice transcripts to DEBUG (Business Solution Data at rest in logs).
 4. /root master.env and .env token sync (KOMMO_LONG_LIVED_TOKEN; infra-mcp can't reach
    /root, so this is SSH-only).

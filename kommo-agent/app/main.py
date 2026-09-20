@@ -20,6 +20,32 @@ from . import linderos
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
 
+
+class _RedactSecretFilter(logging.Filter):
+    """Redact the webhook path-secret from log records (notably uvicorn.access,
+    which logs the full request path). The secret in the URL path is the only
+    webhook auth we have, so it must never sit in plaintext logs. Never raises."""
+
+    def __init__(self, secret: str):
+        super().__init__()
+        self._secret = secret
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if self._secret:
+            try:
+                if isinstance(record.args, tuple):
+                    record.args = tuple(
+                        a.replace(self._secret, "<secret>")
+                        if isinstance(a, str) else a
+                        for a in record.args
+                    )
+                if isinstance(record.msg, str) and self._secret in record.msg:
+                    record.msg = record.msg.replace(self._secret, "<secret>")
+            except Exception:
+                pass
+        return True
+
+
 async def _followup_loop():
     """Poll scheduled_nudges every 30s and send any that are due.
     Atomic claim (status='pending'→'sent' in a WHERE-guarded UPDATE) means
@@ -28,10 +54,22 @@ async def _followup_loop():
     before the scheduled_nudges migration.
     """
     _default_nudge = (client_pack.pack().get("messages", {}) or {}).get("followup_nudge") or ""
+    _last_prune = 0.0
     while True:
         try:
             await asyncio.sleep(30)
             now = time.time()
+            # Hourly housekeeping so state.db never grows unbounded. Safe: only
+            # removes rows for talks/leads untouched for the retention window,
+            # and a genuinely new inbound always gets a fresh talk_id.
+            if now - _last_prune > 3600:
+                _last_prune = now
+                try:
+                    _pruned = state.prune()
+                    if _pruned:
+                        log.info("state prune: %s", _pruned)
+                except Exception as _pe:
+                    log.warning("state prune failed (non-fatal): %s", _pe)
             claimed = state.claim_due_nudges(now)
             if not claimed:
                 continue
@@ -77,6 +115,11 @@ async def lifespan(app: FastAPI):
     )
     if not settings.webhook_secret:
         log.warning("WEBHOOK_SECRET is empty - the webhook endpoint will reject everything")
+    else:
+        # Attach here (not at import) so it survives uvicorn's own logging setup.
+        _sf = _RedactSecretFilter(settings.webhook_secret)
+        for _ln in ("uvicorn.access", "uvicorn"):
+            logging.getLogger(_ln).addFilter(_sf)
     _fu_task = asyncio.create_task(_followup_loop())
     try:
         yield

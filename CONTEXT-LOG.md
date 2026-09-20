@@ -8,6 +8,104 @@ Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by w
 
 ---
 
+## Session: September 20, 2026, 01:21 UTC
+
+### Full 2026-best-practice audit of the live agent, then fixed 4 of the audit items (deployed + verified). worker.py decomposition still pending.
+
+Read every source file in the live tree (not the log's description of it),
+confirmed the deployed image == origin/main byte-for-byte across all 11 core
+files, and checked live runtime via infra-mcp. Agent healthy: 59MB RSS,
+0.12% CPU, 0 restarts, Qdrant green (48 pts, 1536-dim Cosine), webhook 47409015
+registered + enabled, last inbound ~10h prior (low Saturday volume; funnel alive,
+NOT broken).
+
+**Deploy method this session: IN-CONTAINER hot deploy via infra-mcp** (docker cp
+the validated file into kommo-agent, in-container py_compile + `import app.main`
+gate, docker commit kommo-agent:latest as rollback, docker restart). Reason:
+infra-mcp reaches the box through the Docker socket but CANNOT see /root, where
+the git checkout + build context live, so `git pull` + `docker compose build` is
+not reachable from this session.
+**CARRY FORWARD:** GitHub main is now ~9 commits AHEAD of the on-disk checkout at
+/root/kommo-agent. The live container matches GitHub; the checkout is STALE.
+Before ANY future `docker compose build` from /root/kommo-agent, run
+`git pull origin main` there first, or the rebuild ships old code and WIPES every
+fix below. Same stale-checkout trap the log has warned about since 2026-08-10.
+
+### master.env token reconcile (found + fixed)
+KOMMO_LONG_LIVED_TOKEN in /app/data/master.env was STALE (1149 chars) vs the
+working token the live container runs on (1150). The container is fine on its own
+in-memory token, but the next `docker compose up -d` (which re-reads env_file)
+would have picked up the stale token and 401'd every Kommo call. Reconciled
+master.env to the known-good container token (verified identical by FILE hash;
+authenticates HTTP 200). Backup: /app/data/master.env.bak-20260920-003549.
+LESSON: `printf '%s' "$VAR" | sha256sum` MANGLES the token through the shell and
+gives a false mismatch. Hash the file bytes directly. That artifact nearly sent
+me chasing a non-bug.
+STILL OPEN: the /root/master.env and /root/.env mirrors (per infra map) were NOT
+synced (infra-mcp can't see /root). Sync KOMMO_LONG_LIVED_TOKEN there over SSH.
+
+### Batch 1: three low-risk fixes (verified live)
+1. **Webhook secret no longer leaks into uvicorn access logs.** main.py:
+   `_RedactSecretFilter` attached to the uvicorn.access/uvicorn loggers in
+   lifespan startup (after uvicorn configures its own logging, so it sticks). The
+   path secret is the only webhook auth we have (Kommo general webhooks are
+   unsigned), so it must not sit in plaintext logs. VERIFIED: fired real POSTs;
+   access line now reads `POST /webhook/kommo/<secret>`; 0 occurrences of the raw
+   value. (Flagged in the 2026-07-17 audit; had sat open ~2 months.)
+2. **state.prune()** TTL sweep so state.db stops growing unbounded. Deletes rows
+   older than 30d from the time-keyed tables; scheduled_nudges terminal residue
+   at 7d; pending nudges never touched; wal_checkpoint(TRUNCATE) after. Called
+   hourly from the followup loop (fires ~30s after each start). VERIFIED: auto-
+   fired on restart and removed ~1,700 dead rows (greeted 895 to 176, last_inbound
+   853 to 197, scheduled_nudges 493 to 16, etc.). db file stays ~495KB (SQLite
+   reuses freed pages; goal is bounded growth, not a smaller file).
+3. **Docs/naming accuracy.** haiku.py docstring corrected (it calls OpenAI
+   gpt-4o-mini, NOT Claude Haiku, despite the module name); config.py comment now
+   caveats the "switch to Claude is one line" claim (ANTHROPIC_API_KEY is NOT set
+   in env, so it is config + a key, not one line).
+Commits: d2478bbe (main), 77c24842 (state), 93c5e0a9 (haiku), c1975701 (config).
+
+### Tier 1 dead-code removal: the public linderos web app (verified live)
+The self-hosted parcel-drawing web app (Esri keyless tiles, NON-commercial
+license) was retired from the flow in the Aug 22 redesign, but its PUBLIC routes
+were still mounted and reachable (/linderos 410, /api/linderos 405,
+/linderos/img 404). Removed: deleted app/linderos.py + app/linderos.html; dropped
+`from . import linderos` + `app.include_router(linderos.router)` from main.py;
+dropped the dead `from . import linderos` in worker.py (the module was imported
+but never called there; worker only uses the state.* linderos helpers). Confirmed
+public_base_url + resend_api_key are used ONLY by linderos.py, so they are now
+orphaned config (comment updated; settings kept in case an in-chat capture flow
+is ever revived). VERIFIED: import-resolution gate passed; all 3 routes now 404;
+files gone from container; webhook + secret redaction intact; no tracebacks.
+Commits: 78beac2a (main), 2e4bb1e2 (worker), 9198d25c (config),
+2dd6535b (del linderos.py), dd562697 (del linderos.html).
+
+### DEFERRED (Tier 2, rides with the worker.py decomposition)
+Internal linderos/audio dead machinery, all no-ops now but woven through
+worker.py at 5 sites + state.py: the awaiting_linderos table + set/is/clear
+helpers, linderos_first() + linderos_sent table, the [[LINDEROS_LISTO]] media
+branch, the [[AUDIO_PAGO]] strip, the [linderos] block in client.toml, and the
+two prune-list entries. Deferred deliberately: cutting these means surgery inside
+the fragile 1941-line worker.py, the very file slated for decomposition next. Cut
+once, with tests, not twice.
+
+### STILL OPEN / next
+- **worker.py DECOMPOSITION** (the audit's #1 risk): handle_message is one
+  ~1400-line function with mid-function imports, locals().get() state passing, and
+  a dead line (`_already_greeted = not state.first_contact.__doc__ or False`).
+  Plan it as its own mini-project; behavior must stay identical; test_engine.py
+  (1009 lines) is unit-level and has historically missed things, so live smoke per
+  deploy.
+- **Monitoring:** confirm Uptime Kuma (already on the box) is actually watching
+  /health, or a silent container death pages nobody. NOT yet verified.
+- /root checkout `git pull` + /root master.env & .env token sync (SSH-only).
+- **BUSINESS (not code):** Meta re-engagement template (weekend leads handed off
+  outside the 24h window need an approved template); accepted bank-details
+  residual risk (anyone who says "quiero ordenar séptico" reaches the bank image
+  with no human gate, Wellington's chosen design).
+
+---
+
 ## Session: August 22, 2026 — 01:30 UTC
 
 ### Agua flow simplified — human handoff replaces GPS/linderos/deposit bot steps.

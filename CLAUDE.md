@@ -4,7 +4,7 @@ Single source-of-truth for the Aguas Profundas WhatsApp AI agent. This file live
 "Aguas Profundas" Claude project so every session starts oriented on the live system.
 
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-09-20 (audit + 4 fixes: webhook-secret access-log redaction, state.prune() hygiene sweep, haiku/config doc accuracy, public linderos web app removed. worker.py decomposition still pending.)
+Last updated: 2026-09-20 (audit + 4 fixes deployed; then /root synced + clean rebuild - source==image==container all on current main, image ad1f1819; test suite green 55/0. worker.py decomposition still pending.)
 
 ---
 
@@ -262,7 +262,7 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 - Never push to Vercel manually — push to GitHub
 - infra-mcp drops under load — `docker restart infra-mcp` resolves
 - **Deploy cycle: syntax check → `scripts/prompt_guard_uba.py` (UBA guard, blocks on exit 1) → import smoke test → git commit + push → on host: sync source into /root/kommo-agent build context → `docker compose build` → `docker compose up -d` → health → update CONTEXT-LOG**
-- `/root/kommo-agent` is the host build context, NOT a git checkout — sync repo source into it before building. compose build/up is host-only (can't be driven through infra-mcp)
+- `/root/kommo-agent` is the host build context, NOT a git checkout — sync repo source into it before building. compose build/up CAN be driven through infra-mcp: a docker:cli helper with the docker socket + the host context mounted at its real path, then `docker compose -p kommo-agent build|up -d` (exact commands in CONTEXT-LOG 2026-09-20 11:20). SSH is not required.
 - `.env` changes ALSO require `docker compose up -d` (plain `docker restart` does NOT reload env_file). `docker restart` is only a fast in-container hotfix you must immediately also push + rebuild
 
 ---
@@ -275,11 +275,11 @@ no longer grows unbounded; haiku.py and config.py doc/naming accuracy; public li
 web app and its routes removed (app/linderos.py, app/linderos.html, the router mount in
 main.py). All deployed and verified live.
 
-**Deploy state:** today's fixes are LIVE via the in-container hotfix path (docker cp
-plus restart) and pushed to GitHub main, but the /root/kommo-agent build context is
-STALE (GitHub is ~9 commits ahead). Sync source into /root/kommo-agent and run
-`docker compose build` before the next rebuild, or it ships old code and wipes these
-fixes (see section 13, hotfix-must-be-followed-by-rebuild).
+**Deploy state (RESOLVED 2026-09-20):** /root/kommo-agent was synced to current main and
+a clean `docker compose build` + `up -d` was run from infra-mcp via a docker:cli host-mount
+helper (no SSH). Source == image (ad1f1819) == running container, all on main; public
+/health through Traefik ok. The stale-context footgun is closed. Rollback snapshot: image
+kommo-agent:latest (885e4f9e).
 
 **Still open:**
 1. worker.py DECOMPOSITION. handle_message is one ~1400-line function (mid-function

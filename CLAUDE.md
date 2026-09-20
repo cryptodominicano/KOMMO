@@ -4,7 +4,7 @@ Single source-of-truth for the Aguas Profundas WhatsApp AI agent. This file live
 "Aguas Profundas" Claude project so every session starts oriented on the live system.
 
 Owner: Intelia Automatizaciones / Gold Coast AI Automations (Isaias Perez).
-Last updated: 2026-08-23 (scope-derived audio routing, stage machine + sector memory, state-gated price objection, buy-signal routing, stage-based handoff silence, spam-filter name fix, pre-deploy UBA guard. VOZ_AGUA_4 removed.)
+Last updated: 2026-09-20 (audit + 4 fixes: webhook-secret access-log redaction, state.prune() hygiene sweep, haiku/config doc accuracy, public linderos web app removed. worker.py decomposition still pending.)
 
 ---
 
@@ -269,18 +269,39 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 
 ## 14. Open items
 
-1. Agua flow validated end-to-end live (talk 906, 2026-08-23): welcome → sector capture →
-   location audio → price objection (gate open) → buy signal → name+phone → handoff → silence.
-   Remaining agua scenarios to live-test: GPS pin, banco-foto/deposit path (human-handled now,
-   but confirm the acknowledgement text), and a returning next-day customer reusing an open talk.
-2. Séptico flow: price-objection gate now flow-aware (`precio_septico`), but the VOZ_IMHOFF_1
-   ledger-write + septico objection gate were not yet live-tested — run a séptico objection.
-3. Consider keying `sector`/`stage` by lead_id (not talk_id) so flow-state survives a talk CLOSE,
-   not just an open talk. Not urgent (Kommo reuses the talk_id), but it's the durability gap.
-4. Pre-existing hardening from the playbook still open: silence the webhook-secret access log,
-   drop customer transcripts to DEBUG (Business Solution Data at rest).
-2. Complete end-to-end live test: name+phone capture → [[HANDOFF]] confirmed
-3. VOZ_AGUA_1: 2:01 duration, re-recording pending (target 30-40s)
-4. Daily conversation-review automation: not built
-5. Legacy number +1 829-566-7542: wind-down pending
-6. Wellington_Lider_Foto (85808): verify image loaded in Kommo UI
+**Done 2026-09-20 (audit + fixes, see CONTEXT-LOG top entry):** webhook-secret
+access-log redaction (this item was open below); state.prune() TTL sweep so state.db
+no longer grows unbounded; haiku.py and config.py doc/naming accuracy; public linderos
+web app and its routes removed (app/linderos.py, app/linderos.html, the router mount in
+main.py). All deployed and verified live.
+
+**Deploy state:** today's fixes are LIVE via the in-container hotfix path (docker cp
+plus restart) and pushed to GitHub main, but the /root/kommo-agent build context is
+STALE (GitHub is ~9 commits ahead). Sync source into /root/kommo-agent and run
+`docker compose build` before the next rebuild, or it ships old code and wipes these
+fixes (see section 13, hotfix-must-be-followed-by-rebuild).
+
+**Still open:**
+1. worker.py DECOMPOSITION. handle_message is one ~1400-line function (mid-function
+   imports, locals().get() state passing, a dead `_already_greeted` line). The audit's
+   #1 risk. Tier 2 dead code rides with it: internal linderos machinery
+   (awaiting_linderos, linderos_first, the [[LINDEROS_LISTO]] media branch, the
+   [[AUDIO_PAGO]] strip, the [linderos] block in client.toml).
+2. Confirm Uptime Kuma is watching /health; a silent container death currently pages
+   no one.
+3. Drop customer voice transcripts to DEBUG (Business Solution Data at rest in logs).
+4. /root master.env and .env token sync (KOMMO_LONG_LIVED_TOKEN; infra-mcp can't reach
+   /root, so this is SSH-only).
+5. Live-test remaining agua scenarios: GPS pin, banco-foto/deposit acknowledgement text
+   (human-handled now), and a returning next-day customer reusing an open talk. (Agua
+   happy path validated live, talk 906, 2026-08-23.)
+6. Live-test séptico objection: VOZ_IMHOFF_1 ledger-write + the flow-aware
+   `precio_septico` objection gate were not yet exercised.
+7. Consider keying sector/stage by lead_id, not talk_id, so flow-state survives a talk
+   CLOSE. Not urgent (Kommo reuses the talk_id), but it is the durability gap.
+8. VOZ_AGUA_1: 2:01 duration, re-record to 30-40s.
+9. Daily conversation-review automation: not built.
+10. Legacy number +1 829-566-7542: wind-down pending.
+11. Wellington_Lider_Foto (85808): verify image loaded in Kommo UI.
+12. BUSINESS (not code): Meta re-engagement template for weekend leads outside the 24h
+    window; accepted bank-details residual risk (Wellington's chosen design).

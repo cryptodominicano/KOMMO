@@ -20,7 +20,6 @@ _talk_locks: dict[str, asyncio.Lock] = {}
 from .kommo import KommoClient, KommoError
 from . import dr_geo
 from .transcribe import download_audio, transcribe, TranscriptionRejected
-from . import linderos
 from .config import settings
 
 log = logging.getLogger("worker")

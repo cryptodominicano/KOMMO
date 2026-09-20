@@ -291,8 +291,11 @@ kommo-agent:latest (885e4f9e).
    status UP, and alerts by email to Isaias on failure. Optional enhancement: add a
    second channel (SMS/Telegram/push) so an outage is caught even if email is missed.
 3. Drop customer voice transcripts to DEBUG (Business Solution Data at rest in logs).
-4. /root master.env and .env token sync (KOMMO_LONG_LIVED_TOKEN; infra-mcp can't reach
-   /root, so this is SSH-only).
+4. (RESOLVED 2026-09-20) /root master.env + .env token sync - verified: KOMMO_LONG_LIVED_TOKEN
+   is byte-identical (compared by hash, no drift) across the container env, /app/data/master.env,
+   /root/master.env, and /root/kommo-agent/.env. /root/.env does NOT carry the key (it holds other
+   services' creds incl. live Chakra) and was deliberately left untouched. If ever needed, /root is
+   reachable from infra-mcp via the docker socket host-mount, no SSH.
 5. Live-test remaining agua scenarios: GPS pin, banco-foto/deposit acknowledgement text
    (human-handled now), and a returning next-day customer reusing an open talk. (Agua
    happy path validated live, talk 906, 2026-08-23.)

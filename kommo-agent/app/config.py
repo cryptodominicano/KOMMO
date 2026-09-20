@@ -66,8 +66,10 @@ class Settings(BaseSettings):
     dedupe_ttl_seconds: int = 3600
 
     # --- Linderos (property-boundary capture) ---
-    # Public HTTPS base the customer opens the drawing link on. Must match the
-    # agent's own public host so /linderos and /api/linderos are reachable.
+    # Retained but currently UNUSED: these fed the self-hosted linderos drawing
+    # web app, removed 2026-09. The agua flow now hands off to a tecnico who
+    # sends the satellite photo for WhatsApp-pencil markup, so no in-app page
+    # is served. Kept only in case an in-chat capture flow is revived.
     public_base_url: str = "https://kommo-agent.goldcoastai.pro"
     resend_api_key: str = ""
 

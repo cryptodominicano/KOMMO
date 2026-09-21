@@ -592,7 +592,8 @@ async def handle_message(msg: dict) -> None:
         # Generic greeting (no keywords) → hold and show the menu instead.
         _agua_flow_confirmed = (
             is_first and not _septico_first and not from_water_ad
-            and (_has_agua_kw or state.is_flow_confirmed(talk_id))
+            and (_has_agua_kw or _is_generic_greeting
+                 or state.is_flow_confirmed(talk_id))
         )
         if _agua_flow_confirmed and entity_id:
             try:

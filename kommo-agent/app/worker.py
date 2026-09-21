@@ -24,6 +24,12 @@ from .config import settings
 
 log = logging.getLogger("worker")
 
+# Client-approved verbatim WATER welcome (Wellington's pitch). SINGLE SOURCE
+# OF TRUTH: sent on agua first contact AND on a mid-conversation switch to
+# the water flow. From code, never the model, so it is never paraphrased.
+_WELLINGTON_WELCOME = 'Hola, le saluda Wellington, de Aguas Profundas. Le orientaré y acompañaré en todo el proceso de búsqueda de agua.\n\nAunque nadie puede garantizar agua al 100%, nuestra evaluación integral ofrece entre un 80% y 90% de probabilidad de éxito, combinando:\n\n1. Estudio topográfico\n2. Radiestesia\n3. Estudio geohidrológico\n\nNo todos los estudios son iguales; algunas ofertas son incompletas o utilizan un solo método. Nuestro proceso combina los tres análisis para recomendar el punto más favorable, reducir riesgos y hacer su inversión más eficiente.\n\nEl costo aproximado, por la distancia, es de RD$45,000 e incluye los tres estudios. Según los resultados, también ofrecemos perforación convencional o exploratoria.\n\nQuedo disponible para cualquier pregunta o para agendar.'
+_AGUA_UBICACION_Q = 'Para darle el costo exacto según su zona, ¿en qué pueblo o sector está el terreno? 🙏'
+
 
 def _deaccent(x: str) -> str:
     """Lowercased, accent-stripped, for robust phrase matching against WhatsApp
@@ -608,33 +614,11 @@ async def handle_message(msg: dict) -> None:
                 #    ~RD$45,000, convencional/exploratoria). Sent from code so the
                 #    approved copy is never paraphrased.
                 await asyncio.sleep(1.5)
-                await k.send_message(
-                    talk_id,
-                    "Hola, le saluda Wellington, de Aguas Profundas. Le orientar\u00e9 "
-                    "y acompa\u00f1ar\u00e9 en todo el proceso de b\u00fasqueda de agua.\n\n"
-                    "Aunque nadie puede garantizar agua al 100%, nuestra evaluaci\u00f3n "
-                    "integral ofrece entre un 80% y 90% de probabilidad de \u00e9xito, "
-                    "combinando:\n\n"
-                    "1. Estudio topogr\u00e1fico\n"
-                    "2. Radiestesia\n"
-                    "3. Estudio geohidrol\u00f3gico\n\n"
-                    "No todos los estudios son iguales; algunas ofertas son "
-                    "incompletas o utilizan un solo m\u00e9todo. Nuestro proceso combina "
-                    "los tres an\u00e1lisis para recomendar el punto m\u00e1s favorable, "
-                    "reducir riesgos y hacer su inversi\u00f3n m\u00e1s eficiente.\n\n"
-                    "El costo aproximado, por la distancia, es de RD$45,000 e "
-                    "incluye los tres estudios. Seg\u00fan los resultados, tambi\u00e9n "
-                    "ofrecemos perforaci\u00f3n convencional o exploratoria.\n\n"
-                    "Quedo disponible para cualquier pregunta o para agendar."
-                )
+                await k.send_message(talk_id, _WELLINGTON_WELCOME)
                 # 3) Town qualifier as its own message — the funnel-advancing close.
                 #    The bot needs the town for the exact per-province price.
                 await asyncio.sleep(1.0)
-                await k.send_message(
-                    talk_id,
-                    "Para darle el costo exacto seg\u00fan su zona, \u00bfen qu\u00e9 pueblo o "
-                    "sector est\u00e1 el terreno? \U0001f64f"
-                )
+                await k.send_message(talk_id, _AGUA_UBICACION_Q)
                 # Record what the welcome covered so the LLM does not repeat it,
                 # AND open the price-objection gate (estudio_precio): Wellington's
                 # welcome states the price, so an objection now is valid. VOZ_AGUA_1
@@ -844,6 +828,85 @@ async def handle_message(msg: dict) -> None:
                 log.info("talk=%s superseded by a newer message (lock) - skipping",
                          talk_id)
                 return
+
+        # --- CONTROLLED FLOW SWITCH (stage-gated, explicit-noun) -------------
+        # The flow is sticky (set_flow = INSERT OR IGNORE) so ambiguous turns
+        # never drift. But a customer who opened generically (locked to agua)
+        # and then EXPLICITLY names the other product, while still EARLY, is
+        # moved into that flow with the correct welcome + intro audio. Guards:
+        #   (1) not the first message (first contact already routed correctly);
+        #   (2) still early - stage greeting/need_identified AND no pueblo yet
+        #       (a priced lead deep in the funnel is never flipped by a word);
+        #   (3) an EXPLICIT product noun for the OTHER flow (never town/filler).
+        # Fires the new flow's welcome in-place and returns, so the correct
+        # audio plays this same turn with no extra round trip.
+        if (not is_first and entity_id and text
+                and text != "[[LINDEROS_LISTO]]"
+                and mtype not in media_types
+                and mtype not in location_types):
+            _sw_stage = state.get_stage(talk_id)
+            _sw_early = (_sw_stage in ("greeting", "need_identified")
+                         and not state.get_sector(talk_id))
+            if _sw_early:
+                _tsw = _deaccent(text)
+                _SEPTICO_SWITCH_NOUNS = (
+                    "septic", "imhoff", "planta septic", "planta de trat",
+                    "fosa septic", "tanque septic", "modulo",
+                    "aguas negra", "aguas residual", "aguas gris",
+                )
+                _WATER_SWITCH_NOUNS = (
+                    "pozo de agua", "un pozo", "perforac", "estudio de agua",
+                    "radiestesia", "buscar agua", "encontrar agua",
+                    "vena de agua", "quiero agua", "necesito agua",
+                )
+                _switch_to = None
+                if (not _is_septico_flow
+                        and any(n in _tsw for n in _SEPTICO_SWITCH_NOUNS)):
+                    _switch_to = "septico"
+                elif (_is_septico_flow
+                        and any(n in _tsw for n in _WATER_SWITCH_NOUNS)):
+                    _switch_to = "agua"
+                if _switch_to:
+                    state.switch_flow(talk_id, _switch_to)
+                    _locked_flow = _switch_to
+                    _is_septico_flow = (_switch_to == "septico")
+                    trace.add("flow_switch->" + _switch_to)
+                    log.info("talk=%s FLOW SWITCH -> %s (explicit noun, stage=%s)",
+                             talk_id, _switch_to, _sw_stage)
+                    if _switch_to == "septico":
+                        await k.send_message(
+                            talk_id,
+                            "\u00a1Perfecto! \U0001f60a Con gusto le orientamos "
+                            "sobre nuestras plantas s\u00e9pticas IMHOFF.")
+                        _vk_sw = "[[VOZ_IMHOFF_1]]"
+                        if (_is_waba and _imhoff_triggers.get(_vk_sw)
+                                and not state.voice_already_sent(talk_id, _vk_sw)):
+                            try:
+                                await asyncio.sleep(1.5)
+                                await k.run_bot(int(_imhoff_triggers[_vk_sw]),
+                                                entity_id, _entity_type(msg))
+                                state.mark_voice_sent(talk_id, _vk_sw)
+                                for _t_sw in _AUDIO_TOPIC_MAP.get(_vk_sw, []):
+                                    state.mark_topic_covered(str(entity_id), _t_sw,
+                                                             "audio", source=_vk_sw)
+                                log.info("talk=%s switch: fired VOZ_IMHOFF_1", talk_id)
+                            except KommoError as e:
+                                log.error("talk=%s switch VOZ_IMHOFF_1 failed: %s",
+                                          talk_id, e)
+                        await asyncio.sleep(1.0)
+                        await k.send_message(
+                            talk_id,
+                            "\u00bfCu\u00e1ntos ba\u00f1os tiene su propiedad? Con eso "
+                            "le indico el m\u00f3dulo que necesita. \U0001f64f")
+                    else:
+                        await k.send_message(talk_id, _WELLINGTON_WELCOME)
+                        for _t_sw in ("estudio_proceso", "estudio_precio",
+                                      "perforacion_tipos"):
+                            state.mark_topic_covered(str(entity_id), _t_sw,
+                                                     "text", source="welcome")
+                        await asyncio.sleep(1.0)
+                        await k.send_message(talk_id, _AGUA_UBICACION_Q)
+                    return
 
         # --- VOZ_IMHOFF_2-4: séptico keyword-triggered, no-repeat per convo -------
         # VOZ_IMHOFF_4 fires a 3-step sequence: voice → Instagram text → Wellington image.

@@ -603,13 +603,13 @@ async def handle_message(msg: dict) -> None:
         )
         if _agua_flow_confirmed and entity_id:
             try:
-                # 1) Welcome flyer image (best-effort; supported on all channels).
-                if welcome_bot:
-                    try:
-                        await k.run_bot(int(welcome_bot), entity_id, _entity_type(msg))
-                    except KommoError as _we:
-                        log.warning("talk=%s welcome image failed (non-critical): %s",
-                                    talk_id, _we)
+                # 1) Welcome flyer image: NOT fired from code. The current
+                #    welcome flyer is already delivered by a Kommo "Any new
+                #    conversation" trigger on every new lead. Firing welcome_bot
+                #    (55340) here sent a SECOND, outdated flyer (dead 566-7542
+                #    number), so it is disabled to avoid the double image.
+                #    Re-enable ONLY if that Kommo auto-trigger is removed AND
+                #    55340's image is updated to the current flyer.
                 # 2) Wellington's verbatim welcome (full pitch: 3 studies, 80-90%,
                 #    ~RD$45,000, convencional/exploratoria). Sent from code so the
                 #    approved copy is never paraphrased.

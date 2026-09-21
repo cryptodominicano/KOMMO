@@ -605,6 +605,22 @@ def set_flow(talk_id: str, flow: str) -> None:
             (str(talk_id), flow, _t.time()))
 
 
+def switch_flow(talk_id: str, flow: str) -> None:
+    """Overwrite the locked flow (agua <-> septico).
+
+    Ordinary routing NEVER calls this: the flow stays sticky via set_flow
+    (INSERT OR IGNORE) so ambiguous turns can't drift. This is used ONLY by
+    the controlled, stage-gated flow switch in worker.py, when a customer
+    explicitly names the other product early in the conversation. Preserves
+    stage/sector; only the flow + timestamp change."""
+    import time as _t
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO flow_state (talk_id, flow, at) VALUES (?, ?, ?) "
+            "ON CONFLICT(talk_id) DO UPDATE SET flow=excluded.flow, at=excluded.at",
+            (str(talk_id), flow, _t.time()))
+
+
 # Qualification stages (in order):
 # greeting → need_identified → location_captured →
 # price_presented → deposit_requested → deposit_confirmed → won | handoff

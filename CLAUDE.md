@@ -267,7 +267,24 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 
 ---
 
+- Image is built from the host repo `/root/kommo-agent` (compose `build: .`); only `/data` is mounted, so prompt + client.toml + app code are baked into the image. No `.git` on the VPS working copy; GitHub is synced via the Contents API.
+- Prompt/code deploy recipe: edit the host repo (`docker run --rm -v /root/kommo-agent:/work ...`), `docker cp` into the container, `docker commit kommo-agent kommo-agent-kommo-agent:latest`, `docker restart kommo-agent`, then push to GitHub via the Contents API. `system.md` is read fresh per request (no restart); app code (`worker.py` etc.) needs a restart.
+
 ## 14. Open items
+
+### In progress: owner-escalation pivot (Oct 1, 2026 — NOT live; see CONTEXT-LOG)
+- Decommission the conversational agent -> flyer + Wellington study message + a "talk to Wellington" button that escalates the lead to the owner's phone. Engine not built; conversational engine to be gated off behind a reversible mode flag (not deleted).
+- Utility template "Wellingtons CX Messing Flow" submitted to Meta (UTILITY, Spanish, WABA 1032952952881055). Waiting on approval.
+- Handoff lead custom fields: "Cliente Link WhatsApp" (id 2104940), "Cliente Telefono" (id 2104942).
+- UNVERIFIED: how to fire an approved WABA template to a chosen number with field merge (likely a Salesbot Send-Message step + run_bot on a staged alert lead). Prove before wiring.
+- After approval: build the customer in-window reply button, the button-tap handoff (staged alert lead -> fire template), test to 829-204-6993 first, then point at Wellington (+1 829-566-7542, confirmed personal WhatsApp).
+- WABA number discrepancy: UI shows live connected +1 829-837-9566 ("Aguas Profundas KOMMO 2", WABA ID 1032952952881055); section 4 lists +1 829-558-3119. Confirm the live inbound number.
+- Spam contacts burning paid outbound + nudges: talk 1024 (YouTube spammer), talk 907 (daily Bible-verse) -> tag NO_REACTIVAR, pending go-ahead.
+- Welcome flyer image still shows the legacy 566-7542 number (baked in; UI swap, deferred).
+- Kommo "Any new conversation" auto-trigger on a welcome Salesbot is the de-facto welcome-image source (violates empty-triggers rule).
+- LIVE now (deployed + pushed Sept 21): generic "hola" fires the Wellington welcome (`_is_generic_greeting`); stage-gated agua<->septico flow switch (`state.switch_flow`); double welcome image fixed (code no longer fires welcome_bot 55340).
+
+### Standing
 
 **Done 2026-09-20 (audit + fixes, see CONTEXT-LOG top entry):** webhook-secret
 access-log redaction (this item was open below); state.prune() TTL sweep so state.db

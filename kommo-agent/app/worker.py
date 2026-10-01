@@ -446,6 +446,7 @@ async def handle_message(msg: dict) -> None:
     media_types = set(client_pack.behavior("media_types"))
     marker = client_pack.behavior("handoff_marker")
     grace = int(client_pack.behavior("handoff_grace_minutes"))
+    _ESCALATION = client_pack.pack().get("escalation", {})
 
     k = KommoClient()
     try:
@@ -518,6 +519,101 @@ async def handle_message(msg: dict) -> None:
             except Exception as _e:
                 log.warning("talk=%s entity_id lookup failed: %s", talk_id, _e)
         is_first = state.first_contact(talk_id)   # marks first contact; reused to exempt the greeting from the typing delay
+
+        # --- ESCALATION MODE: flyer + verbiage + button -> owner alert -------
+        # When [escalation].enabled is true, the conversational engine is OFF.
+        # Only three things happen: first contact gets the flyer (Kommo auto-
+        # trigger) + Wellington's verbiage + the "Hablar con Wellington" button;
+        # a button tap alerts the owner and confirms to the customer, then the
+        # talk is closed to further bot replies; any other message re-shows the
+        # button. No RAG, LLM, audio, septico, price flow or switch runs.
+        if _ESCALATION.get("enabled"):
+            _btn = _deaccent(str(_ESCALATION.get("button_text", "hablar con wellington")))
+            if state.is_escalated(talk_id):
+                return
+            if text and _btn in _deaccent(text):
+                if entity_id:
+                    try:
+                        _cust = await k.get_lead_contact(int(entity_id))
+                        _cname = (_cust.get("name") or "Cliente").strip()
+                        _cphone = (_cust.get("phone") or "").strip()
+                        _cdig = re.sub(r"\D", "", _cphone)
+                        _clink = ("https://wa.me/" + _cdig) if _cdig else ""
+                        _cloc = state.get_location(talk_id)
+                        _cf = {int(_ESCALATION["telefono_field_id"]): _cphone,
+                               int(_ESCALATION["link_field_id"]): _clink}
+                        _locfid = _ESCALATION.get("location_field_id")
+                        if _locfid and _cloc:
+                            _cf[int(_locfid)] = _cloc
+                        _alead = await k.create_lead(
+                            name=_cname,
+                            contact_id=int(_ESCALATION["owner_contact_id"]),
+                            cf=_cf)
+                        if _alead:
+                            await k.run_bot(int(_ESCALATION["sender_bot_id"]),
+                                            _alead, "leads")
+                            log.info("talk=%s ESCALATION owner-alert lead=%s cust=%r %s loc=%r",
+                                     talk_id, _alead, _cname, _cdig, _cloc)
+                        else:
+                            log.error("talk=%s escalation: create_lead returned none",
+                                      talk_id)
+                    except Exception as _ee:
+                        log.error("talk=%s escalation alert failed: %s", talk_id, _ee)
+                await k.send_message(talk_id, str(_ESCALATION.get("confirm_text",
+                    "Wellington ha recibido su solicitud y le contactara dentro "
+                    "de las proximas 24 horas.")))
+                state.mark_escalated(talk_id)
+                trace.add("escalation->owner_alert")
+                return
+            if is_first:
+                if entity_id and _is_waba:
+                    _fb = _ESCALATION.get("flyer_bot_id")
+                    if _fb:
+                        try:
+                            await k.run_bot(int(_fb), entity_id, _entity_type(msg))
+                            await asyncio.sleep(1.5)
+                        except KommoError as _fe:
+                            log.error("talk=%s escalation flyer failed: %s",
+                                      talk_id, _fe)
+                    await k.send_message(talk_id, str(_ESCALATION.get(
+                        "location_question",
+                        "Para empezar, \u00bfen qu\u00e9 pueblo o sector est\u00e1 "
+                        "ubicado? \U0001f4cd")))
+                    state.set_awaiting_location(talk_id)
+                return
+            # awaiting the sector answer -> normalize via dr_geo, store, then
+            # send the verbiage + button.
+            if state.is_awaiting_location(talk_id):
+                if entity_id and _is_waba and text:
+                    _loc = text.strip()
+                    try:
+                        _prov = dr_geo.province_for(_loc)
+                    except Exception:
+                        _prov = None
+                    state.set_location(talk_id,
+                                       f"{_loc} ({_prov})" if _prov else _loc)
+                    try:
+                        _price = dr_geo.price_for(_loc)
+                    except Exception:
+                        _price = 45000
+                    await k.send_message(talk_id,
+                        _WELLINGTON_WELCOME.replace("RD$45,000", f"RD${_price:,}"))
+                    await asyncio.sleep(1.0)
+                    try:
+                        await k.run_bot(int(_ESCALATION["button_bot_id"]),
+                                        entity_id, _entity_type(msg))
+                    except KommoError as _be:
+                        log.error("talk=%s escalation button bot failed: %s",
+                                  talk_id, _be)
+                return
+            # any other message before tapping -> re-show the button
+            if entity_id and _is_waba:
+                try:
+                    await k.run_bot(int(_ESCALATION["button_bot_id"]),
+                                    entity_id, _entity_type(msg))
+                except KommoError:
+                    pass
+            return
 
         # --- FLOW LOCKING -------------------------------------------------------
         # Best practice: lock the conversation flow on first contact and use it

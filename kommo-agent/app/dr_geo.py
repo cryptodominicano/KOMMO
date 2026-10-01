@@ -99,3 +99,20 @@ def province_for(town: str):
     if not town:
         return None
     return _LOOKUP.get(_norm(town))
+
+
+# Provinces where the full water study is RD$50,000 (vs the RD$45,000 default).
+# Source: KB 01-estudio-de-agua.md (15 outlying provinces). Any province NOT in
+# this set, and any unknown town, defaults to RD$45,000 - the "desde" base; the
+# owner confirms the exact tariff. Keys match province_for() output (deaccented).
+_PRICE_50K = {
+    "Monte Cristi", "Dajabon", "Santiago Rodriguez", "Valverde", "Elias Pina",
+    "San Juan", "Bahoruco", "Independencia", "Barahona", "Pedernales",
+    "Hato Mayor", "El Seibo", "San Pedro de Macoris", "La Romana", "La Altagracia",
+}
+
+
+def price_for(town: str) -> int:
+    """RD$ price of the full water study for a town/sector/municipality.
+    50000 for the outlying provinces, 45000 otherwise (and for unknown towns)."""
+    return 50000 if province_for(town) in _PRICE_50K else 45000

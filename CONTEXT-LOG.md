@@ -2,7 +2,64 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: Month DD, YYYY — HH:MM UTC`, followed by what changed, what was verified, and what is still blocked.
+Format for each entry: `## Session: October 1, 2026 — 04:05 UTC
+
+### MAJOR PIVOT (in progress, NOT live): retire the conversational agent -> flyer + "talk to Wellington" button -> utility-template handoff to the owner's phone.
+
+**The decision.** Isaias is retiring the full conversational flow. New model is a lead filter: Isla posts the welcome flyer + Wellington's study message (price + value) and a button at the end ("Estoy listo, quiero hablar con Wellington"). Uninterested leads leave; interested leads tap the button, which pushes the customer's data to Wellington's PERSONAL phone (+1 829-566-7542, confirmed a normal personal WhatsApp) with a wa.me link so he continues directly from his phone. The conversational engine (audio bots, septico, pricing, deposit, the flow switch) is to be gated off behind a reversible mode flag, NOT deleted. NOTHING here is live yet; the conversational agent is still the live system and fully intact.
+
+### WhatsApp / Kommo research (authoritative; Meta + Kommo docs)
+- The CUSTOMER button does NOT need a template: the customer is inside the 24h window (inbound / CTWA), so a free-form interactive button works, free, no approval. Buttons come only from Salesbots (like images); 1-10 in-window, <=3 in a template.
+- Messaging WELLINGTON (outside his window) needs an APPROVED template; UTILITY for a lead alert. Business-initiated, so it is a paid utility message (pennies; DR number delivers fine; the US marketing-block is irrelevant to DR).
+- API template creation is NOT available to us: our Chats API token creates only generic type="amocrm" templates (all waba_* fields dropped on create) and POST /chats/templates/{id}/review is a no-op. True WABA template create/submit belongs to the integration owning the WhatsApp source = Kommo's built-in WhatsApp, driven via the UI. Proven by creating + deleting generic test template id 84456.
+- Correct path = Kommo UI: Automations -> Templates -> Chat templates -> + New template -> WhatsApp template -> category+type -> fill -> Analyze with AI (Pro) -> Send for review. Admin only. Editable only in Draft/Rejected; locks on In review/Approved; review minutes to 48h.
+- Kommo native URL BUTTON does NOT accept a variable (API rejects https://wa.me/{{3}} as "not a valid URL"; UI won't save a draft with a placeholder in the button URL). The "dynamic URL in Kommo" article is radist.online's third-party product, not native Kommo. So the wa.me link goes in the BODY as a placeholder, not a button.
+- Kommo placeholders merge from the record the message is SENT TO (= the recipient). A template sent to Wellington with [Contact name]/[Phone] would resolve to WELLINGTON's own data, not the customer's. This is the core constraint and shaped the whole design.
+- Lead CUSTOM FIELDS do appear in the chat-template placeholder picker and register as real placeholders. Typed [brackets] are plain text, NOT placeholders (only real placeholders show in the Meta "examples" section) - this also explains the earlier "it never asks for a sample" confusion.
+- Category: Copilot flagged it; by Meta's rules it leans MARKETING (no existing transaction = not Utility; Marketing is the catch-all). Impact negligible. Submitted as Utility; since Apr 9 2025 Meta auto-approves a utility-that-should-be-marketing AS marketing rather than rejecting for category alone.
+
+### Path B chosen (customer data INSIDE the message to Wellington)
+On button tap the engine will create a staged "alert lead" whose primary contact is Wellington (so delivery reaches him), set the lead NAME = customer name, and set lead custom fields = customer phone + clean wa.me link; the template merges from that lead.
+
+### Artifacts created
+- Lead custom fields: "Cliente Link WhatsApp" (id 2104940, text), "Cliente Telefono" (id 2104942, text).
+- WhatsApp template (Kommo UI, title "Wellingtons CX Messing Flow"): Utility, Spanish, 12h validity, WABA "Aguas Profundas KOMMO 2" (WABA ID 1032952952881055). Body uses real placeholders [Lead name], [Cliente Telefono], [Cliente Link WhatsApp] with examples Juan Perez / +1 829 204 6993 / https://wa.me/18292046993. Submitted for Meta review (pending). Copilot passed policy/category/purpose/clarity/tone; soft "call to action" caution ignored (its rewrite would break the placeholders).
+- Deleted generic test template id 84456.
+
+### Key IDs / facts
+- WABA connected in UI: +1 829-837-9566 "Aguas Profundas KOMMO 2", WABA ID 1032952952881055, Quality High, Connected. DISCREPANCY: CLAUDE.md lists primary WABA as +1 829-558-3119. Confirm the live inbound number.
+- Wellington personal WhatsApp (ping target): +1 829-566-7542.
+- End-to-end TEST target (fire the ping here first): +1 829-204-6993.
+- Kommo template API (admin): POST /api/v4/chats/templates, POST .../{id}/review, GET /api/v4/chats/templates, DELETE .../{id}. On this account only usable for generic templates, not WABA.
+
+### TODO after Meta approves the template
+1. VERIFY the send mechanism (the real unknown): fire an approved WABA template to a chosen number with field merge. Likely a Salesbot "Send Message" step with the template, launched via run_bot on the alert lead. Prove before wiring.
+2. Build the customer in-window reply button (Salesbot button step), fired at the end of the welcome.
+3. Wire the button-tap handoff: capture name + phone, create the alert lead (contact = Wellington, lead name = customer name, set the two custom fields incl. clean wa.me link), fire the template.
+4. Test the full chain to 829-204-6993 FIRST; only then point at Wellington / go live.
+5. Gate the conversational engine off behind a reversible mode flag.
+
+---
+
+## Session: September 21, 2026 — 14:00 UTC
+
+### Daily review, generic-welcome fix, agua<->septico flow switch, double-welcome-image fix. All deployed + pushed.
+
+**Daily conversation review.** Reusable method: GET /api/v4/talks, filter to talks updated today, GET messages per talk, read transcripts. 4 active talks: two Isaias test convos, two non-customers. Happy path healthy end to end (welcome image, pueblo + province mapping, study explanation with the never-guarantee-100% line, agua photo, GPS pin, linderos link, [[LINDEROS_LISTO]] deposit, Payment-Audio voice note, bank text, banco-foto, graceful resume). Payment-Audio now arrives as a real Ptt .ogg voice note -> the old "Convert to voice" issue appears resolved. Non-customers consuming paid outbound + the 2h nudge with no sales value: talk 1024 (YouTube-link spammer), talk 907 (daily Bible-verse broadcaster) -> recommended NO_REACTIVAR tag, NOT actioned (pending go-ahead). No regressions.
+
+**Deploy topology discovered (reusable).** Image is built from the host repo /root/kommo-agent (compose build: .); only /data is mounted, so prompt + client.toml + app code are baked in. Verified host repo == running container via md5 on all app files + client pack. NO .git on the VPS working copy; GitHub (cryptodominicano/KOMMO, kommo-agent/ subfolder) is synced separately via the Contents API. Recipe: edit host repo via docker run --rm -v /root/kommo-agent:/work python:3.12-slim ..., docker cp into the container, docker commit kommo-agent kommo-agent-kommo-agent:latest, docker restart kommo-agent; push to GitHub via Contents API. client.py reads system.md fresh per request (prompt edits need no restart); worker.py is code (needs restart). Live model confirmed OpenAI gpt-4o (OPENAI_MODEL).
+
+**Generic-welcome fix (commit 5930d0d).** The exact Wellington verbatim welcome already existed in worker.py but only fired when the first message had a water keyword; a generic "hola" fell through to the menu. Added `_is_generic_greeting` to the `_agua_flow_confirmed` condition so a generic first contact fires the same welcome (flyer + Wellington pitch + ubicacion question). Also refactored the verbatim pitch + ubicacion question into single-source module constants `_WELLINGTON_WELCOME` and `_AGUA_UBICACION_Q` used by both first-contact and the switch; verified byte-identical to the original.
+
+**Stage-gated explicit-noun flow switch (commits: worker 81ad3ace, state 618b085).** Flow lock is sticky (set_flow = INSERT OR IGNORE) so ambiguous turns never drift. Added `state.switch_flow()` (upsert that overwrites the lock) + a switch block in worker.py: on a NON-first message, while still early (stage greeting/need_identified AND no sector captured), if the message has an explicit product noun for the OTHER flow, switch and fire that flow's welcome + intro audio in-place (septico -> welcome text + VOZ_IMHOFF_1 + banos question; agua -> Wellington welcome + ubicacion). Explicit nouns only, never towns/filler; priced leads deep in the funnel never flip. Self-tested switch_flow (sticky refuses overwrite; switch overwrites; stage preserved).
+
+**Double-welcome-image fix (commit de4fccf).** Generic "hola" produced TWO flyers: welcome_bot 55340 (the OLD driller flyer with the dead 566-7542 number) fired by our code, plus a Kommo "Any new conversation" auto-trigger firing the current "Todo comienza" flyer. Removed our code's welcome_bot fire so only the current flyer (from the auto-trigger) remains. NOTE: a Kommo "Any new conversation" auto-trigger on a welcome Salesbot (violates the empty-triggers rule) is now the de-facto welcome-image source; and the current flyer still has the legacy 566-7542 number baked in (UI fix, deferred).
+
+**infra-mcp** dropped mid-session (known under-load fault), recovered on its own.
+
+---
+
+## Session: Month DD, YYYY — HH:MM UTC`, followed by what changed, what was verified, and what is still blocked.
 
 ---
 

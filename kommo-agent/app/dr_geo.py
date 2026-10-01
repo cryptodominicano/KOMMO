@@ -11,6 +11,7 @@ RD$50,000). "Santo Domingo" = the province ring (Este/Norte/Oeste/Boca Chica);
 "Distrito Nacional" = the capital core.
 """
 import unicodedata
+import re
 
 # province -> municipalities, notable municipal districts, and well-known sectors
 _PROVINCES = {
@@ -95,10 +96,25 @@ for alias, prov in {
 
 
 def province_for(town: str):
-    """Return the province for a town/sector/municipality, or None if unknown."""
+    """Return the province for a town/sector/municipality, or None if unknown.
+
+    First tries an exact match on a bare name. If given a phrase or a voice-note
+    transcript (e.g. "Yo soy de Barahona, mi hermano"), it scans for the LONGEST
+    known place name present as whole words and returns its province. This makes
+    the lookup robust to spoken answers and typed sentences, not just bare towns."""
     if not town:
         return None
-    return _LOOKUP.get(_norm(town))
+    n = _norm(town)
+    exact = _LOOKUP.get(n)
+    if exact:
+        return exact
+    best = None
+    best_len = 0
+    for place, prov in _LOOKUP.items():
+        if place and len(place) > best_len and re.search(
+                r"(?<![a-z0-9])" + re.escape(place) + r"(?![a-z0-9])", n):
+            best, best_len = prov, len(place)
+    return best
 
 
 # Provinces where the full water study is RD$50,000 (vs the RD$45,000 default).

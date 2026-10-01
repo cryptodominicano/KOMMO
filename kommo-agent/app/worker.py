@@ -584,8 +584,40 @@ async def handle_message(msg: dict) -> None:
             # awaiting the sector answer -> normalize via dr_geo, store, then
             # send the verbiage + button.
             if state.is_awaiting_location(talk_id):
-                if entity_id and _is_waba and text:
-                    _loc = text.strip()
+                _ans = text
+                # voice-note sector answer: transcribe; if it cannot be
+                # understood, ask to repeat or type, and keep waiting.
+                if (not _ans) and mtype in audio_types:
+                    _link = (msg.get("attachment") or {}).get("link")
+                    if not _link:
+                        try:
+                            for _m in await k.get_messages(talk_id, limit=5):
+                                if (_m.get("attachment") or {}).get("link"):
+                                    _link = _m["attachment"]["link"]
+                                    break
+                        except Exception:
+                            pass
+                    _tx = ""
+                    if _link:
+                        try:
+                            _tx = (await transcribe(await download_audio(_link))).strip()
+                        except TranscriptionRejected:
+                            _tx = ""
+                        except Exception as _te:
+                            log.error("talk=%s escalation transcribe err: %s",
+                                      talk_id, _te)
+                    if _tx:
+                        _ans = _tx
+                        log.info("talk=%s escalation voice sector=%r", talk_id, _tx[:60])
+                    else:
+                        if entity_id and _is_waba:
+                            await k.send_message(talk_id, str(_ESCALATION.get(
+                                "audio_fail_text",
+                                "No pude entender el audio. Por favor rep\u00edtalo "
+                                "o escr\u00edbalo por texto. \U0001f64f")))
+                        return
+                if entity_id and _is_waba and _ans:
+                    _loc = _ans.strip()
                     try:
                         _prov = dr_geo.province_for(_loc)
                     except Exception:

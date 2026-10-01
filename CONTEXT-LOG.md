@@ -2,7 +2,136 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: October 1, 2026 — 04:05 UTC
+Format for each entry: `## Session: October 1, 2026 — 20:30 UTC
+
+### MAJOR: owner-escalation flow BUILT, LIVE, and proven end-to-end. Conversational engine gated OFF.
+
+The pivot from the July build (full conversational AI) to a lead-filter is now
+the LIVE system. Isaias directed: the conversational flow must completely stop.
+The whole audio/septico/pricing/RAG/LLM/flow-switch engine is gated off behind a
+flag (NOT deleted, reversible), and the only behaviour now is a 4-step funnel.
+
+### The live flow (escalation mode)
+1. Any customer first contact -> engine fires the FLYER (bot 97800) + ONE question
+   "En que pueblo o sector esta ubicado?" and nothing else. Marks awaiting_location.
+2. Customer answers with a town -> engine normalizes it with dr_geo.province_for()
+   (odd/misspelled town -> "Town (Province)"), stores it, then sends Wellington's
+   verbatim verbiage (_WELLINGTON_WELCOME) + the "Hablar con Wellington" button.
+3. Customer taps the button -> engine stages an ALERT LEAD whose contact is the
+   OWNER and whose fields carry the customer's name, phone, sector, and a clean
+   wa.me link, then fires the sender bot -> owner's phone gets the template with
+   the customer's data. Customer gets "Wellington ha recibido su solicitud y le
+   contactara dentro de las proximas 24 horas." Then mark_escalated -> PERMANENT
+   silence on that talk (full stop).
+4. Any other message before tapping -> re-show the button. After escalation ->
+   silence. A genuinely NEW conversation starts fresh at step 1.
+
+### Template + send mechanism (the hard part, now proven)
+- Approved template "Wellingtons CX Messing Flow" (chat-template id 84458, type
+  waba, UTILITY, es). Content merges {{lead.name}}, {{lead.cf.2104942}} (phone),
+  {{lead.cf.2104940}} (link) from the lead it is sent on.
+- Kommo sends a template ONLY via a Salesbot "Send Message" step (confirmed by
+  Kommo docs: an AI agent cannot send a template directly; it fires a Salesbot
+  that contains it). Our engine fires that Salesbot with run_bot. Sender bot =
+  "Wellington messenger" (id 100050).
+- Because Kommo placeholders merge from the record the message is SENT TO (= the
+  recipient), we cannot put customer data in a message to the owner using the
+  owner's own fields. Solution: create_lead() a fresh alert lead per tap whose
+  primary CONTACT is the owner but whose NAME + custom fields hold the CUSTOMER's
+  data. The template merges the customer data and delivers to the owner.
+- A template delivers ONLY to a recipient with an ESTABLISHED WhatsApp
+  conversation. Firing at an API-created cold contact returns 202 (queued) but
+  delivers nothing (same finding as July 17). So the OWNER number must message
+  the business once to create its contact. The test 849 and Wellington's 566-7542
+  were both established this way.
+- Billing gate (error 3107): template sends failed with "To send templates, you
+  need to link a valid payment method to your WhatsApp Business Account (3107)"
+  on BOTH a US (610) and a DR (849) number while free-form text delivered fine.
+  This KILLED the earlier US-vs-DR theory: it was NOT the US-number rule, it was
+  an UNFUNDED WABA. Payment must be on the SPECIFIC sending WABA
+  (Aguas Profundas KOMMO 2, number 829-837-9566, WABA ID 1032952952881055), NOT
+  on the portfolio or on another WABA. A card was first added to the wrong WABA
+  (1343110684623231, the legacy one holding 566-7542); moving it to
+  1032952952881055 and waiting ~30 min cleared 3107 and the template delivered
+  (delivery_status=delivered).
+
+### Build (code, committed to cryptodominicano/KOMMO main)
+- state.py: mark_escalated/is_escalated (permanent per-talk silence, `escalated`
+  table). set_awaiting_location/is_awaiting_location/set_location/get_location
+  (`esc_loc` table) for the sector step. All self-create their table.
+- kommo.py: create_lead(name, contact_id, cf={field_id:value}, status_id) ->
+  POST /leads, returns the new lead id.
+- worker.py: the escalation branch, placed right after is_first, gated on
+  [escalation].enabled. When enabled it returns before ANY conversational code
+  (flow lock, welcome, audio, transcription, RAG, LLM, switch all bypassed).
+  Also removed the agua welcome block's welcome_bot fire earlier; the flyer is now
+  fired by the escalation branch (bot 97800).
+- client.toml [escalation]: enabled=true, button_text="Hablar con Welling"
+  (truncation-proof prefix, see gotcha), button_bot_id=100104, sender_bot_id=100050,
+  owner_contact_id=26049644 (TEST=849; switch to 39939531 for Wellington),
+  flyer_bot_id=97800, telefono_field_id=2104942, link_field_id=2104940,
+  location_field_id=2105112, confirm_text, location_question.
+
+### Bots (Kommo UI, ALL must have EMPTY triggers)
+- 100104 Boton-Hablar-Wellington: the customer button. One Send Message step on
+  WhatsApp, a line + Quick reply "Hablar con Wellington". Fired by the engine.
+- 100050 Wellington messenger: the sender. One Send Message step pointed at the
+  approved template. Fired by the engine on a tap.
+- 97800 "welcome-bot 55340": the CURRENT flyer ("Todo comienza..."). Now fired by
+  the engine on first contact. (55340 "welcome-bot" = the OLD driller flyer with
+  the dead 566-7542 number; unused.)
+- CRITICAL trigger bug found: 100104, 100050 AND 97800 all still had the default
+  "Any new conversation" trigger. The SENDER (100050) auto-firing on every new
+  conversation would blast the owner-alert template at every new customer. All
+  three triggers were deleted. Rule reconfirmed: every Salesbot = empty triggers;
+  our engine fires them with run_bot.
+
+### Lead custom fields
+- Cliente Telefono = 2104942 | Cliente Link WhatsApp = 2104940 | Cliente Sector = 2105112
+
+### Key findings / gotchas (reusable)
+- WhatsApp quick-reply button TITLES are capped at 20 chars. "Hablar con
+  Wellington" (21) is silently truncated to "Hablar con Wellingto", so the tap
+  arrives as that. Match on a truncation-proof PREFIX ("hablar con welling"),
+  never the full word. This cost a full debug cycle.
+- An APPROVED template is locked; you cannot add a variable. A 4th variable
+  (sector) needed a brand-new template (cliente_listo_wellington_v2).
+- The Kommo API cannot create/edit/enable/disable bots or their triggers
+  (PATCH /bots/{id} = 405). Bots and triggers are UI-only. But run_bot
+  (POST /bots/{id}/run) fires any bot, and GET /bots lists them. A bot's active
+  state is in settings.active (NOT is_active, which returns null).
+- A failed message's exact error (e.g. 3107) is only visible by hovering the
+  message in the Kommo UI; the messages API exposes delivery_status (sent/seen/
+  delivered/error) but not the reason.
+- dr_geo.province_for(town) is the town->province normalizer reused from the old
+  flow (16 provinces @ RD$45k, 15 @ RD$50k table).
+
+### Owner number
+- TEST owner: 849-258-6931, established contact 26049644 ("Intelia Automatizaciones").
+  owner_contact_id is set to this.
+- PRODUCTION owner: Wellington 829-566-7542, established contact 39939531
+  ("Aguas Profundas"). He has messaged the business, so his contact exists.
+  To go live for real: set owner_contact_id=39939531, redeploy, fire one test.
+
+### v2 template (adds the sector line) - PENDING APPROVAL
+- cliente_listo_wellington_v2: same body + "Ubicacion: [Cliente Sector]", 4 vars
+  (Lead name, Cliente Telefono, Cliente Sector, Cliente Link WhatsApp). Submitted
+  for Meta review. CUTOVER when approved: open sender bot 100050, swap its Send
+  Message step from the old template to v2. No code change, no redeploy. Until
+  then alerts run on the 3-var template (no sector line); the engine already
+  captures/stores the sector on the alert lead regardless, so it is a clean flip.
+
+### Status
+LIVE on escalation (enabled=true). Conversational engine OFF but preserved
+(revert = enabled=false + restart). Full chain proven end-to-end on 610:
+hola -> flyer -> sector question -> answer (dr_geo normalized) -> verbiage ->
+button -> tap -> owner alert on 849 (new alert lead per tap) -> customer
+confirmation -> permanent silence. Owner-switch to Wellington and the v2 template
+cutover are the only remaining go-live steps.
+
+---
+
+## Session: October 1, 2026 — 04:05 UTC
 
 ### MAJOR PIVOT (in progress, NOT live): retire the conversational agent -> flyer + "talk to Wellington" button -> utility-template handoff to the owner's phone.
 

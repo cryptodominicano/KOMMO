@@ -189,3 +189,17 @@ septico  = [
   "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/septico-promo-2.jpg",
   "https://cdn.jsdelivr.net/gh/cryptodominicano/KOMMO@main/kommo-agent/clients/aguas-profundas/assets/septico-promo-3.jpg",
 ]
+
+[escalation]
+enabled = true
+button_text = "Hablar con Welling"   # WhatsApp truncates button titles to 20 chars -> "Hablar con Wellingto"; match a truncation-proof prefix
+button_bot_id = 100104
+flyer_bot_id = 97800
+location_field_id = 2105112
+audio_fail_text = "No pude entender el audio. ¿Podría repetirlo o escribir el pueblo o sector por texto? 🙏"
+location_question = "Para empezar, ¿en qué pueblo o sector está ubicado? 📍"
+sender_bot_id = 100050
+owner_contact_id = 39939531   # Wellington's real contact (+1 829-566-7542); was 26049644 (849 test)
+telefono_field_id = 2104942
+link_field_id = 2104940
+confirm_text = "Wellington ha recibido su solicitud y le contactará dentro de las próximas 24 horas. 🙏"

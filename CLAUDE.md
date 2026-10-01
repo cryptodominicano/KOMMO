@@ -14,6 +14,8 @@ The live agent runs on **Kommo**, not Botpress. It is a self-hosted **FastAPI se
 (`kommo-agent`) on the VPS that owns the AI loop in our own code. Kommo is only the
 WhatsApp/Instagram/Facebook transport and CRM.
 
+**As of Oct 1, 2026 the service runs in ESCALATION MODE** (`[escalation].enabled=true`): the entire conversational engine (RAG, LLM, voice bots, septico, pricing, flow-switch) is gated OFF (preserved in code, reversible with `enabled=false` + restart). The ONLY live behaviour is a lead funnel, first contact gives the flyer + one sector question, then the verbiage + a "Hablar con Wellington" button, and on tap the owner's phone gets a WhatsApp template with the customer's name, phone, sector, and wa.me link while the customer gets a 24h confirmation, after which that conversation is permanently silent. Full build in the Oct 1, 2026 CONTEXT-LOG entry.
+
 Status: **deployed and live on Kommo Pro since 2026-07-20.**
 Health: `GET https://kommo-agent.goldcoastai.pro/health` → `{"ok":true,"subdomain":"aguasprofundas","provider":"openai"}`
 
@@ -272,7 +274,15 @@ All 32 DR provinces covered. Foreign/unrecognizable → `[[HANDOFF]]` only.
 
 ## 14. Open items
 
-### In progress: owner-escalation pivot (Oct 1, 2026 — NOT live; see CONTEXT-LOG)
+### LIVE: owner-escalation flow (Oct 1, 2026, the current production behaviour; see CONTEXT-LOG Oct 1)
+- Escalation mode is LIVE (`[escalation].enabled=true`); conversational engine gated OFF (preserved, reversible). Flow: first contact -> flyer (bot 97800) + sector question -> customer answers (dr_geo-normalized town->province) -> Wellington verbiage + "Hablar con Wellington" button -> tap -> owner alert (name, phone, sector, wa.me link) + customer 24h confirmation -> permanent silence on that talk.
+- Bots (empty triggers, fired by the engine via run_bot): 100104 Boton-Hablar-Wellington (customer button), 100050 Wellington messenger (template sender), 97800 welcome-bot 55340 (flyer). Lead fields: Cliente Telefono 2104942, Cliente Link WhatsApp 2104940, Cliente Sector 2105112.
+- Approved template "Wellingtons CX Messing Flow" (id 84458, UTILITY). v2 cliente_listo_wellington_v2 (adds Ubicacion line, 4 vars) SUBMITTED for approval. CUTOVER when approved: point sender bot 100050's Send Message step at v2 (UI only, no code change); the engine already stores the sector so it is a clean flip.
+- Owner recipient: TEST = 849-258-6931 (contact 26049644), currently set in `owner_contact_id`. PRODUCTION = Wellington 829-566-7542 (contact 39939531, already established). GO-LIVE: set owner_contact_id=39939531, redeploy, fire one test. The owner number MUST have messaged the business once or the alert delivers nowhere.
+- Billing: the sending WABA 1032952952881055 (829-837-9566) must have a payment method or template sends fail with error 3107. Card is on it (Visa 3450).
+- Button match gotcha: WhatsApp truncates quick-reply titles to 20 chars ("Hablar con Wellington" -> "Hablar con Wellingto"); engine matches the prefix "hablar con welling".
+
+### Earlier pre-build notes (historical; the flow is now LIVE per the block above). Still-standing items (WABA number, spam contacts, flyer number) remain valid:
 - Decommission the conversational agent -> flyer + Wellington study message + a "talk to Wellington" button that escalates the lead to the owner's phone. Engine not built; conversational engine to be gated off behind a reversible mode flag (not deleted).
 - Utility template "Wellingtons CX Messing Flow" submitted to Meta (UTILITY, Spanish, WABA 1032952952881055). Waiting on approval.
 - Handoff lead custom fields: "Cliente Link WhatsApp" (id 2104940), "Cliente Telefono" (id 2104942).

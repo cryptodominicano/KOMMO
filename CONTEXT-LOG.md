@@ -2,7 +2,67 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: October 1, 2026 — 20:30 UTC
+Format for each entry: `## Session: October 1, 2026 — 23:30 UTC
+
+### Owner-escalation flow: NOW FULLY PRODUCTION-LIVE on Wellington's real phone. Five refinements since the 20:30 entry.
+
+**1. Province price tier (RD$45,000 / RD$50,000) restored in the verbiage.**
+dr_geo gained price_for(town): 50000 for the 15 outlying provinces (Monte Cristi,
+Dajabon, Santiago Rodriguez, Valverde, Elias Pina, San Juan, Bahoruco,
+Independencia, Barahona, Pedernales, Hato Mayor, El Seibo, San Pedro de Macoris,
+La Romana, La Altagracia), 45000 otherwise and for unknown towns (source: KB
+01-estudio-de-agua.md). The engine injects the right amount into the verbiage
+(replaces the literal "RD$45,000" at send time). Commits dr_geo 3aacad2, worker 8a557e6.
+
+**2. province_for is now phrase-aware.** It was exact-match only, so a voice
+transcript or typed sentence like "Yo soy de Barahona, mi hermano" returned None
+and defaulted to 45k (a live bug Isaias caught on a Barahona voice note). Fixed:
+after the exact lookup it scans for the LONGEST known place name present as whole
+words inside the text and returns its province, so spoken and typed sentences
+resolve the tier, and "san pedro de macoris" is not mis-caught by a shorter name.
+Commit dr_geo 4fd2f851.
+
+**3. Voice-note answers to the sector question are transcribed.** Reuses the
+existing download_audio + transcribe (raises TranscriptionRejected on
+unintelligible audio). Scoped to the awaiting-location step only. On failure the
+customer gets "No pude entender el audio. Podria repetirlo o escribir el pueblo o
+sector por texto?" and stays on the question. Transcription nailed Dominican
+Spanish. Commits worker f8f5104, client.toml 3b67d79.
+
+**4. v2 template LIVE (adds the Ubicacion line).** cliente_listo_wellington_v2
+(UTILITY, 4 vars: Lead name, Cliente Telefono, Cliente Sector=2105112, Cliente Link
+WhatsApp) approved by Meta. CUTOVER done entirely in the UI: sender bot 100050
+"Wellington messenger" now points at v2. Confirmed delivered to the owner with the
+full line, "Ubicacion: Barahona (Barahona)" included. No code change for the
+cutover; the engine already stored the sector, so it was a one-field swap.
+
+**5. Welcome reorder (greeting first).** First contact now sends ONE line and NO
+flyer: "Hola, le saluda Wellington de Aguas Profundas. Para empezar, en que pueblo
+o sector esta ubicado?" (config location_question). After the customer answers, the
+engine fires the FLYER, then the verbiage TAIL starting at "Le orientare y
+acompanare..." (the opening greeting sentence is sliced off via
+_WELLINGTON_WELCOME.find("Le orientar")), with the correct price, then the button.
+Wellington is introduced once, no double greeting, flyer lands after the sector.
+Commits worker dac6951d, client.toml fc775a7.
+
+### OWNER IS NOW WELLINGTON (production)
+owner_contact_id = 39939531 (Wellington's real contact, +1 829-566-7542,
+established). Confirmed delivering to his phone end-to-end on a real 610 run. The
+TEST number 849 (contact 26049644) is retired. Housekeeping: a few PRUEBA/test
+alert leads landed on Wellington's contact during testing (23649150, 23649276,
+23644750, ...) and can be deleted from his contact card in the UI.
+
+### Current production state (live for real customers)
+Customer messages the AI line (829-837-9566) -> greeting + sector question (one
+line, no flyer) -> customer answers by voice or text -> dr_geo normalizes the town
+and prices it 45k/50k -> flyer + verbiage tail + "Hablar con Wellington" button ->
+on tap Wellington's phone (566-7542) gets name, phone, sector, and a one-tap wa.me
+link via the v2 template -> customer gets the 24h confirmation -> that talk is
+permanently silent. Conversational engine still gated off (enabled=false reverts).
+
+---
+
+## Session: October 1, 2026 — 20:30 UTC
 
 ### MAJOR: owner-escalation flow BUILT, LIVE, and proven end-to-end. Conversational engine gated OFF.
 

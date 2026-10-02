@@ -567,17 +567,10 @@ async def handle_message(msg: dict) -> None:
                 return
             if is_first:
                 if entity_id and _is_waba:
-                    _fb = _ESCALATION.get("flyer_bot_id")
-                    if _fb:
-                        try:
-                            await k.run_bot(int(_fb), entity_id, _entity_type(msg))
-                            await asyncio.sleep(1.5)
-                        except KommoError as _fe:
-                            log.error("talk=%s escalation flyer failed: %s",
-                                      talk_id, _fe)
                     await k.send_message(talk_id, str(_ESCALATION.get(
                         "location_question",
-                        "Para empezar, \u00bfen qu\u00e9 pueblo o sector est\u00e1 "
+                        "Hola, le saluda Wellington de Aguas Profundas. Para "
+                        "empezar, \u00bfen qu\u00e9 pueblo o sector est\u00e1 "
                         "ubicado? \U0001f4cd")))
                     state.set_awaiting_location(talk_id)
                 return
@@ -628,8 +621,22 @@ async def handle_message(msg: dict) -> None:
                         _price = dr_geo.price_for(_loc)
                     except Exception:
                         _price = 45000
+                    _fb = _ESCALATION.get("flyer_bot_id")
+                    if _fb:
+                        try:
+                            await k.run_bot(int(_fb), entity_id, _entity_type(msg))
+                            await asyncio.sleep(1.5)
+                        except KommoError as _fe:
+                            log.error("talk=%s escalation flyer failed: %s",
+                                      talk_id, _fe)
+                    # verbiage WITHOUT the opening "Hola, le saluda Wellington..."
+                    # (that greeting is now the first-contact message).
+                    _v = _WELLINGTON_WELCOME
+                    _ix = _v.find("Le orientar")
+                    if _ix > 0:
+                        _v = _v[_ix:]
                     await k.send_message(talk_id,
-                        _WELLINGTON_WELCOME.replace("RD$45,000", f"RD${_price:,}"))
+                        _v.replace("RD$45,000", f"RD${_price:,}"))
                     await asyncio.sleep(1.0)
                     try:
                         await k.run_bot(int(_ESCALATION["button_bot_id"]),

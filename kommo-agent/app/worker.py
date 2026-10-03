@@ -573,6 +573,15 @@ async def handle_message(msg: dict) -> None:
                         "empezar, \u00bfen qu\u00e9 pueblo o sector est\u00e1 "
                         "ubicado? \U0001f4cd")))
                     state.set_awaiting_location(talk_id)
+                    _nmin = int(_ESCALATION.get("nudge_minutes", 120))
+                    if _nmin > 0:
+                        state.schedule_nudge(
+                            lead_id=str(entity_id), talk_id=str(talk_id),
+                            scenario="escalation_sector",
+                            message=str(_ESCALATION.get("nudge_text",
+                                "Hola \U0001f44b. Espero por su respuesta para "
+                                "entender sus necesidades. Gracias.")),
+                            delay_seconds=_nmin * 60, priority=5)
                 return
             # awaiting the sector answer -> normalize via dr_geo, store, then
             # send the verbiage + button.
@@ -608,6 +617,15 @@ async def handle_message(msg: dict) -> None:
                                 "audio_fail_text",
                                 "No pude entender el audio. Por favor rep\u00edtalo "
                                 "o escr\u00edbalo por texto. \U0001f64f")))
+                            _nmin = int(_ESCALATION.get("nudge_minutes", 120))
+                            if _nmin > 0:
+                                state.schedule_nudge(
+                                    lead_id=str(entity_id), talk_id=str(talk_id),
+                                    scenario="escalation_sector",
+                                    message=str(_ESCALATION.get("nudge_text",
+                                        "Hola \U0001f44b. Espero por su respuesta para "
+                                        "entender sus necesidades. Gracias.")),
+                                    delay_seconds=_nmin * 60, priority=5)
                         return
                 if entity_id and _is_waba and _ans:
                     _loc = _ans.strip()

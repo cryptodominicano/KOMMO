@@ -2,7 +2,44 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: October 1, 2026 — 23:30 UTC
+Format for each entry: `## Session: October 3, 2026 17:28 UTC
+
+### Sector-question nudge (BUILT + LIVE), plus a PROPOSED end-of-day 2nd nudge (NOT built, awaiting owner approval).
+
+**DONE: 2-hour sector-question nudge.** If a customer gets the first sector
+question and never answers, a one-time nudge fires 2h later: "Hola [wave]. Espero
+por su respuesta para entender sus necesidades. Gracias." Built on the EXISTING
+scheduled_nudges outbox + the _followup_loop poller (no new timer). Scheduled when
+the sector question is asked (first contact) and re-armed after a failed-audio
+re-ask, so a stuck customer is never left hanging. Auto-cancelled by cancel_nudges
+(runs at the top of every inbound) the instant the customer replies anything, so it
+only ever reaches someone who went silent on that first question. Fires once; skips
+if a human is active (is_handed_off). Config: [escalation].nudge_minutes=120,
+nudge_text. Commits worker 1884490, client.toml 4e37117.
+
+**PROPOSED (NOT built; needs Wellington's approval first): end-of-day 2nd nudge.**
+Idea from Isaias: around 5-6pm local, for a customer who got the sector question
+earlier that same day and still never answered (still awaiting_location), send a
+SECOND nudge that BYPASSES the sector question and gives the flyer + the full
+verbiage defaulted to RD$45,000 (the base, since no sector is known) + the "Hablar
+con Wellington" button. Rationale: the customer may have been working and simply
+had no time; give them the full pitch and the button so they can still proceed that
+evening. Implementation notes for when approved:
+- The scheduler is delay-based (fire_at = now + delay). A time-of-day nudge
+  (5-6pm America/Santo_Domingo) needs fire_at computed to the next 5-6pm, or a
+  scenario the loop checks against a target local hour.
+- Fire only if still awaiting_location (not answered, not escalated). Coordinate
+  with the 2h nudge so the customer is not double-nudged (e.g. the 2h is the gentle
+  reminder; the 5-6pm is the move-forward fallback, and it supersedes or replaces
+  the pending reminder).
+- On firing: set location to a default (e.g. "No indicado"), price the verbiage at
+  RD$45,000, clear awaiting_location, send flyer + verbiage + button. If they then
+  tap, the owner alert's Ubicacion shows that default since no real sector was given.
+- Decision pending: get Wellington's OK before building.
+
+---
+
+## Session: October 1, 2026 — 23:30 UTC
 
 ### Owner-escalation flow: NOW FULLY PRODUCTION-LIVE on Wellington's real phone. Five refinements since the 20:30 entry.
 

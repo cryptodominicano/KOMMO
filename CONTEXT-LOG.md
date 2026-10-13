@@ -4,7 +4,7 @@ This file is the persistent memory layer for the Aguas Profundas WhatsApp AI age
 
 Format for each entry: `## Session: October 12, 2026 20:30 UTC
 
-### First-contact message reworded (client.toml only). COMMITTED, NOT YET DEPLOYED.
+### First-contact message reworded (client.toml only). DEPLOYED + VERIFIED.
 
 [escalation].location_question changed to the assistant-style opener: greets,
 introduces "la asistente virtual de Wellington", says Wellington will take over
@@ -23,9 +23,19 @@ Known, left as is: the verbiage after the province answer still speaks in
 Wellington's first person with usted ("Le orientare..."), a register mismatch with
 the new opener. Province answers render the alert location as "Barahona (Barahona)".
 
-DEPLOY PENDING: the toml is baked into the image, so it needs the standard cycle
-(guard, tests, sync /root/kommo-agent, compose build + up -d, /health). Live agent
-still sends the old greeting until then.
+DEPLOYED 2026-10-13 00:29 UTC from infra-mcp via the docker helper recipe (Sept 20
+11:20 entry): alpine/git sync of main 2cb6897 into /root/kommo-agent (.env backed up
+as .env.bak-20261013-002918), compose -p kommo-agent build (image 4095799b), smoke
+test in a throwaway container (import app.main + toml text), compose up -d. Container
+Up healthy, public /health ok, running container serves the new text. No live customer
+message was sent to test it; first real inbound will be the proof.
+
+NO ROLLBACK IMAGE: the rebuild reclaimed the old image layers and docker commit of
+the old container failed (content digest not found). Rollback = git revert 2cb6897,
+then the same sync + build + up. Not a concern for a one-line config change.
+
+Observed, not changed: startup log shows llm=openai/gpt-4.1 while CLAUDE.md says
+gpt-4o. Irrelevant in escalation mode (LLM gated off) but worth reconciling.
 
 ---
 

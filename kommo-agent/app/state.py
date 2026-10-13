@@ -787,3 +787,70 @@ def prune(retain_days: int = 30) -> dict:
     except Exception:
         pass
     return counts
+
+
+# ---------------------------------------------------------------------------
+# Owner-escalation state (Oct 1, 2026 flow). RESTORED 2026-10-13: these helpers
+# were live in the running container (hot-patched) but never reached git, so a
+# clean rebuild dropped them and worker.py hit AttributeError on every inbound.
+# Table shapes match the live /data/state.db exactly (same names, same columns),
+# so existing rows keep working. Each helper self-creates its table.
+# ---------------------------------------------------------------------------
+
+def _esc_tables(c) -> None:
+    c.execute("CREATE TABLE IF NOT EXISTS escalated ("
+              "talk_id TEXT PRIMARY KEY, at REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS esc_loc ("
+              "talk_id TEXT PRIMARY KEY, awaiting INTEGER DEFAULT 0, "
+              "location TEXT)")
+
+
+def mark_escalated(talk_id: str) -> None:
+    """Permanent per-talk silence once the owner alert + confirmation went out."""
+    with _conn() as c:
+        _esc_tables(c)
+        c.execute("INSERT OR IGNORE INTO escalated (talk_id, at) VALUES (?, ?)",
+                  (str(talk_id), time.time()))
+
+
+def is_escalated(talk_id: str) -> bool:
+    with _conn() as c:
+        _esc_tables(c)
+        return c.execute("SELECT 1 FROM escalated WHERE talk_id=?",
+                         (str(talk_id),)).fetchone() is not None
+
+
+def set_awaiting_location(talk_id: str) -> None:
+    """The sector/province question was asked; the next answer is the location."""
+    with _conn() as c:
+        _esc_tables(c)
+        c.execute("INSERT INTO esc_loc (talk_id, awaiting) VALUES (?, 1) "
+                  "ON CONFLICT(talk_id) DO UPDATE SET awaiting=1",
+                  (str(talk_id),))
+
+
+def is_awaiting_location(talk_id: str) -> bool:
+    with _conn() as c:
+        _esc_tables(c)
+        r = c.execute("SELECT awaiting FROM esc_loc WHERE talk_id=?",
+                      (str(talk_id),)).fetchone()
+        return bool(r and r[0])
+
+
+def set_location(talk_id: str, location: str) -> None:
+    """Store the customer's answer and stop awaiting (live rows: awaiting=0 +
+    location set after an answer, awaiting=1 + NULL while waiting)."""
+    with _conn() as c:
+        _esc_tables(c)
+        c.execute("INSERT INTO esc_loc (talk_id, awaiting, location) "
+                  "VALUES (?, 0, ?) ON CONFLICT(talk_id) DO UPDATE SET "
+                  "awaiting=0, location=excluded.location",
+                  (str(talk_id), location))
+
+
+def get_location(talk_id: str):
+    with _conn() as c:
+        _esc_tables(c)
+        r = c.execute("SELECT location FROM esc_loc WHERE talk_id=?",
+                      (str(talk_id),)).fetchone()
+        return (r[0] if r and r[0] else None)

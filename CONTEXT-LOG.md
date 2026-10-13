@@ -2,7 +2,37 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: October 12, 2026 20:30 UTC
+Format for each entry: `## Session: October 13, 2026 00:45 UTC
+
+### INCIDENT: the 00:29 UTC redeploy dropped live-only escalation helpers. Fix committed, NOT YET DEPLOYED.
+
+The Oct 1 escalation build put six helpers in the RUNNING container's state.py
+(mark_escalated, is_escalated, set_awaiting_location, is_awaiting_location,
+set_location, get_location) but they never reached git, despite the Oct 1 entry
+saying committed. The clean rebuild from main at 00:29 UTC therefore shipped a
+state.py without them, and worker.py calls is_escalated on EVERY inbound, so every
+inbound message would raise AttributeError and be silently ghosted. /health stays
+green. No inbound arrived between the restart and this entry (last inbound ~11 min
+before the check), so no known customer impact yet.
+
+Fix: the six helpers re-added to app/state.py, matching the live /data/state.db
+schema exactly (escalated, esc_loc with awaiting+location; self-creating tables).
+Local round-trip test passes; a scan confirms no state.* call in worker.py is
+undefined; UBA guard passes. Still to do: sync + build + up -d, then verify with a
+real first-contact message.
+
+UNRECOVERABLE: the live DB also has esc_closed (40 rows) and esc_reshow (1 row)
+tables that NO code in git uses, so the old running worker.py had behavior beyond
+git (likely button re-show cap and closing logic), and possibly other live-only edits
+from Oct 3-12. The old image layers were reclaimed by the rebuild. Search past
+sessions for it.
+
+LESSON (repeat of the Sept 20 warning): before ANY rebuild, diff the running
+container's /srv/app against the repo. Hot patches must be committed the same day.
+
+---
+
+## Session: October 12, 2026 20:30 UTC
 
 ### First-contact message reworded (client.toml only). DEPLOYED + VERIFIED.
 

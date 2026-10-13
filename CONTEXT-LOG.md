@@ -2,7 +2,34 @@
 
 This file is the persistent memory layer for the Aguas Profundas WhatsApp AI agent build. It is read at the start of every session alongside the capabilities analysis. Each session's findings are **prepended so the most recent entry is always first**. Never delete old entries — the dead ends are the most valuable part, because they stop us re-walking them.
 
-Format for each entry: `## Session: October 3, 2026 17:28 UTC
+Format for each entry: `## Session: October 12, 2026 20:30 UTC
+
+### First-contact message reworded (client.toml only). COMMITTED, NOT YET DEPLOYED.
+
+[escalation].location_question changed to the assistant-style opener: greets,
+introduces "la asistente virtual de Wellington", says Wellington will take over
+shortly, promises two quick questions (province, then the implicit "Hablar con
+Wellington" button), and asks which PROVINCIA the study is for. Wording is the
+owner's, tuteo kept as written.
+
+Verified by reading the code, not by running live: nothing else matches on the old
+text; the answer path (dr_geo.province_for/price_for) accepts a bare province name
+(tested Barahona -> 50,000, Santiago -> 45,000, Samana/La Vega/Duarte -> 45,000);
+the stored location still feeds the Ubicacion field of cliente_listo_wellington_v2;
+nudge, voice fallback and button flow are untouched. TOML parses. pytest was not
+available in the sandbox, so the suite was not run this session.
+
+Known, left as is: the verbiage after the province answer still speaks in
+Wellington's first person with usted ("Le orientare..."), a register mismatch with
+the new opener. Province answers render the alert location as "Barahona (Barahona)".
+
+DEPLOY PENDING: the toml is baked into the image, so it needs the standard cycle
+(guard, tests, sync /root/kommo-agent, compose build + up -d, /health). Live agent
+still sends the old greeting until then.
+
+---
+
+## Session: October 3, 2026 17:28 UTC
 
 ### Sector-question nudge (BUILT + LIVE), plus a PROPOSED end-of-day 2nd nudge (NOT built, awaiting owner approval).
 

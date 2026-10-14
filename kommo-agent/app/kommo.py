@@ -194,6 +194,37 @@ class KommoClient:
         """PATCH /leads/{id}. Used to move a lead to the handoff stage."""
         return await self._req("PATCH", f"/leads/{lead_id}", json=fields)
 
+    async def create_lead(self, name: str, contact_id: int | str,
+                          cf: dict | None = None,
+                          status_id: int = 109083027,
+                          pipeline_id: int = 14130431) -> int | None:
+        """POST /leads -> new lead id (or None).
+
+        Owner-escalation alert lead. A Kommo template can only be sent by a
+        Salesbot, and the bot merges {{lead.*}} from the lead it runs on, so
+        each button tap stages a FRESH lead linked to the OWNER contact and
+        carrying the CUSTOMER data (name, Cliente Telefono, Cliente Link
+        WhatsApp, Cliente Sector). The sender bot (100050) then delivers the
+        approved utility template to the owner chat.
+
+        Restored 2026-10-14: this method was lost in the 2026-10-12 rebuild.
+        worker.py kept calling it, every tap raised AttributeError and owner
+        alerts silently stopped. Keep it committed in git.
+        """
+        lead: dict = {
+            "name": str(name)[:250] or "Cliente",
+            "pipeline_id": int(pipeline_id),
+            "status_id": int(status_id),
+            "_embedded": {"contacts": [{"id": int(contact_id)}]},
+        }
+        cfv = [{"field_id": int(fid), "values": [{"value": str(val)}]}
+               for fid, val in (cf or {}).items() if val not in (None, "")]
+        if cfv:
+            lead["custom_fields_values"] = cfv
+        data = await self._req("POST", "/leads", json=[lead]) or {}
+        leads = data.get("_embedded", {}).get("leads", []) or []
+        return int(leads[0]["id"]) if leads and leads[0].get("id") else None
+
     async def create_task(self, entity_id: int | str, text: str,
                           due_seconds: int, responsible_user_id: int,
                           entity_type: str = "leads", task_type_id: int = 1) -> dict | None:

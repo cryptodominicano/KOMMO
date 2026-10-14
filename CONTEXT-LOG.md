@@ -32,6 +32,45 @@ container's /srv/app against the repo. Hot patches must be committed the same da
 
 ---
 
+## Session: October 14, 2026 — 20:50 UTC
+
+### Owner alerts ("Hablar con Wellington" -> Wellington's WhatsApp) silently dead since the Oct 12 rebuild. Fixed.
+
+Symptom: customers tapped the button and got "Wellington ha recibido su solicitud...", but
+Wellington (contact 39939531, +1 829-566-7542, talk 1046) got no "Nuevo cliente listo" alert.
+Last good alert: 2026-10-12 23:36 UTC (miguelangeljaquez27).
+
+Root cause: the 2026-10-13 00:34 UTC image rebuild shipped a kommo.py WITHOUT `create_lead()`
+(it was never committed to git; same failure class as the state.py helpers restored in 3bba054).
+worker.py still calls it, so every tap logged
+`escalation alert failed: 'KommoClient' object has no attribute 'create_lead'`, skipped the alert
+lead + sender bot, and still sent the customer confirmation, so nothing looked broken from outside.
+NOT related to the Chakra router (separate BSP, separate traffic).
+
+Missed alerts (7 taps, 6 real): talk 1076 Alicia La Sierva (Oct 13 14:43 UTC), 1483 "R",
+1484 Linares Jj, 1061 Luiscruz, 1486 Juan, 1485 😇😇 (all Oct 14), plus the 849 test (talk 1045).
+Those talks are marked escalated, so they will not retry on their own; backfill is manual.
+
+Fix: restored `KommoClient.create_lead(name, contact_id, cf, status_id=109083027,
+pipeline_id=14130431)` -> POST /leads with the owner contact embedded and the customer fields
+(2104942 phone, 2104940 wa.me link, 2105112 sector), returns the new lead id. Rebuilt with compose
+(via a docker:cli helper, since infra-mcp cannot read /root/kommo-agent/.env). Rollback image:
+`kommo-agent-kommo-agent:pre-createlead-20261014`; host backup `app/kommo.py.bak-20261014-create_lead`.
+
+Verified: create_lead -> lead 24981802 on the 849 test contact, bot 100050 fired, the v2 utility
+template ("cliente_listo_wellington_v2", now with the Ubicación line) DELIVERED to the 849 phone.
+
+Clarification for future sessions: the customer-facing button (bot 100104) is a free-form
+interactive session message, not a template; the OWNER alert (bot 100050) is the utility template.
+Bots 97800 (flyer), 100050, 100104 are the active escalation-mode bots; the conversational VOZ_*
+and foto bots are inactive because escalation mode disables the conversational engine.
+
+Lesson: an exception inside a best-effort branch that is followed by a customer-visible success
+message is the worst kind of silent failure. Add an alert (Resend/ntfy) on any
+`escalation alert failed` log line, and a test asserting every KommoClient method worker.py calls exists.
+
+---
+
 ## Session: October 12, 2026 20:30 UTC
 
 ### First-contact message reworded (client.toml only). DEPLOYED + VERIFIED.
